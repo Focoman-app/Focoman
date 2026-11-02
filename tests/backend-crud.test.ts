@@ -42,6 +42,41 @@ import {
   verifyInvitationLinkToken,
   verifyInvitationPasscode,
 } from "../apps/web/src/lib/invitationPasscode.ts";
+import { shouldUseSameOriginAuthDomain } from "../apps/web/src/lib/firebaseAuthDomain.ts";
+
+describe("Firebase same-origin redirect auth domain", () => {
+  test("uses the app origin for a development Cloudflare Quick Tunnel", () => {
+    assert.strictEqual(
+      shouldUseSameOriginAuthDomain("test-tunnel.trycloudflare.com", true),
+      true,
+    );
+  });
+
+  test("does not enable Quick Tunnel auth proxying in production", () => {
+    assert.strictEqual(
+      shouldUseSameOriginAuthDomain("test-tunnel.trycloudflare.com", false),
+      false,
+    );
+  });
+
+  test("does not accept lookalike tunnel hostnames", () => {
+    assert.strictEqual(
+      shouldUseSameOriginAuthDomain("trycloudflare.com.attacker.example", true),
+      false,
+    );
+  });
+
+  test("keeps localhost on the canonical Firebase auth domain", () => {
+    assert.strictEqual(shouldUseSameOriginAuthDomain("localhost", true), false);
+  });
+
+  test("preserves the existing Vercel same-origin behavior", () => {
+    assert.strictEqual(
+      shouldUseSameOriginAuthDomain("focoman-git-preview.vercel.app", false),
+      true,
+    );
+  });
+});
 
 describe("1. Recovery System & Soft-Delete Domain Logic", () => {
   test("RECOVERY_WINDOW_DAYS is strictly configured to 14 days", () => {

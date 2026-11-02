@@ -2,6 +2,7 @@ import { initializeApp, getApps, getApp, FirebaseApp } from "firebase/app";
 import { getAuth, Auth } from "firebase/auth";
 import { getFirestore, Firestore } from "firebase/firestore";
 import { getAnalytics, isSupported, Analytics } from "firebase/analytics";
+import { shouldUseSameOriginAuthDomain } from "./firebaseAuthDomain";
 
 /**
  * Firebase Client SDK Initialization for Focoman
@@ -12,14 +13,12 @@ function getAuthDomain(): string {
   const canonicalDomain = process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || "focoman.firebaseapp.com";
   if (typeof window !== "undefined") {
     const hostname = window.location.hostname;
-    // Only use custom host if it's explicitly verified in Google OAuth client, never for dynamic preview domains (*.run.app) or localhost
+    // Keep the auth helper same-origin so browsers can persist redirect state.
     if (
-      hostname &&
-      hostname !== "localhost" &&
-      hostname !== "127.0.0.1" &&
-      !hostname.includes(".run.app") &&
-      !hostname.includes("aistudio") &&
-      (hostname === "focoman.web.app" || hostname === "focoman.com" || hostname === "www.focoman.com")
+      shouldUseSameOriginAuthDomain(
+        hostname,
+        process.env.NODE_ENV !== "production",
+      )
     ) {
       return window.location.host;
     }

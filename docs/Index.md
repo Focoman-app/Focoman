@@ -52,6 +52,7 @@ When evaluating specifications and implementation guidelines:
 - **[Recommended Architecture](technical/recommended-architecture.md)** — **Active Target Architecture.** Integrated Next.js App monorepo layout (`apps/web`, `packages/*`), Server Actions execution boundary, and Cloud Run deployment model.
 - **[Technical Design Specification](technical/technical-design-mvp.md)** — **Active Technical Design.** Server-side security boundaries, role permissions, and Firestore collection strategy.
 - **[Deployment Guide](technical/deployment-guide.md)** — **Active Deployment Guide.** Container build, Google Cloud Run, and Firebase App Hosting deployment configuration.
+- **[Developer Portal Setup](technical/dev-portal-setup.md)** — Internal aggregate-only portal setup, security prerequisites, and integration limitations.
 - **[Vercel Hosting Strategy (Secondary)](technical/vercel-hosting-strategy.md)** — Legacy secondary hosting reference.
 
 ---
@@ -66,6 +67,7 @@ When evaluating specifications and implementation guidelines:
 
 - **[Quick Setup Guide](QUICK_SETUP_GUIDE.md)** — Local environment initialization and startup instructions.
 - **[Issue Analysis Document](ISSUE_ANALYSIS.md)** — Diagnostic records for past platform issues.
+- **[Email, Domain & WhatsApp Integration Action Items](tasks/email-domain-whatsapp-action-items.md)** — Planned provider setup, sender-domain configuration, mailbox decision, and WhatsApp Cloud API workstreams.
 
 ---
 

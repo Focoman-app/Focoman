@@ -2,6 +2,38 @@
 
 All meaningful changes to the Focoman codebase, documentation, architecture, or agent workflow instructions must be recorded in this file according to Section 20 of **[Agents.md](Agents.md)**.
 
+## CHG-058 — Align Dev Portal Theme and Add Local Preview
+
+- **Task:** CHG-058 — Match the FocoMan dashboard theme and enable explicitly opted-in password-free development preview.
+- **Date:** 2026-11-02
+- **Area:** `apps/web/src/components/dev-portal`, `apps/web/src/app/devportal/page.tsx`, `apps/web/src/lib/devPortalAuth.ts`, `apps/web/src/lib/devPortalCrypto.ts`, `tests/dev-portal-auth.test.ts`, `docs/technical/dev-portal-setup.md`.
+- **Change:** Reused the FocoMan logo and dashboard/retro palette. Added a visibly labelled temporary preview gated by both development mode and an explicit server environment flag; production continues to require the portal password.
+- **Verification:** Password/session and preview gating unit tests; TypeScript validation and local endpoint checks. Browser UAT remains user-performed.
+
+## CHG-057 — Add Private FocoMan Developer Portal
+
+- **Task:** CHG-057 — Add a password-protected, aggregate-only developer portal for `dev.4command.com`.
+- **Date:** 2026-11-02
+- **Area:** `apps/web/src/app/devportal`, `apps/web/src/app/api/dev`, `apps/web/src/app/api/dev-auth`, `apps/web/src/components/dev-portal`, `apps/web/src/lib/devPortalAuth.ts`, `apps/web/src/lib/devPortalCrypto.ts`, `apps/web/src/middleware.ts`, `scripts/generate-dev-portal-secrets.mjs`, `tests/dev-portal-auth.test.ts`, `docs/technical/dev-portal-setup.md`, `docs/Index.md`.
+- **Change:** Added a monochrome single-page portal, separate server-side password/session protection, shared Firestore login throttling, and aggregate-only Firestore counts. Provider/usage metrics without a real data source report unavailable. Host routing is included; DNS, production deployment, provider connections, and credentials are not configured.
+- **Verification:** `npx tsc -p apps/web/tsconfig.json --noEmit`, `node --experimental-strip-types --test tests/dev-portal-auth.test.ts`, and `git diff --check` passed. Live Firestore, provider integrations, browser UAT, DNS, and deployment were not tested.
+
+## CHG-056 — Record Payment Economics, GCP Cost, and Release Pipeline Decisions
+
+- **Task:** CHG-056 — Track payment-fee allocation, GCP cost modeling, beta/prod environments, and code cleanup prerequisites
+- **Date:** 2026-11-02
+- **Area:** `docs/tasks/email-domain-whatsapp-action-items.md`
+- **Change:** Added planned decision/checklist items for separate subscription and studio-booking payment flows, fee/GST responsibility, provider marketplace settlement/compliance review, workload-based GCP cost modeling, isolated beta, scoped deployment/code cleanup, gated beta-to-production CI/CD, full-cost comparisons of Cloud Run/VPS/cloud vendors, GCP GitHub-trigger setup, and a server-action/Firebase/App Check/rate-limit security review. No payment, DNS, cloud, or application behavior was changed.
+- **Verification:** Documentation-only; reviewed the added checklist and ran `git diff --check`.
+
+## CHG-055 — Track Email, Domain, and WhatsApp Integration Workstreams
+
+- **Task:** CHG-055 — Record pending email provider, sender-domain/mailbox, and WhatsApp Cloud API action items
+- **Date:** 2026-11-02
+- **Area:** `docs/tasks/email-domain-whatsapp-action-items.md`, `docs/Index.md`
+- **Change:** Added a reviewable checklist for Brevo/Resend, domain DNS and inbound mailbox decisions, and WhatsApp Cloud API setup/security. Recorded support-email threading as a separate design decision, not an implemented feature.
+- **Verification:** Documentation-only change; links and diff reviewed. No application code or provider configuration changed.
+
 ## CHG-054 — Data Preservation Policy & Studio Account Closed Notice
 
 - **Task:** CHG-054 — Preserve Customer Order Data & Add Clean Studio Account Closed Notice
@@ -106,6 +138,36 @@ All meaningful changes to the Focoman codebase, documentation, architecture, or 
      - Updated error text to: *"Sign-in completed without session credentials. Please try signing in again."*
      - Standardized alternate method button text to **"Try alternate method"**.
 - **Verification:** TypeScript compilation clean (`npx tsc -p apps/web/tsconfig.json --noEmit`), 0 errors.
+
+---
+
+## CHG-052 — Local Cloudflare Quick Tunnel Google Redirect Auth
+
+- **Task:** CHG-052 — Route local Quick Tunnel Google redirect authentication through the app's same-origin Firebase auth proxy
+- **Date:** 2026-11-02
+- **Area:** `apps/web/src/lib/firebase.ts`, `apps/web/src/lib/firebaseAuthDomain.ts`, `tests/backend-crud.test.ts`
+- **Change:** In development only, recognized exact `*.trycloudflare.com` hostnames as same-origin Firebase auth hosts so the existing `/__/auth/*` proxy can preserve redirect state. Kept popup sign-in and production tunnel behavior unchanged. Added regression tests for tunnel, production, localhost, lookalike, and existing Vercel host behavior.
+- **Verification:** Pending.
+
+---
+
+## CHG-051 — Pure Same-Tab Google Redirect, Vercel Auth Proxy Alignment & Graceful Fallback
+
+- **Task:** CHG-051 — Align Vercel same-origin reverse-proxy auth domain, restore pure same-tab redirect sign-in, and integrate discreet trouble toggle & error fallback
+- **Date:** 2026-10-29
+- **Area:** `apps/web/src/lib/firebase.ts`, `apps/web/src/lib/firebaseAuth.ts`, `apps/web/src/app/sign-in/page.tsx`
+- **Change:**
+  1. **Vercel Same-Origin Auth Domain (`firebase.ts`)**:
+     - Added `focoman.vercel.app` and `*.vercel.app` to `getAuthDomain()`, ensuring requests route through the Next.js same-origin reverse proxy (`/__/auth/*`).
+     - Eliminates cross-origin iframe third-party storage partitioning (CHIPS / Safari ITP) blocks on Vercel preview and production environments.
+  2. **Pure Same-Tab Redirect Flow (`firebaseAuth.ts`)**:
+     - Configured primary `signInWithGoogle()` to execute pure same-tab `signInWithRedirect(auth, googleProvider)` without forced popup overrides.
+     - Kept `signInWithGooglePopup()` as dedicated alternate method.
+  3. **Resilient Redirect State & Graceful Session Hydration (`sign-in/page.tsx`)**:
+     - Retained discreet "Having trouble signing in?" toggle beneath primary button, revealing the alternate method on demand.
+     - Enhanced redirect lifecycle with grace period so `onAuthStateChanged` hydrates valid sessions before showing any error.
+     - If redirect completes without credentials, displays an error banner with a one-click "Try alternate method →" popup button.
+- **Verification:** Unit tests passed 31/31 (`npm test`), TypeScript compilation passed with 0 errors (`npx tsc -p apps/web/tsconfig.json --noEmit`).
 
 ---
 
