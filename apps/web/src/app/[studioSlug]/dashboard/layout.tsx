@@ -29,7 +29,7 @@ export default async function DashboardLayout({
   }
 
   const userMemberships = access?.membership?.uid
-    ? await getMembershipsByUid(access.membership.uid)
+    ? await getMembershipsByUid(access.membership.uid, access.decoded?.email)
     : [];
   const workspacesList = userMemberships
     .filter((m) => !m.isDeleted)

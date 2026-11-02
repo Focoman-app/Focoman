@@ -121,11 +121,39 @@ export async function searchPublicMarketplace(city?: string, tags?: string[]) {
 }
 
 export async function getPublicMarketplaceProfile(slug: string) {
-  // Public profile viewing
+  // Public profile viewing with deleted studio account handling
   try {
-    const profile = await getMarketplaceProfileBySlug(slug);
-    if (!profile) return { success: false, error: "Profile not found or is not public." };
-    return { success: true, profile };
+    const { getFirestoreServerInstance } = await import("@focoman/db");
+    const db = getFirestoreServerInstance();
+    const cleanSlug = slug.trim().toLowerCase();
+
+    const snap = await db
+      .collection("marketplace_profiles")
+      .where("slug", "==", cleanSlug)
+      .limit(1)
+      .get();
+
+    if (!snap.empty) {
+      const profile = snap.docs[0].data() as MarketplaceProfile;
+      if (profile.isDeleted) {
+        return { success: false, isStudioDeleted: true, studioName: profile.name };
+      }
+      if (!profile.isVisible) {
+        return { success: false, error: "Profile is not public." };
+      }
+      return { success: true, profile };
+    }
+
+    // Also check studio collection if marketplace profile was not generated or slug matches studio ID directly
+    const studioSnap = await db.collection("studios").doc(cleanSlug).get();
+    if (studioSnap.exists) {
+      const studioData = studioSnap.data();
+      if (studioData?.isDeleted) {
+        return { success: false, isStudioDeleted: true, studioName: studioData.name };
+      }
+    }
+
+    return { success: false, error: "Profile not found or is not public." };
   } catch (error: unknown) {
     return { success: false, error: error instanceof Error ? error.message : "Failed to load public profile" };
   }

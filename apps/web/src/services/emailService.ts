@@ -37,6 +37,78 @@ const STYLES = {
 };
 
 /**
+ * 0. Studio Workspace Created Welcome Email (Sent to Studio Owner upon Sign-Up/Registration)
+ */
+export function buildStudioWelcomeOwnerHtml(params: {
+  ownerName: string;
+  studioName: string;
+  studioSlug: string;
+  dashboardUrl: string;
+}): string {
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Welcome to Focoman — ${params.studioName}</title>
+</head>
+<body style="margin:0;padding:32px 12px;background-color:${STYLES.bodyBg};font-family:${STYLES.fontFamily};color:${STYLES.textPrimary};">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:560px;margin:0 auto;background:${STYLES.cardBg};border-radius:16px;border:1px solid ${STYLES.border};overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.05);">
+    <tr>
+      <td style="padding:28px 32px;background:#18181b;color:#ffffff;">
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:1.5px;color:#a1a1aa;font-weight:700;">FOCOMAN OS • STUDIO ONBOARDING</div>
+        <h1 style="margin:6px 0 0;font-size:22px;font-weight:800;color:#ffffff;">Welcome to Focoman!</h1>
+      </td>
+    </tr>
+
+    <tr>
+      <td style="padding:32px;">
+        <h2 style="margin:0 0 12px;font-size:18px;font-weight:700;color:${STYLES.textPrimary};">
+          Hello ${params.ownerName},
+        </h2>
+        <p style="margin:0 0 20px;font-size:14px;line-height:1.6;color:${STYLES.textSecondary};">
+          Congratulations! Your photography studio workspace <strong>${params.studioName}</strong> has been successfully registered and initialized on Focoman.
+        </p>
+
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:0 0 24px;background:#f8fafc;border:1px solid ${STYLES.border};border-radius:12px;padding:16px;">
+          <tr>
+            <td style="padding:8px 0;font-size:13px;color:${STYLES.textSecondary};width:40%;">Studio Name:</td>
+            <td style="padding:8px 0;font-size:13px;font-weight:700;color:${STYLES.textPrimary};">${params.studioName}</td>
+          </tr>
+          <tr>
+            <td style="padding:8px 0;font-size:13px;color:${STYLES.textSecondary};">Workspace Slug:</td>
+            <td style="padding:8px 0;font-family:monospace;font-size:13px;font-weight:700;color:${STYLES.accent};">/${params.studioSlug}</td>
+          </tr>
+          <tr>
+            <td style="padding:8px 0;font-size:13px;color:${STYLES.textSecondary};">Dashboard URL:</td>
+            <td style="padding:8px 0;font-size:13px;font-weight:600;color:${STYLES.primary};">${params.dashboardUrl}</td>
+          </tr>
+        </table>
+
+        <div style="text-align:center;margin:32px 0 24px;">
+          <a href="${params.dashboardUrl}" style="display:inline-block;padding:14px 32px;background:#18181b;color:#ffffff;text-decoration:none;font-weight:700;font-size:14px;border-radius:10px;box-shadow:0 4px 14px rgba(0,0,0,0.2);">
+            Open Studio Dashboard
+          </a>
+        </div>
+
+        <p style="margin:16px 0 0;font-size:12px;line-height:1.5;color:${STYLES.textMuted};text-align:center;">
+          For questions or assistance, reach us anytime at <a href="mailto:support@focoman.com" style="color:${STYLES.accent};text-decoration:none;font-weight:600;">support@focoman.com</a>.
+        </p>
+      </td>
+    </tr>
+
+    <tr>
+      <td style="padding:20px 32px;background:#f8fafc;border-top:1px solid ${STYLES.border};font-size:11px;color:${STYLES.textMuted};text-align:center;">
+        Focoman Studio Management OS • Photography Business Operations
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+`;
+}
+
+/**
  * 1. Crew Member Invitation Email Template
  */
 export function buildCrewInvitationHtml(params: {

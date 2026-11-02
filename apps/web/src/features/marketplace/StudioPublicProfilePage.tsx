@@ -39,6 +39,36 @@ export default async function StudioPublicProfilePage(props: {
   const params = await props.params;
   const res = await getPublicMarketplaceProfile(params.slug);
 
+  if (res.isStudioDeleted) {
+    return (
+      <div className="min-h-screen bg-surface-app flex flex-col">
+        <Navbar />
+        <main className="flex-1 max-w-xl mx-auto w-full px-4 sm:px-6 py-16 flex flex-col items-center justify-center text-center">
+          <div className="bg-white rounded-3xl border border-border-default p-8 sm:p-12 shadow-sm w-full">
+            <h1 className="text-2xl font-extrabold text-text-primary tracking-tight sm:text-3xl">
+              Studio Account Closed
+            </h1>
+            <p className="mt-3 text-sm text-text-secondary leading-relaxed">
+              The studio <span className="font-semibold text-text-primary">"{res.studioName || params.slug}"</span> has been closed or deleted by the owner.
+            </p>
+            <div className="mt-6 p-4 rounded-2xl bg-gray-50 border border-border-default text-xs text-text-secondary text-left space-y-1.5">
+              <p className="font-bold text-text-primary">Looking for your order or deliverables?</p>
+              <p>Existing orders and proofing galleries associated with this studio remain fully accessible via your tracking PIN or direct order link.</p>
+            </div>
+            <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
+              <Link
+                href="/studios"
+                className="w-full sm:w-auto rounded-xl bg-text-primary px-6 py-2.5 text-xs font-bold text-white shadow-xs hover:bg-black transition text-center"
+              >
+                Browse Marketplace
+              </Link>
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
   if (!res.success || !res.profile) notFound();
 
   const profile = res.profile;

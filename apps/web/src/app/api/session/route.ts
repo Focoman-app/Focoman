@@ -13,7 +13,26 @@ function hasSameOrigin(request: Request): boolean {
   return true;
 }
 
-function cookieOptions() {
+function cookieOptions(request?: Request) {
+  const host = request?.headers.get('host') || '';
+  const referer = request?.headers.get('referer') || '';
+  const secFetchDest = request?.headers.get('sec-fetch-dest') || '';
+
+  const isIframeOrPreview =
+    process.env.NODE_ENV !== 'production' ||
+    host.includes('.run.app') ||
+    referer.includes('aistudio') ||
+    secFetchDest === 'iframe';
+
+  if (isIframeOrPreview) {
+    return {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'none' as const,
+      path: '/',
+    };
+  }
+
   return {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
@@ -41,7 +60,7 @@ export async function POST(request: Request) {
     const sessionCookie = await createSessionCookieFromIdToken(idToken);
     const response = NextResponse.json({ success: true });
     response.cookies.set(SESSION_COOKIE_NAME, sessionCookie, {
-      ...cookieOptions(),
+      ...cookieOptions(request),
       maxAge: SESSION_COOKIE_MAX_AGE_MS / 1000,
     });
     return response;
@@ -59,7 +78,7 @@ export async function DELETE(request: Request) {
   }
 
   const response = NextResponse.json({ success: true });
-  response.cookies.set(SESSION_COOKIE_NAME, '', { ...cookieOptions(), maxAge: 0 });
+  response.cookies.set(SESSION_COOKIE_NAME, '', { ...cookieOptions(request), maxAge: 0 });
   return response;
 }
 
@@ -76,7 +95,7 @@ export async function GET(request: Request) {
   const sessionCookie = `dev_session:${email}:owner-${studio}`;
   const response = NextResponse.redirect(new URL(redirectTo, request.url));
   response.cookies.set(SESSION_COOKIE_NAME, sessionCookie, {
-    ...cookieOptions(),
+    ...cookieOptions(request),
     maxAge: SESSION_COOKIE_MAX_AGE_MS / 1000,
   });
   return response;

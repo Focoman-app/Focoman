@@ -48,12 +48,11 @@ export function getFirestoreServerInstance(): Firestore {
   const projectId =
     process.env.FIREBASE_PROJECT_ID ||
     process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ||
-    process.env.GOOGLE_CLOUD_PROJECT;
+    process.env.GOOGLE_CLOUD_PROJECT ||
+    'focoman';
 
   const clientEmail = process.env.FIREBASE_CLIENT_EMAIL || process.env.FIREBASE_ADMIN_CLIENT_EMAIL;
   const privateKey = parsePrivateKey(process.env.FIREBASE_PRIVATE_KEY || process.env.FIREBASE_ADMIN_PRIVATE_KEY);
-
-  const emulatorHost = process.env.FIRESTORE_EMULATOR_HOST;
 
   const existingApps = getApps();
   if (existingApps.length > 0) {
@@ -63,14 +62,9 @@ export function getFirestoreServerInstance(): Firestore {
       credential: cert({ projectId, clientEmail, privateKey }),
       projectId,
     });
-  } else if (emulatorHost && projectId) {
-    firebaseAppInstance = initializeApp({ projectId });
   } else {
-    throw new Error(
-      '[Focoman DB] Firebase Admin credentials are not configured. ' +
-      'Set FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, and FIREBASE_PRIVATE_KEY in your environment, ' +
-      'or set FIRESTORE_EMULATOR_HOST to use the Firestore Emulator locally.'
-    );
+    // Fallback initialization using default project credentials
+    firebaseAppInstance = initializeApp({ projectId });
   }
 
   firestoreDbInstance = getFirestore(firebaseAppInstance);
@@ -297,14 +291,47 @@ export async function resetStudioWhatsappConfig(studioId: string): Promise<boole
 }
 
 // MEMBERSHIPS
-export async function getMembershipsByUid(uid: string): Promise<StudioMembership[]> {
+export async function getMembershipsByUid(uid: string, email?: string): Promise<StudioMembership[]> {
   const firestore = getFirestoreServerInstance();
   const snap = await firestore
     .collection('memberships')
     .where('uid', '==', uid)
     .where('status', '==', 'ACTIVE')
     .get();
-  return snap.docs.map((d) => d.data() as StudioMembership);
+
+  const memberships = snap.docs.map((d) => d.data() as StudioMembership);
+  const existingStudioIds = new Set(memberships.map((m) => m.studioId.toLowerCase()));
+
+  try {
+    const studiosSnap = await firestore.collection('studios').where('ownerId', '==', uid).get();
+    for (const doc of studiosSnap.docs) {
+      const studio = doc.data() as Studio;
+      if (!studio.isDeleted && !existingStudioIds.has(studio.id.toLowerCase())) {
+        const ownerMembership: StudioMembership = {
+          id: `${studio.id}_${uid}`,
+          studioId: studio.id,
+          studioName: studio.name,
+          uid,
+          role: 'STUDIO_OWNER',
+          status: 'ACTIVE',
+          joinedAt: studio.createdAt || new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+        memberships.push(ownerMembership);
+        existingStudioIds.add(studio.id.toLowerCase());
+
+        try {
+          await firestore.collection('memberships').doc(ownerMembership.id).set(ownerMembership, { merge: true });
+        } catch {
+          // ignore auto-heal background errors
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[getMembershipsByUid] Error fetching owned studios fallback:', err);
+  }
+
+  return memberships;
 }
 
 export async function getMembershipByUidAndStudio(
