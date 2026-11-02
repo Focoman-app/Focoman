@@ -80,8 +80,17 @@ export async function syncServerSession(force = false): Promise<boolean> {
  */
 export async function signInWithGoogle(): Promise<UserCredential | void> {
   const isIframe = typeof window !== "undefined" && window.self !== window.top;
-  if (isIframe) {
-    console.log("[Focoman Auth] App running inside embedded frame. Automatically using popup sign-in...");
+  const isVercel = typeof window !== "undefined" && window.location.hostname.includes("vercel.app");
+  const isCustomHost =
+    typeof window !== "undefined" &&
+    window.location.hostname !== "localhost" &&
+    window.location.hostname !== "127.0.0.1" &&
+    !window.location.hostname.includes("firebaseapp.com") &&
+    !window.location.hostname.includes("web.app");
+
+  // Use popup sign-in on Vercel, custom domains, or inside iFrames to prevent cross-origin redirect token loss (3rd-party cookie / ITP restrictions)
+  if (isIframe || isVercel || isCustomHost) {
+    console.log("[Focoman Auth] Using popup sign-in for cross-domain / Vercel host:", typeof window !== "undefined" ? window.location.hostname : "");
     const credential = await signInWithPopup(auth, googleProvider);
     await syncServerSession(true);
     return credential;

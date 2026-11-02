@@ -2,19 +2,19 @@
 
 All meaningful changes to the Focoman codebase, documentation, architecture, or agent workflow instructions must be recorded in this file according to Section 20 of **[Agents.md](Agents.md)**.
 
-## CHG-048 — Sign-In Page Error State Isolation & Alternate Method Prompt
+## CHG-048 — Sign-In Error State Redesign & Vercel Cross-Domain Popup Authentication
 
-- **Task:** CHG-048 — Sign-In Error State Redesign & Alternate Method Prompt Refinements
+- **Task:** CHG-048 — Sign-In Error State Redesign & Vercel Cross-Domain Popup Authentication
 - **Date:** 2026-11-02
-- **Area:** `apps/web/src/app/sign-in/page.tsx`
+- **Area:** `apps/web/src/app/sign-in/page.tsx`, `apps/web/src/lib/firebaseAuth.ts`
 - **Change:**
-  1. **Error Message & Title Refinement (`sign-in/page.tsx`)**:
-     - Updated error notice title from "Sign-In Redirect Notice" to **"Sign in failed"**.
-     - Updated redirect error text to: *"Sign-in completed without session credentials. Please try signing in again."*
-  2. **Button Labels & Cleaner Layout**:
-     - Standardized alternate method button text to **"Try alternate method"** (removed `(Popup Window)` bracket text and arrow marks `→`/`←`).
-     - Removed the "← Back to standard sign-in" button for a clean, minimal error state.
-     - Removed all icons/emotes from the error notice block.
+  1. **Vercel & Custom Domain Automatic Popup Authentication (`firebaseAuth.ts`)**:
+     - Added automatic host detection (`isVercel` / `isCustomHost`) to `signInWithGoogle()`.
+     - When deployed on Vercel (`*.vercel.app`) or custom hosts, authentication automatically invokes `signInWithPopup`. This prevents cross-origin session token loss caused by browser third-party cookie restrictions (ITP / CHIPS) during same-tab redirects between `*.vercel.app` and `focoman.firebaseapp.com`.
+  2. **Error Message & Title Refinement (`sign-in/page.tsx`)**:
+     - Updated error notice title to **"Sign in failed"**.
+     - Updated error text to: *"Sign-in completed without session credentials. Please try signing in again."*
+     - Standardized alternate method button text to **"Try alternate method"**.
 - **Verification:** TypeScript compilation clean (`npx tsc -p apps/web/tsconfig.json --noEmit`), 0 errors.
 
 ---
