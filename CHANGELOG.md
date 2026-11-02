@@ -2,6 +2,21 @@
 
 All meaningful changes to the Focoman codebase, documentation, architecture, or agent workflow instructions must be recorded in this file according to Section 20 of **[Agents.md](Agents.md)**.
 
+## CHG-048 — Sign-In Page Error State Isolation & Alternate Method Prompt
+
+- **Task:** CHG-048 — Sign-In Error State Redesign & Alternate Method Prompt Refinements
+- **Date:** 2026-11-02
+- **Area:** `apps/web/src/app/sign-in/page.tsx`
+- **Change:**
+  1. **Error Message & Title Refinement (`sign-in/page.tsx`)**:
+     - Updated error notice title from "Sign-In Redirect Notice" to **"Sign in failed"**.
+     - Updated redirect error text to: *"Sign-in completed without session credentials. Please try signing in again."*
+  2. **Button Labels & Cleaner Layout**:
+     - Standardized alternate method button text to **"Try alternate method"** (removed `(Popup Window)` bracket text and arrow marks `→`/`←`).
+     - Removed the "← Back to standard sign-in" button for a clean, minimal error state.
+     - Removed all icons/emotes from the error notice block.
+- **Verification:** TypeScript compilation clean (`npx tsc -p apps/web/tsconfig.json --noEmit`), 0 errors.
+
 ---
 
 ## CHG-050 — Delete User Account in Account Settings with Typing Confirmation

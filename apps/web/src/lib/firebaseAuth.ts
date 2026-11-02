@@ -79,6 +79,14 @@ export async function syncServerSession(force = false): Promise<boolean> {
  * Fallback: popup sign-in if same-tab redirect throws or is blocked.
  */
 export async function signInWithGoogle(): Promise<UserCredential | void> {
+  const isIframe = typeof window !== "undefined" && window.self !== window.top;
+  if (isIframe) {
+    console.log("[Focoman Auth] App running inside embedded frame. Automatically using popup sign-in...");
+    const credential = await signInWithPopup(auth, googleProvider);
+    await syncServerSession(true);
+    return credential;
+  }
+
   console.log("[Focoman Auth] Initiating same-tab signInWithRedirect (authDomain:", auth.config?.authDomain || "focoman.firebaseapp.com", ")...");
   try {
     await signInWithRedirect(auth, googleProvider);
