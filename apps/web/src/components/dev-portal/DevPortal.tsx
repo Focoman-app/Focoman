@@ -125,18 +125,98 @@ function SignIn() {
     finally { setBusy(false); }
   }
 
-  return <div className={styles.loginShell}><div className={styles.loginCard}>
-    <div className={styles.masthead}><FocomanLogo className={styles.loginLogo} showStudiosSuffix={false} /><span> INTERNAL PORTAL</span></div>
-    <div className={styles.loginIcon}><ShieldCheck size={23} /></div>
-    <p className={styles.eyebrow}>RESTRICTED ACCESS</p><h1>Dev Portal</h1>
-    <p className={styles.description}>A private workspace for platform analytics and operations.</p>
-    <form onSubmit={submit} className={styles.form}>
-      <label htmlFor="dev-password">Admin password</label>
-      <input id="dev-password" type="password" autoComplete="current-password" value={password} onChange={e => setPassword(e.target.value)} required />
-      {error && <p role="alert" className={styles.error}>{error}</p>}
-      <button type="submit" disabled={busy}>{busy ? "Signing in…" : "Unlock portal →"}</button>
-    </form><p className={styles.loginFoot}>AUTHORISED PERSONNEL ONLY</p>
-  </div></div>;
+  return (
+    <div className="min-h-screen bg-surface-app text-text-primary selection:bg-brand-blue-soft flex flex-col items-center justify-center p-4 py-12">
+      <div className="w-full max-w-md">
+        <div className="mb-6 flex items-center justify-between">
+          <a
+            href="/"
+            className="inline-flex items-center gap-2 text-xs font-semibold text-text-secondary hover:text-text-primary transition"
+          >
+            ← Back to Home
+          </a>
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-border-default bg-white px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-text-secondary shadow-xs">
+            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            Internal Ops
+          </span>
+        </div>
+
+        <div className="w-full rounded-3xl border border-border-default bg-white p-8 shadow-sm sm:p-10">
+          <div className="text-center">
+            <div className="flex justify-center mb-3">
+              <FocomanLogo className="h-8 w-auto" showStudiosSuffix={false} />
+            </div>
+            <span className="text-xs font-bold uppercase tracking-widest text-brand-blue-primary">
+              Restricted Environment
+            </span>
+            <h1 className="mt-2 text-2xl font-extrabold tracking-tight text-text-primary sm:text-3xl">
+              Dev Portal Access
+            </h1>
+            <p className="mx-auto mt-2 text-sm text-text-secondary">
+              A private workspace for platform analytics, telemetry, and infrastructure operations.
+            </p>
+          </div>
+
+          <div className="mx-auto mt-8">
+            <div className="rounded-2xl border border-border-default bg-gray-50/50 p-6 sm:p-7">
+              <div className="flex items-center gap-3 mb-5 pb-4 border-b border-border-default">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-blue-soft text-brand-blue-primary">
+                  <ShieldCheck size={20} />
+                </div>
+                <div>
+                  <h2 className="text-sm font-bold text-text-primary">Admin Authentication</h2>
+                  <p className="text-[11px] text-text-secondary">Enter your platform security credentials</p>
+                </div>
+              </div>
+
+              <form onSubmit={submit} className="space-y-4">
+                <div>
+                  <label htmlFor="dev-password" className="block text-xs font-bold text-text-primary mb-1.5">
+                    Admin Password
+                  </label>
+                  <input
+                    id="dev-password"
+                    type="password"
+                    autoComplete="current-password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Enter security key or password"
+                    required
+                    className="w-full rounded-xl border border-border-default bg-white px-4 py-3 text-sm text-text-primary shadow-xs placeholder:text-text-tertiary focus:border-brand-blue-primary focus:outline-none focus:ring-2 focus:ring-brand-blue-primary/20 transition"
+                  />
+                </div>
+
+                {error && (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50/80 p-3.5 text-xs text-amber-950 font-medium">
+                    {error}
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={busy}
+                  className="w-full rounded-xl bg-text-primary text-white font-bold py-3.5 px-4 text-xs shadow-sm hover:bg-black active:translate-y-[1px] transition text-center cursor-pointer flex items-center justify-center gap-2 disabled:opacity-60"
+                >
+                  {busy ? (
+                    <>
+                      <RefreshCw size={14} className="animate-spin" />
+                      <span>Verifying Credentials...</span>
+                    </>
+                  ) : (
+                    <span>Unlock Dev Portal →</span>
+                  )}
+                </button>
+              </form>
+            </div>
+          </div>
+
+          <p className="text-[11px] text-text-tertiary text-center mt-6">
+            Authorised FocoMan administrators only. Session valid for 4 hours.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function MetricCard({ label, value, note }: { label: string; value: number | null | undefined; note: string }) {

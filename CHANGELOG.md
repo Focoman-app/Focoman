@@ -2,6 +2,20 @@
 
 All meaningful changes to the Focoman codebase, documentation, architecture, or agent workflow instructions must be recorded in this file according to Section 20 of **[Agents.md](Agents.md)**.
 
+## CHG-072 — Dev Portal Sign-In Theme Alignment & Scrypt Security Credentials
+
+- **Task:** CHG-072 — Restructure Dev Portal sign-in UI to align with FocoMan modern design system and configure scrypt credentials in local environment.
+- **Date:** 2026-11-03
+- **Area:** apps/web/src/components/dev-portal/DevPortal.tsx, apps/web/.env.local, .env.example, CHANGELOG.md.
+- **Change:**
+  1. Revamped the Dev Portal sign-in UI: replaced retro monospace fonts, Georgia serifs, and raw square borders with modern Inter typography, soft rounded-3xl container, brand blue accents (#0EA5E9), FocomanLogo, and back-to-home navigation matching apps/web/src/app/sign-in/page.tsx.
+  2. Configured scrypt salted password hash (DEV_PORTAL_PASSWORD_HASH) and 32-byte cryptographic session secret (DEV_PORTAL_SESSION_SECRET) in apps/web/.env.local with default password FocomanAdmin2026!.
+  3. Updated .env.example to track the required dev portal environment variables.
+- **Verification:**
+  - npx tsc --project apps/web/tsconfig.json --noEmit passed with 0 errors.
+  - npm test passed 36/36 tests.
+  - node --test tests/dev-portal-auth.test.ts passed 2/2 tests.
+
 ## CHG-071 — Production Domain Routing Live on Vercel & Registrar Policy
 
 - **Task:** CHG-071 — Record production live routing on `focoman.com`, Hostinger registrar security policy, and planned GitHub/Vercel workspace migrations.
