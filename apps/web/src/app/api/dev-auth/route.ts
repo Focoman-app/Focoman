@@ -6,20 +6,27 @@ export const dynamic = 'force-dynamic';
 
 function validOrigin(request: Request): boolean {
   const origin = request.headers.get('origin');
+  console.log('[dev-auth] Received origin:', origin, 'request.url:', request.url);
   if (!origin) return false;
-  
-  // Allow current request origin (e.g. localhost, focoman.vercel.app, focoman.com)
-  const reqOrigin = new URL(request.url).origin;
-  if (origin === reqOrigin) return true;
 
-  // Allow canonical production hostnames
-  const allowedHosts = [
-    'https://focoman.com',
-    'https://www.focoman.com',
-    'https://focoman.vercel.app',
-    'https://dev.4command.com',
-  ];
-  return allowedHosts.includes(origin);
+  try {
+    const originHost = new URL(origin).host.toLowerCase();
+    const reqHost = (request.headers.get('host') || new URL(request.url).host).toLowerCase();
+    if (originHost === reqHost) return true;
+
+    if (originHost.startsWith('localhost:') || originHost.startsWith('127.0.0.1:')) return true;
+
+    const allowedHosts = [
+      'focoman.com',
+      'www.focoman.com',
+      'focoman.vercel.app',
+      'dev.4command.com',
+    ];
+    return allowedHosts.includes(originHost);
+  } catch (e) {
+    console.error('[dev-auth] Error validating origin:', e);
+    return false;
+  }
 }
 
 function cookieOptions() {
