@@ -39,3 +39,6 @@ Thumbs.db
 
 # Scratch
 scratch/
+
+# Local helper binaries are not application or social-module source.
+/.tools/

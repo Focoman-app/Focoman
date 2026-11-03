@@ -1,0 +1,13 @@
+# Only reusable framework files and small checked SVG assets belong here.
+# Episode content, including text/scripts, stays outside this checkout.
+*
+!/.gitignore
+!/README.md
+!/brand/
+!/brand/README.md
+!/brand/logo.svg
+!/brand/logo-dark.svg
+!/brand/mark.svg
+!/skills/
+!/skills/focoman-video/
+!/skills/focoman-video/SKILL.md

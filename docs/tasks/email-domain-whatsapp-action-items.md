@@ -17,7 +17,9 @@
 - [ ] Confirm where `focoman.com` DNS is managed and inventory existing web, MX, SPF, DKIM, and DMARC records before editing anything.
 - [ ] Add the domain to Brevo and Resend; apply their provider-specific DKIM/domain-verification records and maintain one valid SPF record (merge mechanisms rather than adding conflicting SPF records).
 - [ ] Preserve existing website records and any chosen mailbox MX records. Do not enable Cloudflare Email Routing until its effect on the domain's MX records is reviewed.
-- [ ] Decide whether `support@focoman.com` is only a sender, an alias forwarded to an existing inbox, or a full mailbox. Configure separate `From` and `Reply-To` addresses accordingly.
+- [ ] Create the approved first four Zoho mailboxes from a laptop after domain ownership and DNS readiness are confirmed: `founder@focoman.com` (company ownership and recovery), `webmaster@focoman.com` (website, DNS, hosting, and technical administration), `support@focoman.com` (all customer, app, and finance support), and `noreply@focoman.com` (automated outbound messages only).
+- [ ] Reserve Zoho's fifth mailbox for a future named employee; do not allocate it to a shared account.
+- [ ] Configure automated messages sent from `noreply@focoman.com` to state that replies are not monitored and direct recipients to `support@focoman.com` for help. Do not use `noreply@focoman.com` as an owner, recovery, or support-login identity.
 - [ ] Verify SPF/DKIM/DMARC and test inbox placement and replies before customer rollout.
 
 ## 3. WhatsApp Business Cloud API — notifications and owner bot

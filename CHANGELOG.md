@@ -2,6 +2,30 @@
 
 All meaningful changes to the Focoman codebase, documentation, architecture, or agent workflow instructions must be recorded in this file according to Section 20 of **[Agents.md](Agents.md)**.
 
+## CHG-066 — Isolate Lightweight Social Framework and Update Video Defaults
+
+- **Task:** Rebase recent remote changes, preserve local work, and organize reusable social/video guidance without committing generated media.
+- **Date:** 2026-11-03
+- **Area:** `social/`, `docs/Index.md`, `.gitignore`; installed personal `focoman-video` skill.
+- **Change:** Move the framework into a lightweight social module; retain current-app SVG brand assets and theme references; set landscape videos to 2–3 minutes and portrait Shorts to 32–45 seconds; specify two topic-led thumbnails, captions and SEO publishing copy. Keep episode content, generated media and local tools outside Git. Preserve incoming app changes and local mailbox decisions while resolving overlapping changelog identifiers.
+- **Verification:** Independent review passed: module 7 files / 19,811 bytes; SVG source/geometry comparisons, framework/skill links, media/tool ignore checks, both skill validators and Git whitespace checks passed. `npm test` passed 36/36. No unresolved merge conflicts; local application/package/test files match the rebased upstream. No new video render or social publication performed.
+
+## CHG-065 — Define Reusable FocoMan Studios Video Framework
+
+- **Task:** Record the requested reusable video-production framework and professional asset inventory before creating the next video.
+- **Date:** 2026-11-03
+- **Area:** Initially `docs/design/video-production-framework.md`, `docs/Index.md`; reusable personal skill at `C:/Users/DELL/.codex/skills/focoman-video/SKILL.md`. The framework is now maintained under `social/` (CHG-066).
+- **Change:** Added a working draft separating user requirements from proposed defaults for landscape full videos, portrait Shorts, thumbnails/covers, current application-logo branding, casual Tamil/English narration, subtitles, recurring series, creative review, source integrity and phone delivery. Added discoverable skill instructions that reference the canonical framework.
+- **Verification:** Documentation/skill setup only. Current logo/framework paths and official platform references checked; `quick_validate.py` reported `Skill is valid!`, and `git diff --check` passed. No new video, thumbnail, renderer, paid voice request or external publication was created.
+
+## CHG-064 — Record Initial Professional Mailbox Allocation
+
+- **Task:** Record the approved initial Zoho mailbox allocation and automated sender policy.
+- **Date:** 2026-11-03
+- **Area:** `docs/tasks/email-domain-whatsapp-action-items.md`.
+- **Change:** Documented the first four planned mailboxes: `founder@focoman.com`, `webmaster@focoman.com`, `support@focoman.com`, and outbound-only `noreply@focoman.com`. Reserved the fifth Zoho mailbox for a future named employee and required automated no-reply messages to direct recipients to `support@focoman.com`.
+- **Verification:** Documentation-only; no mailbox, DNS, provider, or application configuration was changed.
+
 ## CHG-063 — Complete Data Purge on Account Deletion & Default Studio Preference
 
 - **Task:** CHG-063 — Fix account deletion to completely purge owned studio collections (orders, tasks, customers, packages, payments) and allow registering with clean slate; introduce explicit default workspace preference on studio registration.

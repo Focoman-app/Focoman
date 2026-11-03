@@ -60,6 +60,7 @@ When evaluating specifications and implementation guidelines:
 ## 6. Design System
 
 - **[Brand Design System](design/brand-design-system.md)** — Design tokens, brand identity, color palettes, typography, and UI component styling rules.
+- **[Social Video Framework](../social/README.md)** — Lightweight reusable framework for 2–3-minute landscape videos, 32–45-second portrait Shorts, thumbnails, narration, subtitles and publishing/SEO copy. Includes [app-derived brand assets](../social/brand/README.md); episode content and media stay device-only.
 
 ---
 
