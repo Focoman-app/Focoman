@@ -136,16 +136,24 @@ export async function registerStudioTransaction(
   membership: StudioMembership
 ): Promise<{ success: boolean; error?: string }> {
   const firestore = getFirestoreServerInstance();
+  const sid = studio.id.toLowerCase();
+
   try {
-    await firestore.runTransaction(async (transaction) => {
-      const studioRef = firestore.collection('studios').doc(studio.id);
-      const studioDoc = await transaction.get(studioRef);
-      if (studioDoc.exists) {
-        const existingData = studioDoc.data() as Studio;
-        if (!existingData.isDeleted) {
-          throw new Error(`Studio identifier "${studio.id}" is already in use.`);
-        }
+    const studioRef = firestore.collection('studios').doc(sid);
+    const studioDoc = await studioRef.get();
+    if (studioDoc.exists) {
+      const existingData = studioDoc.data() as Studio;
+      if (!existingData.isDeleted) {
+        return { success: false, error: `Studio identifier "${studio.id}" is already in use.` };
       }
+      // Studio was previously deleted: purge any leftover historical data before registering anew
+      await purgeAllStudioData(sid);
+    } else {
+      // Purge any orphaned records that might exist with this studioId
+      await purgeAllStudioData(sid);
+    }
+
+    await firestore.runTransaction(async (transaction) => {
       transaction.set(studioRef, studio);
       const membershipRef = firestore.collection('memberships').doc(membership.id);
       transaction.set(membershipRef, membership);
@@ -209,36 +217,131 @@ export async function softDeleteStudio(studioId: string, deletedByUid: string): 
   return true;
 }
 
-export async function hardDeleteStudio(studioId: string): Promise<boolean> {
+export async function archiveStudioToHeadless(studioId: string): Promise<boolean> {
   const firestore = getFirestoreServerInstance();
   const sid = studioId.toLowerCase();
+  const now = new Date().toISOString();
+  const archivedTag = `${sid}__archived_${Date.now()}`;
 
-  // 1. Delete the studio document
-  await firestore.collection('studios').doc(sid).delete();
+  // 1. Fetch studio doc to capture name if needed
+  let studioName = "Studio";
+  try {
+    const studioDoc = await firestore.collection('studios').doc(sid).get();
+    if (studioDoc.exists) {
+      studioName = (studioDoc.data() as Studio)?.name || studioName;
+    }
+  } catch {
+    // Non-fatal
+  }
 
-  // 2. Delete all memberships for this studio
-  const memSnap = await firestore
-    .collection('memberships')
-    .where('studioId', '==', sid)
-    .get();
+  // 2. Detach orders and convert them to headless records (NEVER DELETE CUSTOMER ORDERS)
+  try {
+    const ordersSnap = await firestore.collection('orders').where('studioId', '==', sid).get();
+    if (!ordersSnap.empty) {
+      const docs = ordersSnap.docs;
+      for (let i = 0; i < docs.length; i += 400) {
+        const batch = firestore.batch();
+        const chunk = docs.slice(i, i + 400);
+        chunk.forEach((d) => {
+          batch.update(d.ref, {
+            isHeadless: true,
+            studioStatus: 'INACTIVE',
+            archivedStudioId: sid,
+            studioId: archivedTag,
+            updatedAt: now,
+          });
+        });
+        await batch.commit();
+      }
+    }
+  } catch (err) {
+    console.warn(`[archiveStudioToHeadless] Error archiving orders for ${sid}:`, err);
+  }
 
-  const batch = firestore.batch();
-  memSnap.docs.forEach((doc) => {
-    batch.delete(doc.ref);
-  });
+  // 3. Move associated tasks to archived studio tag so they remain attached to orders for customer tracking
+  try {
+    const tasksSnap = await firestore.collection('tasks').where('studioId', '==', sid).get();
+    if (!tasksSnap.empty) {
+      const docs = tasksSnap.docs;
+      for (let i = 0; i < docs.length; i += 400) {
+        const batch = firestore.batch();
+        const chunk = docs.slice(i, i + 400);
+        chunk.forEach((d) => {
+          batch.update(d.ref, {
+            studioId: archivedTag,
+            updatedAt: now,
+          });
+        });
+        await batch.commit();
+      }
+    }
+  } catch (err) {
+    console.warn(`[archiveStudioToHeadless] Error archiving tasks for ${sid}:`, err);
+  }
 
-  // 3. Delete all invitations for this studio
-  const invSnap = await firestore
-    .collection('invitations')
-    .where('studioId', '==', sid)
-    .get();
+  // 4. Move payments to archived tag so customer payment history and receipts stay intact
+  try {
+    const paymentsSnap = await firestore.collection('payments').where('studioId', '==', sid).get();
+    if (!paymentsSnap.empty) {
+      const docs = paymentsSnap.docs;
+      for (let i = 0; i < docs.length; i += 400) {
+        const batch = firestore.batch();
+        const chunk = docs.slice(i, i + 400);
+        chunk.forEach((d) => {
+          batch.update(d.ref, {
+            studioId: archivedTag,
+            updatedAt: now,
+          });
+        });
+        await batch.commit();
+      }
+    }
+  } catch (err) {
+    console.warn(`[archiveStudioToHeadless] Error archiving payments for ${sid}:`, err);
+  }
 
-  invSnap.docs.forEach((doc) => {
-    batch.delete(doc.ref);
-  });
+  // 5. Clean up ephemeral studio operational collections: memberships, invitations, studio_packages
+  const ephemeralCols = ['memberships', 'invitations', 'studio_packages', 'booking_requests', 'members'];
+  for (const colName of ephemeralCols) {
+    try {
+      const snap = await firestore.collection(colName).where('studioId', '==', sid).get();
+      if (!snap.empty) {
+        const docs = snap.docs;
+        for (let i = 0; i < docs.length; i += 400) {
+          const batch = firestore.batch();
+          const chunk = docs.slice(i, i + 400);
+          chunk.forEach((d) => batch.delete(d.ref));
+          await batch.commit();
+        }
+      }
+    } catch (err) {
+      console.warn(`[archiveStudioToHeadless] Error deleting from ${colName} for studio ${sid}:`, err);
+    }
+  }
 
-  await batch.commit();
+  // 6. Delete marketplace profile if exists
+  try {
+    await firestore.collection('marketplace_profiles').doc(sid).delete();
+  } catch (err) {
+    console.warn(`[archiveStudioToHeadless] Error deleting marketplace_profile for studio ${sid}:`, err);
+  }
+
+  // 7. Delete the active studio document so the slug `sid` is immediately freed up for new registration!
+  try {
+    await firestore.collection('studios').doc(sid).delete();
+  } catch (err) {
+    console.warn(`[archiveStudioToHeadless] Error deleting studio doc for ${sid}:`, err);
+  }
+
   return true;
+}
+
+export async function purgeAllStudioData(studioId: string): Promise<boolean> {
+  return await archiveStudioToHeadless(studioId);
+}
+
+export async function hardDeleteStudio(studioId: string): Promise<boolean> {
+  return await archiveStudioToHeadless(studioId);
 }
 
 export async function leaveStudioMembership(uid: string, studioId: string): Promise<boolean> {

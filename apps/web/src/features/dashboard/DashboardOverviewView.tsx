@@ -54,22 +54,19 @@ function addDays(date: Date, days: number): Date {
 }
 
 function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency: "INR",
-    maximumFractionDigits: 0,
-  }).format(amount);
+  return "₹" + Math.round(amount).toLocaleString("en-IN");
 }
+
+const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 function formatDisplayDate(dateStr: string): string {
   if (!dateStr) return "-";
   try {
     const d = parseDateOnly(dateStr);
-    return new Intl.DateTimeFormat("en-IN", {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-    }).format(d);
+    const day = d.getDate();
+    const month = MONTH_NAMES[d.getMonth()];
+    const year = d.getFullYear();
+    return `${day} ${month} ${year}`;
   } catch {
     return dateStr;
   }
@@ -349,9 +346,9 @@ export function DashboardOverviewView({
       const sDate = new Date(bStart);
       const eDate = new Date(Math.min(bEnd, endMs));
       const sDay = sDate.getDate();
-      const sMo = sDate.toLocaleString("en-IN", { month: "short" });
+      const sMo = MONTH_NAMES[sDate.getMonth()];
       const eDay = eDate.getDate();
-      const eMo = eDate.toLocaleString("en-IN", { month: "short" });
+      const eMo = MONTH_NAMES[eDate.getMonth()];
       const label = sMo === eMo ? `${sDay} - ${eDay} ${sMo}` : `${sDay} ${sMo} - ${eDay} ${eMo}`;
 
       buckets.push({

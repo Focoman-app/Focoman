@@ -2,6 +2,69 @@
 
 All meaningful changes to the Focoman codebase, documentation, architecture, or agent workflow instructions must be recorded in this file according to Section 20 of **[Agents.md](Agents.md)**.
 
+## CHG-063 — Complete Data Purge on Account Deletion & Default Studio Preference
+
+- **Task:** CHG-063 — Fix account deletion to completely purge owned studio collections (orders, tasks, customers, packages, payments) and allow registering with clean slate; introduce explicit default workspace preference on studio registration.
+- **Date:** 2026-11-02
+- **Area:** `packages/db/src/index.ts`, `apps/web/src/actions/studioActions.ts`, `apps/web/src/app/account-settings/page.tsx`, `apps/web/src/app/onboarding/register-studio/page.tsx`.
+- **Change:**
+  1. **Complete Studio Data Purge**:
+     - Added `purgeAllStudioData(studioId)` in `@focoman/db` to systematically delete all records across `orders`, `tasks`, `customers`, `payments`, `studio_packages`, `memberships`, `members`, `invitations`, `booking_requests`, `marketplace_profiles`, and `studios` documents.
+     - Updated `hardDeleteStudio` to leverage `purgeAllStudioData`.
+     - In `deleteUserAccountAction`, when an owner deletes their account, all owned studios without other active owners are completely purged, user preferences are cleared, and client-side `focoman_*` localStorage keys are removed.
+     - In `registerStudioTransaction`, whenever a studio is created/re-registered with an identical slug, any residual or historical records under that slug are purged first, guaranteeing a 100% clean, blank slate.
+  2. **Default Workspace Architectural Flow**:
+     - Clarified architectural model: First studio is automatically set as default for frictionless onboarding; subsequent studios do not silently hijack or override the existing default workspace.
+     - Added an intuitive checkbox on `/onboarding/register-studio` ("Set as default workspace") that automatically defaults to checked for 1st-time studios and unchecked for existing multi-studio users, giving the user clear transparency and control.
+- **Verification:** `compile_applet` passed (`Build succeeded`), `npm test` passed 36/36 tests.
+
+## CHG-062 — Optimize Services & Starter Packages Mobile View
+
+- **Task:** CHG-062 — Optimize Quick Setup Services & Packages view for mobile screen viewport while preserving desktop/tablet layout.
+- **Date:** 2026-11-02
+- **Area:** `apps/web/src/app/[studioSlug]/dashboard/services/page.tsx`.
+- **Change:**
+  1. **Mobile Natural Document Scrolling**: Replaced fixed height containment with natural viewport scrolling on mobile (`min-h-screen sm:h-full sm:min-h-0 sm:overflow-hidden`).
+  2. **Scrollable Header on Mobile**: Made the header scroll naturally with content on mobile (`relative sm:shrink-0`), condensed badges, and hid verbose explanatory paragraph on mobile (`hidden sm:block`), recovering ~120px+ of vertical view area.
+  3. **Ultra-Sleek Sticky Footer**: Condensed the bottom action bar on mobile by hiding non-critical text and providing a full-width clean CTA button (`Save & Launch Dashboard →`), taking only ~50px instead of ~120px.
+  4. **Compact Card Spacing**: Reduced padding on mobile (`p-3.5 sm:p-8`) and fitted price inputs (`w-24 sm:w-28`) for comfortable single-row alignment.
+  5. **Preserved Desktop Layout**: Desktop (`sm:`/`lg:`) retains the original two-panel layout, fixed header, full descriptions, and side-by-side action footer.
+- **Verification:** `compile_applet` passed (`Build succeeded`), `npm test` passed 36/36 tests.
+
+## CHG-061 — Prioritize Studio Owner Option on Workspaces Page
+
+- **Task:** CHG-061 — Reorder initial onboarding workspace options to prioritize studio owners as primary customers.
+- **Date:** 2026-11-02
+- **Area:** `apps/web/src/app/workspaces/page.tsx`.
+- **Change:** Re-ordered the getting started options and quick action buttons on `/workspaces`:
+  1. **Option 1: I run a Studio** (`/onboarding/register-studio`) — Primary option given highest visual priority.
+  2. **Option 2: I'm a Crew Member** (`/onboarding/join-studio`) — Secondary option for invited team members.
+  3. **Option 3: I'm a Customer** (`/studios`) — Tertiary option for end-clients exploring studios.
+- **Verification:** `compile_applet` passed (`Build succeeded`), `npm test` passed 36/36 tests.
+
+## CHG-060 — Eliminate Zoom-In Behavior and Refine Clean FocoMan Spinning Logo
+
+- **Task:** CHG-060 — Eliminate zoom-in scaling on modals/inputs and remove rotating background boxes from the FocoMan loading state.
+- **Date:** 2026-11-02
+- **Area:** `apps/web/src/components/FocomanSpinner.tsx`, `apps/web/src/app/account-settings/page.tsx`, `apps/web/src/app/layout.tsx`, `apps/web/src/app/globals.css`, `apps/web/src/app/workspaces/page.tsx`, `apps/web/src/app/[studioSlug]/dashboard/crm/page.tsx`, `apps/web/src/app/[studioSlug]/dashboard/erp/page.tsx`, `apps/web/src/app/[studioSlug]/dashboard/oms/page.tsx`, `apps/web/src/app/[studioSlug]/dashboard/services/page.tsx`, `apps/web/src/app/[studioSlug]/dashboard/settings/page.tsx`, `apps/web/src/components/AddCrewMemberModal.tsx`.
+- **Change:**
+  1. **Eliminated Zoom-In Behavior**:
+     - Removed `zoom-in` and `zoom-in-95` CSS animation classes across all modals, dialogs, and dropdowns.
+     - Added `viewport` lock (`maximumScale: 1, userScalable: false`) in `layout.tsx` to prevent mobile browsers (iOS Safari/Android Chrome) from zooming the viewport on input focus or modal open.
+     - Added mobile 16px minimum font size enforcement for form inputs in `globals.css` and removed `autoFocus` from the account deletion modal.
+  2. **Refined Clean FocoMan Spinning Logo**:
+     - Removed the background dashed border/square box and lens blur from `FocomanLoadingState` and `FocomanSpinner.tsx`.
+     - Loading views now display purely the authentic FocoMan brand mark smoothly rotating 360 degrees without any surrounding boxes or shapes.
+- **Verification:** `compile_applet` passed (`Build succeeded`), `npm test` passed 36/36 tests.
+
+## CHG-059 — Branded Focoman Logo Loading Spinner
+
+- **Task:** CHG-059 — Replace generic hollow spinning box with authentic rotating FocoMan brand mark loader.
+- **Date:** 2026-11-02
+- **Area:** `apps/web/src/components/FocomanSpinner.tsx`, `apps/web/src/app/sign-in/page.tsx`, `apps/web/src/app/dashboard/page.tsx`, `apps/web/src/app/workspaces/page.tsx`, `apps/web/src/app/track/[passkey]/page.tsx`, `apps/web/src/app/account-settings/page.tsx`, `apps/web/src/app/onboarding/register-studio/page.tsx`, `apps/web/src/app/onboarding/join-studio/page.tsx`, `apps/web/src/features/dashboard/DashboardHomeView.tsx`.
+- **Change:** Created `FocomanSpinner` and `FocomanLoadingState` components featuring the authentic FocoMan superhero/camera shield mark with smooth 360-degree rotation and optional camera focus ring. Replaced hollow border spinners and plain text across Google sign-in ("Connecting to Google..."), session checking ("Checking authentication..."), workspace finding, guest tracking, and onboarding registration.
+- **Verification:** `compile_applet` passed (`Build succeeded`), `npm test` passed 36/36 tests.
+
 ## CHG-058 — Align Dev Portal Theme and Add Local Preview
 
 - **Task:** CHG-058 — Match the FocoMan dashboard theme and enable explicitly opted-in password-free development preview.

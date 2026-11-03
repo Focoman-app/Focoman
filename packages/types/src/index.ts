@@ -278,6 +278,8 @@ export interface CustomerTrackingView {
     orderStatus: OrderStatus;
     staffEmails?: string[];
     staffUids?: string[];
+    isHeadless?: boolean;
+    studioStatus?: string;
   };
   tasks: Array<{
     title: string;
@@ -534,6 +536,9 @@ export interface Order extends SoftDeletable {
   cancellationInfo?: CancellationInfo;
   trackingPasskey: string;
   passkeyPin?: string;
+  isHeadless?: boolean;
+  studioStatus?: 'ACTIVE' | 'INACTIVE' | 'DELETED';
+  archivedStudioId?: string;
   notifyWhatsApp?: boolean;
   notifySms?: boolean;
   notifyEmail?: boolean;

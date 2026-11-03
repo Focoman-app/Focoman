@@ -4,6 +4,7 @@ import { useState, useEffect, Suspense } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useStudioWorkspace } from "@/components/StudioWorkspaceProvider";
+import { FocomanSpinner } from "@/components/FocomanSpinner";
 import { StudioServiceConfig, StudioPackage } from "@focoman/types";
 import {
   updateStudioServicesAction,
@@ -266,7 +267,7 @@ function ServicesContent() {
     : false;
 
   return (
-    <div className="flex flex-col h-full min-h-0 overflow-hidden bg-surface-app">
+    <div className="flex flex-col min-h-screen sm:h-full sm:min-h-0 sm:overflow-hidden bg-surface-app">
       {/* Toast Notification */}
       {toastMessage && (
         <div className="fixed bottom-16 right-6 z-50 rounded-2xl bg-slate-900 px-5 py-3 text-xs font-bold text-white shadow-xl animate-in fade-in slide-in-from-bottom-3 duration-200 flex items-center gap-2">
@@ -275,27 +276,40 @@ function ServicesContent() {
         </div>
       )}
 
-      {/* Top Header Panel (Fixed) */}
-      <header className="shrink-0 border-b border-border-default bg-white px-4 py-4 sm:px-8 sm:py-5 shadow-2xs z-10">
-        <div className="max-w-5xl mx-auto flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      {/* Top Header Panel (Scrolls away on mobile to maximize visible catalog space; fixed on desktop) */}
+      <header className="relative sm:shrink-0 border-b border-border-default bg-white px-3.5 py-3 sm:px-8 sm:py-5 shadow-2xs z-10">
+        <div className="max-w-5xl mx-auto flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4">
           <div>
-            <div className="flex items-center gap-2.5">
-              <span className="inline-block rounded-full bg-brand-blue-50 px-3 py-1 text-[11px] font-bold text-brand-blue-primary uppercase tracking-wider border border-brand-blue-soft">
-                {isOnboarding ? "Step 2 · Quick Setup" : "Studio Catalog"}
-              </span>
-              <span className="text-xs text-text-tertiary">
-                {enabledServices.length} Active Services · {enabledPackages.length} Active Packages
-              </span>
+            <div className="flex items-center justify-between sm:justify-start gap-2.5">
+              <div className="flex items-center gap-2">
+                <span className="inline-block rounded-full bg-brand-blue-50 px-2.5 py-0.5 sm:px-3 sm:py-1 text-[10px] sm:text-[11px] font-bold text-brand-blue-primary uppercase tracking-wider border border-brand-blue-soft">
+                  {isOnboarding ? "Step 2 · Quick Setup" : "Studio Catalog"}
+                </span>
+                <span className="text-[11px] sm:text-xs text-text-tertiary">
+                  {enabledServices.length} Active Services · {enabledPackages.length} Active Packages
+                </span>
+              </div>
+              {/* Skip for now on mobile top row */}
+              {isOnboarding && (
+                <div className="sm:hidden">
+                  <Link
+                    href={`/${studioSlug}/dashboard`}
+                    className="text-xs font-bold text-text-secondary hover:text-text-primary underline"
+                  >
+                    Skip →
+                  </Link>
+                </div>
+              )}
             </div>
-            <h1 className="mt-2 text-xl font-extrabold tracking-tight text-text-primary sm:text-2xl">
+            <h1 className="mt-1 sm:mt-2 text-base sm:text-2xl font-extrabold tracking-tight text-text-primary">
               {isOnboarding ? "Configure Services & Starter Packages" : "Studio Services & Package Combos"}
             </h1>
-            <p className="mt-1 text-xs text-text-secondary max-w-2xl leading-relaxed">
+            <p className="mt-1 text-xs text-text-secondary max-w-2xl leading-relaxed hidden sm:block">
               Define the specific services your studio provides and set default rates. When you register confirmed orders, only your active services will appear with instant price auto-calculations.
             </p>
           </div>
 
-          <div className="flex items-center gap-2.5 shrink-0">
+          <div className="hidden sm:flex items-center gap-2.5 shrink-0">
             {isOnboarding && (
               <Link
                 href={`/${studioSlug}/dashboard`}
@@ -308,9 +322,9 @@ function ServicesContent() {
         </div>
       </header>
 
-      {/* Scrollable Catalog Body */}
-      <div className="flex-1 overflow-y-auto min-h-0 px-4 py-6 sm:px-6 lg:px-8 space-y-6">
-        <div className="max-w-5xl mx-auto space-y-6 pb-6">
+      {/* Catalog Body (Natural document scroll on mobile, contained scroll on desktop) */}
+      <div className="flex-1 px-3 py-3 sm:overflow-y-auto sm:min-h-0 sm:px-6 lg:px-8 sm:py-6 space-y-4 sm:space-y-6 pb-24 sm:pb-6">
+        <div className="max-w-5xl mx-auto space-y-4 sm:space-y-6 pb-4 sm:pb-6">
           {/* Error Alert */}
           {errorMessage && (
             <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-xs font-semibold text-red-700 flex items-center justify-between">
@@ -326,13 +340,13 @@ function ServicesContent() {
           )}
 
           {/* Section 1: Studio Services & Deliverables */}
-          <div className="rounded-3xl border border-border-default bg-white p-6 sm:p-8 shadow-xs space-y-6">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-border-divider pb-4">
+          <div className="rounded-2xl sm:rounded-3xl border border-border-default bg-white p-3.5 sm:p-8 shadow-xs space-y-4 sm:space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5 sm:gap-3 border-b border-border-divider pb-3 sm:pb-4">
               <div>
-                <h2 className="text-base font-bold text-text-primary">
-                  1. Services & Deliverables Catalog
+                <h2 className="text-sm sm:text-base font-bold text-text-primary">
+                  1. Services &amp; Deliverables Catalog
                 </h2>
-                <p className="text-xs text-text-secondary mt-0.5">
+                <p className="text-xs text-text-secondary mt-0.5 hidden sm:block">
                   Toggle the services your studio offers. Set base prices for automatic calculations in confirmed orders.
                 </p>
               </div>
@@ -340,7 +354,7 @@ function ServicesContent() {
                 <button
                   type="button"
                   onClick={() => setShowAddServiceModal(true)}
-                  className="rounded-xl border border-brand-blue-soft bg-brand-blue-50/60 px-3.5 py-1.5 text-xs font-bold text-brand-blue-primary hover:bg-brand-blue-50 transition shrink-0"
+                  className="rounded-xl border border-brand-blue-soft bg-brand-blue-50/60 px-3.5 py-1.5 text-xs font-bold text-brand-blue-primary hover:bg-brand-blue-50 transition shrink-0 self-start sm:self-auto"
                 >
                   + Add Custom Service
                 </button>
@@ -348,31 +362,31 @@ function ServicesContent() {
             </div>
 
             {/* Services List Grouped by Category */}
-            <div className="space-y-6">
+            <div className="space-y-4 sm:space-y-6">
               {categories.map((cat) => {
                 const catServices = services.filter((s) => s.category === cat);
                 return (
-                  <div key={cat} className="space-y-3">
-                    <h3 className="text-xs font-bold uppercase tracking-wider text-text-tertiary">
+                  <div key={cat} className="space-y-2.5 sm:space-y-3">
+                    <h3 className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-text-tertiary">
                       {cat}
                     </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 sm:gap-3">
                       {catServices.map((svc) => (
                         <div
                           key={svc.id}
-                          className={`rounded-2xl border p-4 transition flex items-center justify-between gap-3 ${
+                          className={`rounded-xl sm:rounded-2xl border p-2.5 sm:p-4 transition flex items-center justify-between gap-2 sm:gap-3 ${
                             svc.enabled
                               ? "border-border-default bg-white shadow-2xs hover:border-brand-blue-primary/40"
                               : "border-border-divider bg-slate-50/70 opacity-60"
                           }`}
                         >
-                          <div className="flex items-center gap-3 min-w-0">
+                          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
                             {/* Toggle switch with tactile shadows and mild gray state */}
                             <button
                               type="button"
                               onClick={() => handleToggleService(svc.id)}
                               disabled={!isOwner}
-                              className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full p-0.5 transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:cursor-not-allowed ${
+                              className={`relative inline-flex h-5 w-10 sm:h-6 sm:w-11 shrink-0 cursor-pointer rounded-full p-0.5 transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:cursor-not-allowed ${
                                 svc.enabled
                                   ? "bg-brand-blue-primary shadow-[inset_0_1px_3px_rgba(0,0,0,0.25)] focus:ring-brand-blue-primary"
                                   : "bg-slate-200 shadow-[inset_0_1px_2px_rgba(0,0,0,0.12)] border border-slate-300/80 focus:ring-slate-400"
@@ -380,7 +394,7 @@ function ServicesContent() {
                               aria-label={`Toggle ${svc.name}`}
                             >
                               <span
-                                className={`pointer-events-none inline-block h-5 w-5 transform rounded-full transition duration-200 ease-in-out shadow-[0_2px_4px_rgba(0,0,0,0.18)] ${
+                                className={`pointer-events-none inline-block h-4 w-4 sm:h-5 sm:w-5 transform rounded-full transition duration-200 ease-in-out shadow-[0_2px_4px_rgba(0,0,0,0.18)] ${
                                   svc.enabled
                                     ? "translate-x-5 bg-white border border-brand-blue-soft"
                                     : "translate-x-0 bg-slate-100 border border-slate-300/80"
@@ -401,9 +415,9 @@ function ServicesContent() {
                           </div>
 
                           {/* Price Input */}
-                          <div className="flex items-center gap-2 shrink-0">
-                            <div className="relative w-28 shrink-0">
-                              <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-text-tertiary">
+                          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                            <div className="relative w-24 sm:w-28 shrink-0">
+                              <span className="pointer-events-none absolute left-2.5 sm:left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-text-tertiary">
                                 ₹
                               </span>
                               <input
@@ -413,7 +427,7 @@ function ServicesContent() {
                                 disabled={!svc.enabled || !isOwner}
                                 value={svc.defaultPrice === 0 ? "" : svc.defaultPrice}
                                 onChange={(e) => handlePriceChange(svc.id, Number(e.target.value))}
-                                className="w-full rounded-xl border border-border-default bg-white py-1.5 pl-7 pr-3 text-right text-xs font-bold text-text-primary outline-none transition focus:border-brand-blue-primary focus:ring-1 focus:ring-brand-blue-primary disabled:bg-slate-100/60 disabled:text-text-disabled disabled:border-border-divider"
+                                className="w-full rounded-xl border border-border-default bg-white py-1.5 pl-6 sm:pl-7 pr-2.5 sm:pr-3 text-right text-xs font-bold text-text-primary outline-none transition focus:border-brand-blue-primary focus:ring-1 focus:ring-brand-blue-primary disabled:bg-slate-100/60 disabled:text-text-disabled disabled:border-border-divider"
                                 placeholder="0"
                               />
                             </div>
@@ -447,13 +461,13 @@ function ServicesContent() {
           </div>
 
           {/* Section 2: Studio Packages & Combos */}
-          <div className="rounded-3xl border border-border-default bg-white p-6 sm:p-8 shadow-xs space-y-6">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-border-divider pb-4">
+          <div className="rounded-2xl sm:rounded-3xl border border-border-default bg-white p-3.5 sm:p-8 shadow-xs space-y-4 sm:space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5 sm:gap-3 border-b border-border-divider pb-3 sm:pb-4">
               <div>
-                <h2 className="text-base font-bold text-text-primary">
-                  2. Packages & Combos
+                <h2 className="text-sm sm:text-base font-bold text-text-primary">
+                  2. Packages &amp; Combos
                 </h2>
-                <p className="text-xs text-text-secondary mt-0.5">
+                <p className="text-xs text-text-secondary mt-0.5 hidden sm:block">
                   Bundle services together into wedding packages and combos. Edit prices directly below or create custom combos.
                 </p>
               </div>
@@ -464,7 +478,7 @@ function ServicesContent() {
                     setPackageServices(enabledServices.slice(0, 3).map((s) => s.name));
                     setShowCreatePackageModal(true);
                   }}
-                  className="rounded-xl bg-brand-blue-primary px-4 py-2 text-xs font-bold text-white hover:bg-brand-blue-hover transition shadow-xs shrink-0"
+                  className="rounded-xl bg-brand-blue-primary px-3.5 py-1.5 sm:px-4 sm:py-2 text-xs font-bold text-white hover:bg-brand-blue-hover transition shadow-xs shrink-0 self-start sm:self-auto"
                 >
                   + Create Package Combo
                 </button>
@@ -472,25 +486,25 @@ function ServicesContent() {
             </div>
 
             {/* Packages & Combos List */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
               {packages.map((pkg) => (
                 <div
                   key={pkg.id}
-                  className={`rounded-2xl border p-5 transition flex flex-col justify-between space-y-3 ${
+                  className={`rounded-xl sm:rounded-2xl border p-3.5 sm:p-5 transition flex flex-col justify-between space-y-2.5 sm:space-y-3 ${
                     pkg.isPublished
                       ? "border-border-default bg-white shadow-2xs hover:border-brand-blue-primary/40"
                       : "border-border-divider bg-slate-50/70 opacity-60"
                   }`}
                 >
-                  <div className="space-y-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex items-center gap-3 min-w-0">
+                  <div className="space-y-2.5 sm:space-y-3">
+                    <div className="flex items-start justify-between gap-2 sm:gap-3">
+                      <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
                         {/* Toggle switch with tactile shadows and mild gray state */}
                         <button
                           type="button"
                           onClick={() => handleTogglePackage(pkg.id)}
                           disabled={!isOwner}
-                          className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full p-0.5 transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:cursor-not-allowed ${
+                          className={`relative inline-flex h-5 w-10 sm:h-6 sm:w-11 shrink-0 cursor-pointer rounded-full p-0.5 transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:cursor-not-allowed ${
                             pkg.isPublished
                               ? "bg-brand-blue-primary shadow-[inset_0_1px_3px_rgba(0,0,0,0.25)] focus:ring-brand-blue-primary"
                               : "bg-slate-200 shadow-[inset_0_1px_2px_rgba(0,0,0,0.12)] border border-slate-300/80 focus:ring-slate-400"
@@ -498,7 +512,7 @@ function ServicesContent() {
                           aria-label={`Toggle ${pkg.name}`}
                         >
                           <span
-                            className={`pointer-events-none inline-block h-5 w-5 transform rounded-full transition duration-200 ease-in-out shadow-[0_2px_4px_rgba(0,0,0,0.18)] ${
+                            className={`pointer-events-none inline-block h-4 w-4 sm:h-5 sm:w-5 transform rounded-full transition duration-200 ease-in-out shadow-[0_2px_4px_rgba(0,0,0,0.18)] ${
                               pkg.isPublished
                                 ? "translate-x-5 bg-white border border-brand-blue-soft"
                                 : "translate-x-0 bg-slate-100 border border-slate-300/80"
@@ -515,8 +529,8 @@ function ServicesContent() {
 
                       {/* Direct Editable Combo Price Input */}
                       <div className="flex items-center gap-1.5 shrink-0">
-                        <div className="relative w-28 shrink-0">
-                          <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-text-tertiary">
+                        <div className="relative w-24 sm:w-28 shrink-0">
+                          <span className="pointer-events-none absolute left-2.5 sm:left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-text-tertiary">
                             ₹
                           </span>
                           <input
@@ -527,7 +541,7 @@ function ServicesContent() {
                             value={pkg.price === 0 ? "" : pkg.price}
                             onChange={(e) => handlePackagePriceChange(pkg.id, Number(e.target.value))}
                             placeholder="0"
-                            className="w-full rounded-xl border border-border-default bg-white py-1.5 pl-7 pr-3 text-right text-xs font-bold text-text-primary outline-none transition focus:border-brand-blue-primary focus:ring-1 focus:ring-brand-blue-primary disabled:bg-slate-100/60 disabled:text-text-disabled disabled:border-border-divider"
+                            className="w-full rounded-xl border border-border-default bg-white py-1.5 pl-6 sm:pl-7 pr-2.5 sm:pr-3 text-right text-xs font-bold text-text-primary outline-none transition focus:border-brand-blue-primary focus:ring-1 focus:ring-brand-blue-primary disabled:bg-slate-100/60 disabled:text-text-disabled disabled:border-border-divider"
                           />
                         </div>
 
@@ -576,26 +590,26 @@ function ServicesContent() {
         </div>
       </div>
 
-      {/* Bottom Action Bar (Fixed) */}
-      <footer className="shrink-0 border-t border-border-default bg-white px-4 py-3.5 sm:px-8 shadow-md z-10">
-        <div className="max-w-5xl mx-auto flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div className="text-xs text-text-secondary">
+      {/* Bottom Action Bar (Sleek sticky bar on mobile; fixed bar on desktop) */}
+      <footer className="sticky bottom-0 sm:shrink-0 border-t border-border-default bg-white/95 backdrop-blur-md px-3.5 py-2.5 sm:px-8 sm:py-3.5 shadow-lg z-20">
+        <div className="max-w-5xl mx-auto flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3">
+          <div className="text-xs text-text-secondary hidden sm:block">
             {isOnboarding
               ? "Save your studio catalog to launch your workspace with instant pre-calculated rates."
               : "Ready to book? Your active services immediately power the Confirmed Order form."}
           </div>
-          <div className="flex items-center gap-3 shrink-0">
+          <div className="flex items-center gap-3 w-full sm:w-auto shrink-0">
             {isOnboarding ? (
               <button
                 type="button"
                 onClick={() => handleSaveServices(true)}
                 disabled={savingServices || !isOwner}
-                className="rounded-xl bg-brand-blue-primary px-6 py-2.5 text-xs font-bold text-white hover:bg-brand-blue-hover transition shadow-sm disabled:opacity-50 flex items-center gap-2"
+                className="w-full sm:w-auto rounded-xl bg-brand-blue-primary px-6 py-2.5 text-xs font-bold text-white hover:bg-brand-blue-hover transition shadow-sm disabled:opacity-50 flex items-center justify-center gap-2"
               >
                 {savingServices ? (
                   <>
-                    <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                    Saving & Launching...
+                    <FocomanSpinner size="xs" />
+                    Saving &amp; Launching...
                   </>
                 ) : (
                   "Save & Launch Dashboard →"
@@ -606,11 +620,11 @@ function ServicesContent() {
                 type="button"
                 onClick={() => handleSaveServices(false)}
                 disabled={savingServices || !isOwner}
-                className="rounded-xl bg-brand-blue-primary px-6 py-2.5 text-xs font-bold text-white hover:bg-brand-blue-hover transition shadow-sm disabled:opacity-50 flex items-center gap-2"
+                className="w-full sm:w-auto rounded-xl bg-brand-blue-primary px-6 py-2.5 text-xs font-bold text-white hover:bg-brand-blue-hover transition shadow-sm disabled:opacity-50 flex items-center justify-center gap-2"
               >
                 {savingServices ? (
                   <>
-                    <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                    <FocomanSpinner size="xs" />
                     Saving...
                   </>
                 ) : (
@@ -625,7 +639,7 @@ function ServicesContent() {
       {/* Modal: Focoman Theme Delete Confirmation */}
       {deleteConfirmItem && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-sm rounded-3xl bg-white p-6 shadow-2xl border border-border-default space-y-4 animate-in fade-in zoom-in-95 duration-150">
+          <div className="w-full max-w-sm rounded-3xl bg-white p-6 shadow-2xl border border-border-default space-y-4 animate-in fade-in duration-150">
             <div className="flex items-start gap-3.5">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-red-50 border border-red-100 text-red-600">
                 <svg
@@ -703,7 +717,7 @@ function ServicesContent() {
       {/* Modal: Add Custom Service */}
       {showAddServiceModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl border border-border-default space-y-4 animate-in fade-in zoom-in-95 duration-150">
+          <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl border border-border-default space-y-4 animate-in fade-in duration-150">
             <div className="flex items-center justify-between border-b border-border-divider pb-3">
               <h3 className="font-bold text-sm text-text-primary">Add Custom Studio Service</h3>
               <button
@@ -800,7 +814,7 @@ function ServicesContent() {
       {/* Modal: Create Package Combo */}
       {showCreatePackageModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl border border-border-default space-y-4 animate-in fade-in zoom-in-95 duration-150">
+          <div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl border border-border-default space-y-4 animate-in fade-in duration-150">
             <div className="flex items-center justify-between border-b border-border-divider pb-3">
               <h3 className="font-bold text-sm text-text-primary">Create Package / Combo</h3>
               <button

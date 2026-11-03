@@ -49,7 +49,7 @@ export default async function StudioPublicProfilePage(props: {
               Studio Account Closed
             </h1>
             <p className="mt-3 text-sm text-text-secondary leading-relaxed">
-              The studio <span className="font-semibold text-text-primary">"{res.studioName || params.slug}"</span> has been closed or deleted by the owner.
+              The studio <span className="font-semibold text-text-primary">&quot;{res.studioName || params.slug}&quot;</span> has been closed or deleted by the owner.
             </p>
             <div className="mt-6 p-4 rounded-2xl bg-gray-50 border border-border-default text-xs text-text-secondary text-left space-y-1.5">
               <p className="font-bold text-text-primary">Looking for your order or deliverables?</p>

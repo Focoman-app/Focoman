@@ -2504,7 +2504,7 @@ export default function OmsPage({
       {/* New Order Modal */}
       {showCreateModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs overflow-y-auto">
-          <div className="w-full max-w-lg max-h-[90vh] flex flex-col rounded-3xl bg-white shadow-2xl border border-border-default animate-in fade-in zoom-in duration-150 my-auto">
+          <div className="w-full max-w-lg max-h-[90vh] flex flex-col rounded-3xl bg-white shadow-2xl border border-border-default animate-in fade-in duration-150 my-auto">
             {/* Modal Header (Pinned at Top) */}
             <div className="flex items-center justify-between p-6 pb-4 border-b border-border-default shrink-0">
               <div>
@@ -2579,7 +2579,7 @@ export default function OmsPage({
 
                   {/* Customer Autocomplete Dropdown */}
                   {showCustomerDropdown && matchingCustomers.length > 0 && (
-                    <div className="absolute top-full left-0 right-0 z-30 mt-1 rounded-2xl border border-border-default bg-white p-2 shadow-xl animate-in fade-in zoom-in-95 duration-100 max-h-48 overflow-y-auto">
+                    <div className="absolute top-full left-0 right-0 z-30 mt-1 rounded-2xl border border-border-default bg-white p-2 shadow-xl animate-in fade-in duration-100 max-h-48 overflow-y-auto">
                       <div className="flex items-center justify-between px-2 pb-1 border-b border-border-default text-[10px] font-bold text-text-tertiary uppercase tracking-wider">
                         <span>Select Existing Client or Type New</span>
                         <button
@@ -2857,7 +2857,7 @@ export default function OmsPage({
 
                     {/* Dropdown Options Popup */}
                     {showServicesDropdown && (
-                      <div className="absolute top-full z-20 left-0 right-0 mt-1.5 rounded-2xl border border-border-default bg-white shadow-xl p-2.5 space-y-1.5 animate-in fade-in zoom-in-95 duration-100">
+                      <div className="absolute top-full z-20 left-0 right-0 mt-1.5 rounded-2xl border border-border-default bg-white shadow-xl p-2.5 space-y-1.5 animate-in fade-in duration-100">
                         <div className="flex items-center justify-between px-2 pb-1 border-b border-border-default text-[10px] font-bold text-text-tertiary uppercase tracking-wider">
                           <span>Studio Services ({newOrderForm.services.length} selected)</span>
                           <button
@@ -3156,7 +3156,7 @@ export default function OmsPage({
       {/* In-App Cancellation Dialog */}
       {cancelTargetOrder && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl border border-border-default animate-in fade-in zoom-in duration-150">
+          <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl border border-border-default animate-in fade-in duration-150">
             <div className="flex items-center justify-between pb-3 border-b border-border-default">
               <div>
                 <h3 className="text-base font-bold text-text-primary">Cancel Order</h3>
@@ -3220,7 +3220,7 @@ export default function OmsPage({
       {/* In-App Soft-Delete Dialog */}
       {deleteTargetOrder && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl border border-border-default animate-in fade-in zoom-in duration-150">
+          <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl border border-border-default animate-in fade-in duration-150">
             <div className="flex items-center justify-between pb-3 border-b border-border-default">
               <div>
                 <h3 className="text-base font-bold text-status-error">Delete Order</h3>

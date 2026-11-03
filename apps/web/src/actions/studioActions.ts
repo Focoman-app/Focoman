@@ -5,9 +5,11 @@ import {
   registerStudioTransaction,
   getMembershipsByUid,
   getMembershipByUidAndStudio,
+  getMembershipsByStudio,
   updateStudio,
   softDeleteStudio,
   hardDeleteStudio,
+  purgeAllStudioData,
   leaveStudioMembership,
   restoreStudio,
   getFirestoreServerInstance,
@@ -384,23 +386,42 @@ export async function deleteUserAccountAction(idToken: string): Promise<{
     // 1. Fetch all memberships for this user
     const memberships = await getMembershipsByUid(uid);
 
-    // 2. For studios where this user is the STUDIO_OWNER, soft-delete the studio
+    // 2. For studios where this user is the STUDIO_OWNER:
     for (const m of memberships) {
       if (m.role === "STUDIO_OWNER") {
         try {
-          await softDeleteStudio(m.studioId, uid);
+          const studioMembers = await getMembershipsByStudio(m.studioId);
+          const otherActiveOwners = studioMembers.filter(
+            (sm) => sm.uid !== uid && sm.role === "STUDIO_OWNER" && sm.status === "ACTIVE"
+          );
+
+          if (otherActiveOwners.length === 0) {
+            // Sole owner: Completely purge the studio and all associated data (orders, tasks, customers, etc.)
+            await purgeAllStudioData(m.studioId);
+          } else {
+            // Co-owned studio: Leave membership so studio remains with remaining owner
+            await leaveStudioMembership(uid, m.studioId);
+          }
         } catch (e) {
-          console.warn(`[deleteUserAccountAction] Soft delete studio ${m.studioId} warning:`, e);
+          console.warn(`[deleteUserAccountAction] Purge studio ${m.studioId} warning:`, e);
         }
-      }
-      try {
-        await leaveStudioMembership(uid, m.studioId);
-      } catch (e) {
-        console.warn(`[deleteUserAccountAction] Leave studio ${m.studioId} warning:`, e);
+      } else {
+        try {
+          await leaveStudioMembership(uid, m.studioId);
+        } catch (e) {
+          console.warn(`[deleteUserAccountAction] Leave studio ${m.studioId} warning:`, e);
+        }
       }
     }
 
-    // 3. Clear customerUid on claimed orders so orders remain with studios but detach from deleted user
+    // 3. Clear user preferences document
+    try {
+      await firestore.collection("user_preferences").doc(uid).delete();
+    } catch (e) {
+      console.warn("[deleteUserAccountAction] Clear user_preferences warning:", e);
+    }
+
+    // 4. Clear customerUid on claimed orders so orders remain with studios but detach from deleted user
     try {
       const ordersSnap = await firestore
         .collection("orders")
@@ -417,7 +438,7 @@ export async function deleteUserAccountAction(idToken: string): Promise<{
       console.warn("[deleteUserAccountAction] Clear customerUid on orders warning:", e);
     }
 
-    // 4. Delete user in Firebase Authentication
+    // 5. Delete user in Firebase Authentication
     await adminAuth.deleteUser(uid);
 
     return { success: true };

@@ -227,6 +227,8 @@ export function toCustomerTrackingView(
       orderStatus: order.orderStatus,
       staffEmails: studioInfo?.staffEmails,
       staffUids: studioInfo?.staffUids,
+      isHeadless: order.isHeadless || order.studioStatus === "INACTIVE" || false,
+      studioStatus: order.studioStatus || (studioInfo?.studioOwnerId ? "ACTIVE" : (order.isHeadless ? "INACTIVE" : "ACTIVE")),
     },
     tasks: tasks.map((task) => ({
       title: task.title,

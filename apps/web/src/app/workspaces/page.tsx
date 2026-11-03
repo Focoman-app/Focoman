@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Navbar } from "@/components/Navbar";
 import { BackButton } from "@/components/BackButton";
+import { FocomanLoadingState, FocomanSpinner } from "@/components/FocomanSpinner";
 import { subscribeToAuthState, signInWithGoogle, signOutUser, syncServerSession } from "@/lib/firebaseAuth";
 import { getUserWorkspacesAction, deleteStudioAction, leaveStudioAction } from "@/actions/studioActions";
 import { getMyPendingInvitationsAction } from "@/actions/memberActions";
@@ -181,14 +182,20 @@ export default function WorkspacesPage() {
           <BackButton fallbackHref="/dashboard" />
         </div>
         {loadingUser ? (
-          <div className="py-20 text-center text-sm text-text-tertiary">
-            Checking authentication status...
-          </div>
+          <FocomanLoadingState
+            status="Checking authentication status..."
+            subtext="Loading your studio memberships and workspace access"
+            showCard={false}
+            minHeight="min-h-[320px]"
+          />
         ) : !currentUser ? (
           /* Unauthenticated State - Now redirects to home */
-          <div className="py-20 text-center text-sm text-text-tertiary">
-            Redirecting...
-          </div>
+          <FocomanLoadingState
+            status="Redirecting..."
+            subtext="Please wait while we route you"
+            showCard={false}
+            minHeight="min-h-[320px]"
+          />
         ) : (
           /* Authenticated State */
           <div className="space-y-8">
@@ -267,25 +274,7 @@ export default function WorkspacesPage() {
                 </p>
 
                 <div className="mt-8 grid gap-4 sm:grid-cols-3 max-w-3xl mx-auto text-left">
-                  {/* Option 1: Customer */}
-                  <Link
-                    href="/studios"
-                    className="flex flex-col justify-between rounded-2xl border-2 border-emerald-500/30 bg-emerald-50/40 p-6 transition hover:border-emerald-500 hover:bg-emerald-50/80 shadow-2xs group"
-                  >
-                    <div>
-                      <h3 className="text-sm font-bold text-emerald-950 group-hover:text-emerald-700">
-                        I&apos;m a Customer
-                      </h3>
-                      <p className="mt-1 text-xs text-emerald-900/80 leading-relaxed">
-                        Browse verified studios, explore event packages &amp; track your bookings.
-                      </p>
-                    </div>
-                    <span className="mt-4 inline-flex items-center text-xs font-bold text-emerald-700 group-hover:underline">
-                      Explore Studios →
-                    </span>
-                  </Link>
-
-                  {/* Option 2: Studio Owner */}
+                  {/* Option 1: Studio Owner (Primary Target) */}
                   <Link
                     href="/onboarding/register-studio"
                     className="flex flex-col justify-between rounded-2xl border-2 border-brand-orange-primary/30 bg-brand-orange-background/30 p-6 transition hover:border-brand-orange-primary hover:bg-brand-orange-background/60 shadow-2xs group"
@@ -303,7 +292,7 @@ export default function WorkspacesPage() {
                     </span>
                   </Link>
 
-                  {/* Option 3: Crew Member */}
+                  {/* Option 2: Crew Member */}
                   <Link
                     href="/onboarding/join-studio"
                     className="flex flex-col justify-between rounded-2xl border-2 border-brand-purple-primary/30 bg-brand-purple-background/30 p-6 transition hover:border-brand-purple-primary hover:bg-brand-purple-background/60 shadow-2xs group"
@@ -318,6 +307,24 @@ export default function WorkspacesPage() {
                     </div>
                     <span className="mt-4 inline-flex items-center text-xs font-bold text-brand-purple-primary group-hover:underline">
                       Join with Invite Code →
+                    </span>
+                  </Link>
+
+                  {/* Option 3: Customer */}
+                  <Link
+                    href="/studios"
+                    className="flex flex-col justify-between rounded-2xl border-2 border-emerald-500/30 bg-emerald-50/40 p-6 transition hover:border-emerald-500 hover:bg-emerald-50/80 shadow-2xs group"
+                  >
+                    <div>
+                      <h3 className="text-sm font-bold text-emerald-950 group-hover:text-emerald-700">
+                        I&apos;m a Customer
+                      </h3>
+                      <p className="mt-1 text-xs text-emerald-900/80 leading-relaxed">
+                        Browse verified studios, explore event packages &amp; track your bookings.
+                      </p>
+                    </div>
+                    <span className="mt-4 inline-flex items-center text-xs font-bold text-emerald-700 group-hover:underline">
+                      Explore Studios →
                     </span>
                   </Link>
                 </div>
@@ -406,12 +413,6 @@ export default function WorkspacesPage() {
                   </div>
                   <div className="flex flex-wrap items-center gap-2.5 shrink-0">
                     <Link
-                      href="/studios"
-                      className="rounded-xl border border-emerald-600 bg-white px-3.5 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-50 transition"
-                    >
-                      Explore Studios
-                    </Link>
-                    <Link
                       href="/onboarding/register-studio"
                       className="rounded-xl border border-brand-orange-primary bg-white px-3.5 py-2 text-xs font-bold text-brand-orange-primary hover:bg-orange-50 transition"
                     >
@@ -422,6 +423,12 @@ export default function WorkspacesPage() {
                       className="rounded-xl border border-brand-purple-primary bg-white px-3.5 py-2 text-xs font-bold text-brand-purple-primary hover:bg-purple-50 transition"
                     >
                       + Join Studio
+                    </Link>
+                    <Link
+                      href="/studios"
+                      className="rounded-xl border border-emerald-600 bg-white px-3.5 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-50 transition"
+                    >
+                      Explore Studios
                     </Link>
                     <Link
                       href="/track"
@@ -439,7 +446,7 @@ export default function WorkspacesPage() {
         {/* Delete / Leave Workspace Confirmation Modal */}
         {targetWorkspaceToDelete && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
-            <div className="w-full max-w-md rounded-3xl bg-white p-6 sm:p-8 shadow-2xl border border-border-default animate-in fade-in zoom-in-95 duration-150">
+            <div className="w-full max-w-md rounded-3xl bg-white p-6 sm:p-8 shadow-2xl border border-border-default animate-in fade-in duration-150">
               <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-red-100 text-red-600 mb-4">
                 <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -506,7 +513,7 @@ export default function WorkspacesPage() {
                 >
                   {isDeleting ? (
                     <>
-                      <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                      <FocomanSpinner size="xs" />
                       Processing...
                     </>
                   ) : targetWorkspaceToDelete.role === "STUDIO_OWNER" ? (

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Navbar } from "@/components/Navbar";
 import { BackButton } from "@/components/BackButton";
+import { FocomanLoadingState, FocomanSpinner } from "@/components/FocomanSpinner";
 import { subscribeToAuthState, signInWithGoogle, getCurrentUserIdToken } from "@/lib/firebaseAuth";
 import { acceptInvitationAction, getInvitationClaimStatusAction } from "@/actions/memberActions";
 import { User } from "firebase/auth";
@@ -359,9 +360,21 @@ function JoinStudioContent() {
           <button
             type="submit"
             disabled={isSubmitting || !currentUser || claimStatus?.status === "CHECKING" || (claimStatus?.status === "PENDING" && claimStatus.requiresPasscode && claimCode.length !== 6)}
-            className="rounded-xl bg-brand-purple-primary px-6 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-purple-700 disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-xl bg-brand-purple-primary px-6 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-purple-700 disabled:opacity-50"
           >
-            {isSubmitting ? "Joining Studio..." : claimStatus?.status === "CHECKING" ? "Checking invitation..." : "Verify & Join Studio"}
+            {isSubmitting ? (
+              <>
+                <FocomanSpinner size="xs" />
+                <span>Joining Studio...</span>
+              </>
+            ) : claimStatus?.status === "CHECKING" ? (
+              <>
+                <FocomanSpinner size="xs" />
+                <span>Checking invitation...</span>
+              </>
+            ) : (
+              "Verify & Join Studio"
+            )}
           </button>
         </div>
       </form>
@@ -379,7 +392,7 @@ export default function JoinStudioPage() {
         <div className="mb-6">
           <BackButton fallbackHref="/workspaces" />
         </div>
-        <Suspense fallback={<div className="p-8 text-center text-sm text-text-secondary">Loading invitation...</div>}>
+        <Suspense fallback={<FocomanLoadingState status="Loading invitation..." showCard={false} minHeight="min-h-[250px]" />}>
           <JoinStudioContent />
         </Suspense>
       </main>

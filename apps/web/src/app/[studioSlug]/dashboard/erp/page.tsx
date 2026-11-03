@@ -815,7 +815,7 @@ export default function ErpPage({ params }: { params: Promise<{ studioSlug: stri
       {/* Add Member Modal */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-md rounded-3xl bg-white p-6 sm:p-8 shadow-2xl border border-border-default animate-in fade-in zoom-in duration-150">
+          <div className="w-full max-w-md rounded-3xl bg-white p-6 sm:p-8 shadow-2xl border border-border-default animate-in fade-in duration-150">
             <div className="flex items-center justify-between pb-3 border-b border-border-default">
               <div>
                 <div className="badge-brand-purple mb-1">
@@ -996,7 +996,7 @@ export default function ErpPage({ params }: { params: Promise<{ studioSlug: stri
       {/* Invitation Code Dialog */}
       {createdInvite && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-md rounded-3xl bg-white p-6 sm:p-8 shadow-xl border border-border-default animate-in fade-in zoom-in duration-150">
+          <div className="w-full max-w-md rounded-3xl bg-white p-6 sm:p-8 shadow-xl border border-border-default animate-in fade-in duration-150">
             <div className="flex items-center justify-between border-b border-border-default pb-4">
               <div>
                 <span className="badge-status-success">

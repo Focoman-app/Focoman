@@ -110,3 +110,19 @@ input[type="date"]::-webkit-calendar-picker-indicator {
     @apply rounded-2xl border border-brand-purple-primary bg-brand-purple-background/40 shadow-sm;
   }
 }
+
+/* Prevent mobile browser (iOS Safari / Chrome) auto-zoom on input focus */
+@media screen and (max-width: 768px) {
+  input, select, textarea {
+    font-size: 16px !important;
+  }
+}
+
+/* Eliminate scaling / zoom-in animation across all modals and inputs */
+.zoom-in,
+.zoom-in-95,
+[class*="zoom-in"] {
+  --tw-enter-scale: 1 !important;
+  --tw-exit-scale: 1 !important;
+  transform: scale(1) !important;
+}

@@ -7,6 +7,7 @@ import { getUserWorkspacesAction } from "@/actions/studioActions";
 import { resolveAndSyncDefaultWorkspace } from "@/lib/workspaceDefaults";
 import { Navbar } from "@/components/Navbar";
 import { BackButton } from "@/components/BackButton";
+import { FocomanLoadingState } from "@/components/FocomanSpinner";
 
 export default function GlobalDashboardRedirect() {
   const router = useRouter();
@@ -45,10 +46,11 @@ export default function GlobalDashboardRedirect() {
     <div className="min-h-screen bg-surface-app flex flex-col">
       <Navbar />
       <main className="flex-1 flex flex-col items-center justify-center p-4">
-        <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow-sm text-center border border-border-default">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-blue-primary mx-auto mb-4"></div>
-          <p className="text-sm font-medium text-text-secondary">{status}</p>
-        </div>
+        <FocomanLoadingState
+          status={status}
+          subtext="Preparing your workspace environment"
+          showCard={true}
+        />
       </main>
     </div>
   );

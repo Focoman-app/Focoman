@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Navbar } from "@/components/Navbar";
+import { FocomanLoadingState } from "@/components/FocomanSpinner";
 import { subscribeToAuthState, signOutUser } from "@/lib/firebaseAuth";
 import { getCustomerAuthorizedOrdersHistoryAction } from "@/actions/customerActions";
 import { getCustomerBookingRequestsAction } from "@/actions/marketplaceActions";
@@ -191,6 +192,17 @@ export default function AccountSettingsPage() {
 
       if (res.success) {
         await clearDefaultWorkspace(user.uid);
+        if (typeof window !== "undefined") {
+          try {
+            Object.keys(localStorage).forEach((key) => {
+              if (key.startsWith("focoman_")) {
+                localStorage.removeItem(key);
+              }
+            });
+          } catch (e) {
+            console.warn("[handleDeleteAccount] Failed to clear local storage:", e);
+          }
+        }
         await signOutUser();
         router.replace("/sign-in?deleted=true");
       } else {
@@ -218,7 +230,11 @@ export default function AccountSettingsPage() {
       <div className="min-h-screen bg-surface-app flex flex-col">
         <Navbar />
         <main className="flex-1 flex flex-col items-center justify-center p-4">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-blue-primary"></div>
+          <FocomanLoadingState
+            status="Loading Account Settings..."
+            subtext="Fetching profile and workspace preferences"
+            showCard={true}
+          />
         </main>
       </div>
     );
@@ -632,7 +648,7 @@ export default function AccountSettingsPage() {
         {/* Delete User Account Confirmation Modal */}
         {showDeleteModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
-            <div className="w-full max-w-md rounded-3xl bg-white p-6 sm:p-7 shadow-2xl border border-red-200 animate-in fade-in zoom-in duration-150 space-y-5">
+            <div className="w-full max-w-md rounded-3xl bg-white p-6 sm:p-7 shadow-2xl border border-red-200 animate-in fade-in duration-150 space-y-5">
               <div className="flex items-start justify-between">
                 <h3 className="text-base font-extrabold text-text-primary">Delete User Account</h3>
                 <button
@@ -665,12 +681,11 @@ export default function AccountSettingsPage() {
                 </label>
                 <input
                   type="text"
-                  autoFocus
                   value={deleteConfirmationInput}
                   onChange={(e) => setDeleteConfirmationInput(e.target.value)}
                   placeholder='Type "delete" to confirm'
                   disabled={isDeleting}
-                  className="w-full rounded-xl border border-border-default px-3.5 py-2.5 text-xs font-mono font-bold text-text-primary outline-none focus:border-red-500 focus:ring-2 focus:ring-red-100 transition"
+                  className="w-full rounded-xl border border-border-default px-3.5 py-2.5 text-base sm:text-xs font-mono font-bold text-text-primary outline-none focus:border-red-500 focus:ring-2 focus:ring-red-100 transition"
                 />
               </div>
 

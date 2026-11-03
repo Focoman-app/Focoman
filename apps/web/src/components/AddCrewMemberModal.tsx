@@ -133,7 +133,7 @@ export function AddCrewMemberModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
-      <div className="w-full max-w-md rounded-3xl bg-white p-6 sm:p-8 shadow-2xl border border-border-default animate-in fade-in zoom-in duration-150">
+      <div className="w-full max-w-md rounded-3xl bg-white p-6 sm:p-8 shadow-2xl border border-border-default animate-in fade-in duration-150">
         <div className="flex items-center justify-between pb-3 border-b border-border-default">
           <div>
             <div className="badge-brand-purple mb-1">

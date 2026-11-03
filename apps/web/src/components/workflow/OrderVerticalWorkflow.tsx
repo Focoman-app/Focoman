@@ -182,8 +182,8 @@ export function OrderVerticalWorkflow({
   };
 
   // Phase Progress Calculations
-  const services = order.services || [];
-  const assignedResources = fullOrder?.assignedResources || [];
+  const services = useMemo(() => order.services || [], [order.services]);
+  const assignedResources = useMemo(() => fullOrder?.assignedResources || [], [fullOrder?.assignedResources]);
   const assignedServicesCount = useMemo(() => {
     return services.filter((svcName) => {
       const svcLower = svcName.trim().toLowerCase();
@@ -342,7 +342,7 @@ export function OrderVerticalWorkflow({
                 {fullOrder.cancellationInfo.cancellationReason}
               </p>
               <p className="text-[11px] text-text-tertiary">
-                Cancelled on {new Date(fullOrder.cancellationInfo.cancelledAt).toLocaleDateString()}
+                Cancelled on {fullOrder.cancellationInfo.cancelledAt ? fullOrder.cancellationInfo.cancelledAt.split("T")[0] : ""}
               </p>
             </div>
           )}

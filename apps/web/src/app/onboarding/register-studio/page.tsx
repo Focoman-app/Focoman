@@ -5,8 +5,9 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Navbar } from "@/components/Navbar";
 import { BackButton } from "@/components/BackButton";
+import { FocomanSpinner } from "@/components/FocomanSpinner";
 import { subscribeToAuthState, getCurrentUserIdToken, syncServerSession } from "@/lib/firebaseAuth";
-import { registerStudioAction, checkStudioSlugAvailabilityAction } from "@/actions/studioActions";
+import { registerStudioAction, checkStudioSlugAvailabilityAction, getUserWorkspacesAction } from "@/actions/studioActions";
 import { setDefaultWorkspace } from "@/lib/workspaceDefaults";
 import { User } from "firebase/auth";
 
@@ -33,6 +34,8 @@ export default function RegisterStudioPage() {
   const [isChecking, setIsChecking] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [existingWorkspacesCount, setExistingWorkspacesCount] = useState<number | null>(null);
+  const [setAsDefault, setSetAsDefault] = useState(true);
 
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -60,9 +63,26 @@ export default function RegisterStudioPage() {
   };
 
   useEffect(() => {
-    const unsubscribe = subscribeToAuthState((user) => {
+    const unsubscribe = subscribeToAuthState(async (user) => {
       setCurrentUser(user);
       setLoadingUser(false);
+      if (user) {
+        try {
+          const token = await user.getIdToken();
+          const workspaces = await getUserWorkspacesAction(token);
+          const count = workspaces.length;
+          setExistingWorkspacesCount(count);
+          // If user already has existing workspaces, leave unchecked by default to preserve their primary workspace
+          if (count > 0) {
+            setSetAsDefault(false);
+          } else {
+            setSetAsDefault(true);
+          }
+        } catch {
+          setExistingWorkspacesCount(0);
+          setSetAsDefault(true);
+        }
+      }
     });
     return () => unsubscribe();
   }, []);
@@ -145,7 +165,9 @@ export default function RegisterStudioPage() {
     setIsSubmitting(false);
 
     if (res.success && res.studio) {
-      await setDefaultWorkspace(currentUser.uid, res.studio.id, idToken);
+      if (setAsDefault) {
+        await setDefaultWorkspace(currentUser.uid, res.studio.id, idToken);
+      }
       await syncServerSession();
       router.push(`/${res.studio.id}/dashboard/services?onboarding=true`);
     } else {
@@ -206,7 +228,16 @@ export default function RegisterStudioPage() {
                     Studio Identifier: <code className="font-mono text-brand-orange-primary font-semibold">/{slugPreview}</code>
                   </span>
                   <span className="font-semibold text-text-secondary">
-                    {isChecking ? "Checking availability..." : availability.checked && availability.available ? "Identifier is available." : ""}
+                    {isChecking ? (
+                      <span className="inline-flex items-center gap-1.5">
+                        <FocomanSpinner size="xs" />
+                        Checking availability...
+                      </span>
+                    ) : availability.checked && availability.available ? (
+                      "Identifier is available."
+                    ) : (
+                      ""
+                    )}
                   </span>
                 </div>
               )}
@@ -324,6 +355,27 @@ export default function RegisterStudioPage() {
               />
             </div>
 
+            <div className="rounded-2xl border border-border-default/80 bg-surface-subtle/50 p-4">
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={setAsDefault}
+                  onChange={(e) => setSetAsDefault(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded border-border-default text-brand-orange-primary focus:ring-brand-orange-primary"
+                />
+                <div className="text-xs">
+                  <span className="font-semibold text-text-primary">
+                    Set as default workspace
+                  </span>
+                  <p className="text-text-secondary text-[11px] mt-0.5 leading-relaxed">
+                    {existingWorkspacesCount && existingWorkspacesCount > 0
+                      ? "Make this new studio your default workspace on sign-in, or leave unchecked to keep your current default studio."
+                      : "Automatically opens this studio workspace whenever you sign in."}
+                  </p>
+                </div>
+              </label>
+            </div>
+
             <div className="pt-4 flex items-center justify-between border-t border-border-divider">
               <Link href="/workspaces" className="text-xs font-semibold text-text-secondary hover:text-text-primary">
                 Cancel
@@ -331,9 +383,16 @@ export default function RegisterStudioPage() {
               <button
                 type="submit"
                 disabled={isSubmitting || isChecking || (availability.checked && !availability.available)}
-                className="rounded-xl bg-brand-orange-primary px-6 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-orange-600 disabled:opacity-50"
+                className="inline-flex items-center gap-2 rounded-xl bg-brand-orange-primary px-6 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-orange-600 disabled:opacity-50"
               >
-                {isSubmitting ? "Creating Workspace..." : "Complete Registration"}
+                {isSubmitting ? (
+                  <>
+                    <FocomanSpinner size="xs" />
+                    <span>Creating Workspace...</span>
+                  </>
+                ) : (
+                  "Complete Registration"
+                )}
               </button>
             </div>
           </form>

@@ -17,12 +17,9 @@ export async function requireDashboardStudioAccess(
     }
     return access;
   } catch (error: unknown) {
-    if (
-      error instanceof UnauthenticatedSessionError ||
-      error instanceof StudioMembershipRequiredError
-    ) {
-      // In embedded iframe preview environments where third-party cookies are blocked by browsers,
-      // fallback to studio document lookup so layout and dashboard components render and authenticate client-side.
+    // In embedded iframe preview environments where third-party cookies are blocked by browsers,
+    // fallback to studio document lookup so layout and dashboard components render and authenticate client-side.
+    try {
       const { getStudioBySlug } = await import('@focoman/db');
       const studio = await getStudioBySlug(studioSlug);
 
@@ -53,10 +50,11 @@ export async function requireDashboardStudioAccess(
           },
         };
       }
-
-      notFound();
+    } catch {
+      // Fall through to notFound()
     }
-    throw error;
+
+    notFound();
   }
 }
 

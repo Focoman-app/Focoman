@@ -12,6 +12,7 @@ import {
 } from "@/lib/firebaseAuth";
 import { Navbar } from "@/components/Navbar";
 import { BackButton } from "@/components/BackButton";
+import { FocomanSpinner } from "@/components/FocomanSpinner";
 
 function SignInContent() {
   const router = useRouter();
@@ -217,7 +218,7 @@ function SignInContent() {
                 >
                   {isSigningIn ? (
                     <>
-                      <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                      <FocomanSpinner size="xs" />
                       <span>Opening Alternate Window...</span>
                     </>
                   ) : (
@@ -237,7 +238,7 @@ function SignInContent() {
               >
                 {isSigningIn ? (
                   <>
-                    <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-brand-purple-primary border-t-transparent" />
+                    <FocomanSpinner size="xs" />
                     <span>Connecting to Google...</span>
                   </>
                 ) : (

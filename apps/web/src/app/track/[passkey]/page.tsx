@@ -3,6 +3,7 @@ import { Navbar } from "@/components/Navbar";
 import { getOrderByPasskeyAction } from "@/actions/orderActions";
 import { TrackOrderClient } from "./TrackOrderClient";
 import Link from "next/link";
+import { FocomanLoadingState } from "@/components/FocomanSpinner";
 
 export const dynamic = "force-dynamic";
 
@@ -77,7 +78,12 @@ export default async function TrackOrderPage({ params }: { params: Promise<{ pas
   return (
     <Suspense fallback={
       <div className="min-h-screen bg-surface-app flex flex-col items-center justify-center p-4">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-blue-primary" />
+        <FocomanLoadingState
+          status="Loading Order Tracking..."
+          subtext="Fetching production milestones and proofing status"
+          showCard={false}
+          minHeight="min-h-[300px]"
+        />
       </div>
     }>
       <TrackOrderClient view={res.view} rawIdentifier={passkey} />

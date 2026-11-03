@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import Link from "next/link";
 import { Order, OrderStatus } from "@focoman/types";
 import { getStudioCalendarDate } from "@focoman/domain";
+import { FocomanSpinner } from "@/components/FocomanSpinner";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -606,7 +607,7 @@ export function DashboardHomeView({
   if (!collapseLoaded) {
     return (
       <div className="flex-1 flex items-center justify-center p-8">
-        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-brand-blue-primary" />
+        <FocomanSpinner size="md" />
       </div>
     );
   }

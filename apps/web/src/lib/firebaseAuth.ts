@@ -32,9 +32,11 @@ let redirectHandlingPromise: Promise<UserCredential | null> | null = null;
  */
 export async function syncServerSession(force = false): Promise<boolean> {
   if (typeof window === "undefined") return false;
+  const origin = window.location.origin;
+
   if (!auth.currentUser) {
     try {
-      await fetch("/api/session", { method: "DELETE" });
+      await fetch(`${origin}/api/session`, { method: "DELETE", credentials: "same-origin" });
     } catch {
       // Ignore background delete errors
     }
@@ -50,20 +52,19 @@ export async function syncServerSession(force = false): Promise<boolean> {
       if (!force && lastSyncedToken === idToken) {
         return true;
       }
-      console.log("[Focoman Auth] Posting idToken to /api/session...");
-      const response = await fetch("/api/session", {
+      const response = await fetch(`${origin}/api/session`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ idToken }),
+        credentials: "same-origin",
       });
-      console.log("[Focoman Auth] /api/session response status:", response.status);
       if (response.ok) {
         lastSyncedToken = idToken;
         return true;
       }
       return false;
     } catch (error) {
-      console.error("[Focoman Auth] Failed to sync session cookie with server:", error);
+      console.warn("[Focoman Auth] Session sync deferred (network/navigation state):", error instanceof Error ? error.message : error);
       return false;
     } finally {
       inFlightSync = null;

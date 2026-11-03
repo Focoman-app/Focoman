@@ -526,6 +526,25 @@ export function TrackOrderClient({ view, rawIdentifier }: TrackOrderClientProps)
       <main className="flex-1 flex flex-col p-4 py-12">
         <div className="mx-auto w-full max-w-4xl space-y-6">
 
+          {/* Archived / Inactive Studio Banner for Headless Orders */}
+          {(order.isHeadless || order.studioStatus === "INACTIVE" || order.studioStatus === "DELETED") && (
+            <div className="rounded-2xl border border-slate-300 bg-slate-50 p-4 px-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-slate-900 shadow-xs">
+              <div className="flex items-center gap-2.5">
+                <span className="flex h-7 px-2.5 items-center justify-center rounded-xl bg-slate-200 text-slate-800 font-extrabold shrink-0 text-[10px] uppercase tracking-wider">
+                  Archived Record
+                </span>
+                <div>
+                  <p className="font-bold">
+                    Studio Inactive &bull; Historical Order Record Preserved
+                  </p>
+                  <p className="text-[11px] text-slate-600 mt-0.5">
+                    The photography studio associated with this booking is no longer actively operating on FocoMan. Your order summary, milestones, and deliverables remain safely preserved for your reference.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Studio Staff Recognition Banner: Only for Studio Owner / Crew */}
           {isStaffMatch && (
             <div className="rounded-2xl border border-purple-200 bg-purple-50 p-4 px-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-purple-950 shadow-xs">
@@ -542,7 +561,7 @@ export function TrackOrderClient({ view, rawIdentifier }: TrackOrderClientProps)
                   </p>
                 </div>
               </div>
-              {order.studioId && (
+              {order.studioId && !order.isHeadless && order.studioStatus !== "INACTIVE" && (
                 <Link
                   href={`/${order.studioId}/dashboard/oms`}
                   className="rounded-xl border border-purple-300 bg-white px-3.5 py-1.5 text-xs font-bold text-purple-900 hover:bg-purple-100 transition shrink-0 shadow-xs"
@@ -711,7 +730,7 @@ export function TrackOrderClient({ view, rawIdentifier }: TrackOrderClientProps)
                     <div key={c.email} className="p-3 flex items-center justify-between bg-white">
                       <div>
                         <span className="font-semibold text-text-primary">{c.email}</span>
-                        <span className="text-[10px] text-text-tertiary block">Added {new Date(c.addedAt).toLocaleDateString()}</span>
+                        <span className="text-[10px] text-text-tertiary block">Added {c.addedAt ? c.addedAt.split("T")[0] : ""}</span>
                       </div>
                       <div className="flex items-center gap-2">
                         <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold ${
@@ -776,9 +795,7 @@ export function TrackOrderClient({ view, rawIdentifier }: TrackOrderClientProps)
               <div>
                 <span className="text-xs font-bold uppercase tracking-wider text-text-tertiary">Date</span>
                 <p className="mt-1 text-sm font-semibold text-text-primary">
-                  {order.eventDate
-                    ? new Date(order.eventDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-                    : '—'}
+                  {order.eventDate || "—"}
                   {order.orderStatus === "AWAITING_EVENT" && (() => {
                     const d = getEventDaysRemaining(order.eventDate);
                     return d && d.diffDays > 0 ? ` (${d.label})` : "";
@@ -807,19 +824,19 @@ export function TrackOrderClient({ view, rawIdentifier }: TrackOrderClientProps)
               <div className="rounded-2xl bg-surface-app p-4 border border-border-default">
                 <span className="text-xs text-text-tertiary block">Total Value</span>
                 <span className="text-lg font-extrabold text-text-primary mt-1 block">
-                  ₹{order.totalAmount.toLocaleString()}
+                  ₹{Math.round(order.totalAmount).toLocaleString("en-IN")}
                 </span>
               </div>
               <div className="rounded-2xl bg-emerald-50/60 p-4 border border-emerald-200">
                 <span className="text-xs text-emerald-800 block">Advance Paid</span>
                 <span className="text-lg font-extrabold text-emerald-900 mt-1 block">
-                  ₹{order.advanceAmount.toLocaleString()}
+                  ₹{Math.round(order.advanceAmount).toLocaleString("en-IN")}
                 </span>
               </div>
               <div className="rounded-2xl bg-surface-app p-4 border border-border-default">
                 <span className="text-xs text-text-tertiary block">Remaining Balance</span>
                 <span className="text-lg font-extrabold text-text-primary mt-1 block">
-                  ₹{order.remainingAmount.toLocaleString()}
+                  ₹{Math.round(order.remainingAmount).toLocaleString("en-IN")}
                 </span>
               </div>
             </div>
