@@ -7,8 +7,19 @@ export const dynamic = 'force-dynamic';
 function validOrigin(request: Request): boolean {
   const origin = request.headers.get('origin');
   if (!origin) return false;
-  const allowed = process.env.NODE_ENV === 'production' ? 'https://dev.4command.com' : new URL(request.url).origin;
-  return origin === allowed;
+  
+  // Allow current request origin (e.g. localhost, focoman.vercel.app, focoman.com)
+  const reqOrigin = new URL(request.url).origin;
+  if (origin === reqOrigin) return true;
+
+  // Allow canonical production hostnames
+  const allowedHosts = [
+    'https://focoman.com',
+    'https://www.focoman.com',
+    'https://focoman.vercel.app',
+    'https://dev.4command.com',
+  ];
+  return allowedHosts.includes(origin);
 }
 
 function cookieOptions() {

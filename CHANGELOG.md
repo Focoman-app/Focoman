@@ -2,6 +2,14 @@
 
 All meaningful changes to the Focoman codebase, documentation, architecture, or agent workflow instructions must be recorded in this file according to Section 20 of **[Agents.md](Agents.md)**.
 
+## CHG-073 — Dev Portal Production Origin Allowlist Fix
+
+- **Task:** CHG-073 — Allow dev portal authentication from canonical domains (focoman.com, focoman.vercel.app).
+- **Date:** 2026-11-03
+- **Area:** apps/web/src/app/api/dev-auth/route.ts, CHANGELOG.md.
+- **Change:** Updated alidOrigin() in /api/dev-auth to accept requests originating from focoman.com, www.focoman.com, and focoman.vercel.app in production in addition to same-origin requests.
+- **Verification:** npx tsc --project apps/web/tsconfig.json --noEmit passed with 0 errors.
+
 ## CHG-072 — Dev Portal Sign-In Theme Alignment & Scrypt Security Credentials
 
 - **Task:** CHG-072 — Restructure Dev Portal sign-in UI to align with FocoMan modern design system and configure scrypt credentials in local environment.
