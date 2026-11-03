@@ -2,6 +2,63 @@
 
 All meaningful changes to the Focoman codebase, documentation, architecture, or agent workflow instructions must be recorded in this file according to Section 20 of **[Agents.md](Agents.md)**.
 
+## CHG-070 — Resend Live Telemetry & Hostinger Domain Expiry Safeguard in Dev Portal
+
+- **Task:** CHG-070 — Configure Resend live API telemetry, domain verification check, and Hostinger 3-year domain expiration safeguard with threshold alerts.
+- **Date:** 2026-11-03
+- **Area:** `apps/web/src/services/resendDevService.ts`, `apps/web/src/app/api/dev/resend-ping/route.ts`, `apps/web/src/app/api/dev/metrics/route.ts`, `apps/web/src/components/dev-portal/DevPortal.tsx`, `docs/tasks/email-domain-whatsapp-action-items.md`.
+- **Change:**
+  1. Implemented `resendDevService.ts` querying Resend domain status (`GET /domains`), key validity, quotas (100 daily / 3,000 monthly), and triggering on-demand diagnostic test emails (`POST /api/dev/resend-ping`).
+  2. Integrated Hostinger root domain validity tracking (`focoman.com`, valid until `2029-11-02`, ~1,094 days remaining) with automated expiration alert policy scheduled at 60, 30, 15, 7, 3, and 1 days before expiry.
+  3. Upgraded Dev Portal Email dashboard with interactive Resend telemetry, verified domain badges, and domain protection safeguard cards with multi-recipient routing (`webmaster@focoman.com`, `founder@focoman.com`, and personal recovery email).
+  4. Updated `docs/tasks/email-domain-whatsapp-action-items.md` tracking Resend completion and Hostinger ownership transfer status.
+- **Verification:**
+  - `npx tsc --project apps/web/tsconfig.json --noEmit` passed with 0 errors.
+  - `npm test` passed 36/36 tests.
+
+## CHG-069 — Brevo API Integration & Dev Portal Email Management
+
+- **Task:** CHG-069 — Integrate Brevo live API status, daily telemetry, and 90-day inactivity safeguard with interactive pinging in Dev Portal.
+- **Date:** 2026-11-03
+- **Area:** `apps/web/src/services/brevoService.ts`, `apps/web/src/app/api/dev/brevo-ping/route.ts`, `apps/web/src/app/api/dev/metrics/route.ts`, `apps/web/src/components/dev-portal/DevPortal.tsx`, `apps/web/src/services/emailService.ts`.
+- **Change:**
+  1. Created `brevoService.ts` to query Brevo's live account status (`GET /v3/account`), daily usage statistics (`GET /v3/smtp/statistics/aggregatedReport`), and keep-alive ping triggering (`POST /v3/smtp/email`).
+  2. Implemented keep-alive ping handler (`/api/dev/brevo-ping`) to refresh the Brevo API key's 90-day inactivity timer on demand and record the timestamp in Firestore.
+  3. Integrated live email provider telemetry into the Dev Portal Email tab: displaying Brevo live daily quota (300/day), sent/delivered counts, key expiry date (Nov 3, 2027), 90-day inactivity countdown, Resend configuration status, and an interactive **Send Keep-Alive Ping** button with instant feedback.
+- **Verification:**
+  - Validated live Brevo API connection (HTTP 200, successfully fetched account `webmaster@focoman.com`, plan: Free 300 credits/day, and daily stats).
+  - TypeScript compilation `npx tsc --project apps/web/tsconfig.json --noEmit` passed with 0 errors.
+  - `npm test` passed 36/36 tests.
+
+## CHG-068 — Configure Professional Sender Identity & Support Reply-To Routing
+
+- **Task:** CHG-068 — Configure default sender `noreply@focoman.com` with `support@focoman.com` reply-to routing across all automated transactional notifications.
+- **Date:** 2026-11-03
+- **Area:** `apps/web/src/services/emailService.ts`, `.env.example`, `docs/tasks/email-domain-whatsapp-action-items.md`.
+- **Change:**
+  1. Updated `emailService.ts` to introduce centralized sender configuration via `getSenderConfig()`, defaulting outbound emails to `Focoman <noreply@focoman.com>` and adding `replyTo: support@focoman.com` across all 10 automated notification actions (invitations, shoot assignments, order confirmations, galleries, payments, and reviews).
+  2. Updated `.env.example` with `RESEND_FROM_EMAIL=Focoman <noreply@focoman.com>` and `RESEND_REPLY_TO_EMAIL=support@focoman.com`.
+  3. Updated integration tracking in `docs/tasks/email-domain-whatsapp-action-items.md` to record completed Zoho Mail mailbox provisioning and automated outbound/inbound reply separation.
+- **Verification:**
+  - TypeScript compilation `npx tsc --project apps/web/tsconfig.json --noEmit` passed with 0 errors.
+  - Node test suite `npm test` passed 36/36 tests.
+
+## CHG-067 — Filter Active Public Metrics & Purge Orphaned Soft-Deleted Studios
+
+- **Task:** CHG-067 — Filter active studios and orders in platform public metrics & purge orphaned soft-deleted studios.
+- **Date:** 2026-11-03
+- **Area:** `packages/db/src/index.ts`, Firestore database (`studios`, `orders`, `memberships`).
+- **Change:**
+  1. **Active Filter on Public Platform Stats**:
+     - Updated `getPlatformPublicStats()` in `@focoman/db` to query `db.collection('studios').where('isDeleted', '==', false)` and `db.collection('orders').where('isDeleted', '==', false)`.
+     - Ensures that soft-deleted studios and cancelled/soft-deleted orders are never counted towards the landing page metrics (`activeStudiosCount` and `registeredOrdersCount`).
+  2. **Purge Historical Orphaned Studios**:
+     - Executed a complete purge on the 9 historical soft-deleted studios (`auth003`, `lumina`, `tes`, `test-studio`, `test3`, `testsiva`, `teststudio`, `tststudio2`, `tststudio23`) whose user profiles had been previously deleted.
+     - Detached their orders and tasks into headless archived records so client receipts are preserved, cleaned up associated memberships/invitations, and deleted the orphaned studio documents.
+- **Verification:**
+  - `npx tsc --project apps/web/tsconfig.json --noEmit` passed with 0 errors.
+  - Verified Firestore state: 11 active studios (`isDeleted: false`), 0 soft-deleted studios, and 18 active orders. Total studios count on landing page accurately displays 11.
+
 ## CHG-066 — Isolate Lightweight Social Framework and Update Video Defaults
 
 - **Task:** Rebase recent remote changes, preserve local work, and organize reusable social/video guidance without committing generated media.

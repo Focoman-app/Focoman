@@ -862,6 +862,32 @@ export function buildPipelineStatusUpdateHtml(params: {
 // Core Sending Actions (Direct Delivery to Real Recipients)
 // ----------------------------------------------------------------------------
 
+export const DEFAULT_SENDER_FROM = "Focoman <noreply@focoman.com>";
+export const DEFAULT_SENDER_REPLY_TO = "support@focoman.com";
+
+export function getSenderConfig(): { fromEmail: string; replyToEmail: string } {
+  return {
+    fromEmail: process.env.RESEND_FROM_EMAIL || DEFAULT_SENDER_FROM,
+    replyToEmail: process.env.RESEND_REPLY_TO_EMAIL || DEFAULT_SENDER_REPLY_TO,
+  };
+}
+
+export interface ResendStatus {
+  configured: boolean;
+  fromEmail: string;
+  replyToEmail: string;
+}
+
+export function getResendStatus(): ResendStatus {
+  const { fromEmail, replyToEmail } = getSenderConfig();
+  return {
+    configured: Boolean(process.env.RESEND_API_KEY),
+    fromEmail,
+    replyToEmail,
+  };
+}
+// ----------------------------------------------------------------------------
+
 
 /**
  * Sends a Crew Member Invitation Email
@@ -880,7 +906,7 @@ export async function sendCrewInvitationEmail(params: {
     return { success: false, recipient: params.toEmail, error: "Resend client not configured." };
   }
 
-  const fromEmail = process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev";
+  const { fromEmail, replyToEmail } = getSenderConfig();
   const baseUrl = params.baseUrl || process.env.NEXT_PUBLIC_APP_URL || "https://ais-dev-r23tbivkepodqcgcat4bbg-1076087076684.asia-southeast1.run.app";
   const joinUrl = `${baseUrl}/onboarding/join-studio?code=${encodeURIComponent(params.inviteCode)}`;
 
@@ -896,6 +922,7 @@ export async function sendCrewInvitationEmail(params: {
   try {
     const { data, error } = await resend.emails.send({
       from: fromEmail,
+      replyTo: replyToEmail,
       to: params.toEmail,
       subject: `${params.studioName} invites you to join their crew on Focoman`,
       html,
@@ -934,7 +961,7 @@ export async function sendCrewAcceptedOwnerEmail(params: {
     return { success: false, recipient: params.ownerEmail, error: "Resend client not configured." };
   }
 
-  const fromEmail = process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev";
+  const { fromEmail, replyToEmail } = getSenderConfig();
   const baseUrl = params.baseUrl || process.env.NEXT_PUBLIC_APP_URL || "https://ais-dev-r23tbivkepodqcgcat4bbg-1076087076684.asia-southeast1.run.app";
   const erpUrl = `${baseUrl}/${params.studioSlug}/dashboard/erp`;
 
@@ -951,6 +978,7 @@ export async function sendCrewAcceptedOwnerEmail(params: {
   try {
     const { data, error } = await resend.emails.send({
       from: fromEmail,
+      replyTo: replyToEmail,
       to: params.ownerEmail,
       subject: `New Crew Member Joined: ${params.memberName} has joined ${params.studioName}`,
       html,
@@ -989,7 +1017,7 @@ export async function sendOrderConfirmedCustomerEmail(params: {
     return { success: false, recipient: params.toEmail, error: "Resend client not configured." };
   }
 
-  const fromEmail = process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev";
+  const { fromEmail, replyToEmail } = getSenderConfig();
   const baseUrl = params.baseUrl || process.env.NEXT_PUBLIC_APP_URL || "https://ais-dev-r23tbivkepodqcgcat4bbg-1076087076684.asia-southeast1.run.app";
   const trackUrl = `${baseUrl}/track/${params.passkey}`;
 
@@ -1007,6 +1035,7 @@ export async function sendOrderConfirmedCustomerEmail(params: {
   try {
     const { data, error } = await resend.emails.send({
       from: fromEmail,
+      replyTo: replyToEmail,
       to: params.toEmail,
       subject: `Booking Confirmed: #${params.orderId} - ${params.studioName}`,
       html,
@@ -1046,7 +1075,7 @@ export async function sendCrewShootAssignedEmail(params: {
     return { success: false, recipient: params.toEmail, error: "Resend client not configured." };
   }
 
-  const fromEmail = process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev";
+  const { fromEmail, replyToEmail } = getSenderConfig();
   const baseUrl = params.baseUrl || process.env.NEXT_PUBLIC_APP_URL || "https://ais-dev-r23tbivkepodqcgcat4bbg-1076087076684.asia-southeast1.run.app";
   const portalUrl = `${baseUrl}/${params.studioSlug}/dashboard/oms`;
 
@@ -1064,6 +1093,7 @@ export async function sendCrewShootAssignedEmail(params: {
   try {
     const { data, error } = await resend.emails.send({
       from: fromEmail,
+      replyTo: replyToEmail,
       to: params.toEmail,
       subject: `Shoot Assignment: ${params.eventType} on ${params.eventDate} (${params.studioName})`,
       html,
@@ -1101,7 +1131,7 @@ export async function sendPaymentReminderCustomerEmail(params: {
     return { success: false, recipient: params.toEmail, error: "Resend client not configured." };
   }
 
-  const fromEmail = process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev";
+  const { fromEmail, replyToEmail } = getSenderConfig();
   const baseUrl = params.baseUrl || process.env.NEXT_PUBLIC_APP_URL || "https://ais-dev-r23tbivkepodqcgcat4bbg-1076087076684.asia-southeast1.run.app";
   const paymentUrl = `${baseUrl}/pay/${params.orderId}`;
 
@@ -1118,6 +1148,7 @@ export async function sendPaymentReminderCustomerEmail(params: {
   try {
     const { data, error } = await resend.emails.send({
       from: fromEmail,
+      replyTo: replyToEmail,
       to: params.toEmail,
       subject: `Payment Reminder: Balance Due for #${params.orderId} - ${params.studioName}`,
       html,
@@ -1152,7 +1183,7 @@ export async function sendGalleryReadyCustomerEmail(params: {
     return { success: false, recipient: params.toEmail, error: "Resend client not configured." };
   }
 
-  const fromEmail = process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev";
+  const { fromEmail, replyToEmail } = getSenderConfig();
   const baseUrl = params.baseUrl || process.env.NEXT_PUBLIC_APP_URL || "https://ais-dev-r23tbivkepodqcgcat4bbg-1076087076684.asia-southeast1.run.app";
   const galleryUrl = `${baseUrl}/track/${params.passkey}`;
 
@@ -1168,6 +1199,7 @@ export async function sendGalleryReadyCustomerEmail(params: {
   try {
     const { data, error } = await resend.emails.send({
       from: fromEmail,
+      replyTo: replyToEmail,
       to: params.toEmail,
       subject: `Your Photos are Ready! Order #${params.orderId} - ${params.studioName}`,
       html,
@@ -1201,7 +1233,7 @@ export async function sendReviewRequestCustomerEmail(params: {
     return { success: false, recipient: params.toEmail, error: "Resend client not configured." };
   }
 
-  const fromEmail = process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev";
+  const { fromEmail, replyToEmail } = getSenderConfig();
   const baseUrl = params.baseUrl || process.env.NEXT_PUBLIC_APP_URL || "https://ais-dev-r23tbivkepodqcgcat4bbg-1076087076684.asia-southeast1.run.app";
   const reviewUrl = params.reviewUrl || `${baseUrl}/review`;
 
@@ -1215,6 +1247,7 @@ export async function sendReviewRequestCustomerEmail(params: {
   try {
     const { data, error } = await resend.emails.send({
       from: fromEmail,
+      replyTo: replyToEmail,
       to: params.toEmail,
       subject: `How was your photoshoot with ${params.studioName}?`,
       html,
@@ -1247,7 +1280,7 @@ export async function sendCrewWelcomeMemberEmail(params: {
     return { success: false, recipient: params.toEmail, error: "Resend client not configured." };
   }
 
-  const fromEmail = process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev";
+  const { fromEmail, replyToEmail } = getSenderConfig();
   const baseUrl = params.baseUrl || process.env.NEXT_PUBLIC_APP_URL || "https://ais-dev-r23tbivkepodqcgcat4bbg-1076087076684.asia-southeast1.run.app";
   const dashboardUrl = `${baseUrl}/${params.studioSlug}/dashboard/oms`;
 
@@ -1260,6 +1293,7 @@ export async function sendCrewWelcomeMemberEmail(params: {
   try {
     const { data, error } = await resend.emails.send({
       from: fromEmail,
+      replyTo: replyToEmail,
       to: params.toEmail,
       subject: `Welcome to ${params.studioName} Crew!`,
       html,
@@ -1297,7 +1331,7 @@ export async function sendEventStartedEmail(params: {
     return { success: false, recipient: params.toEmail, error: "Resend client not configured." };
   }
 
-  const fromEmail = process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev";
+  const { fromEmail, replyToEmail } = getSenderConfig();
   const baseUrl = params.baseUrl || process.env.NEXT_PUBLIC_APP_URL || "https://ais-dev-r23tbivkepodqcgcat4bbg-1076087076684.asia-southeast1.run.app";
   const trackingUrl = params.passkey ? `${baseUrl}/track/${params.passkey}` : `${baseUrl}/${params.studioSlug}/dashboard/oms`;
 
@@ -1314,6 +1348,7 @@ export async function sendEventStartedEmail(params: {
   try {
     const { data, error } = await resend.emails.send({
       from: fromEmail,
+      replyTo: replyToEmail,
       to: params.toEmail,
       subject: `📸 Event Day Live: ${params.eventTitle} is Today! (${params.studioName})`,
       html,
@@ -1352,7 +1387,7 @@ export async function sendPipelineStatusUpdateEmail(params: {
     return { success: false, recipient: params.toEmail, error: "Resend client not configured." };
   }
 
-  const fromEmail = process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev";
+  const { fromEmail, replyToEmail } = getSenderConfig();
   const baseUrl = params.baseUrl || process.env.NEXT_PUBLIC_APP_URL || "https://ais-dev-r23tbivkepodqcgcat4bbg-1076087076684.asia-southeast1.run.app";
   const portalUrl = params.passkey ? `${baseUrl}/track/${params.passkey}` : `${baseUrl}/${params.studioSlug}/dashboard/oms`;
 
@@ -1370,6 +1405,7 @@ export async function sendPipelineStatusUpdateEmail(params: {
   try {
     const { data, error } = await resend.emails.send({
       from: fromEmail,
+      replyTo: replyToEmail,
       to: params.toEmail,
       subject: `Production Progress: #${params.orderId} - ${params.taskTitle} (${params.newStatus})`,
       html,

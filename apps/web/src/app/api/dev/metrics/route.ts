@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import { getFirestoreServerInstance } from '@focoman/db';
 import { requireDevPortalSession } from '@/lib/devPortalAuth';
+import { getBrevoAccountStatus, getBrevoDailyUsageStats } from '@/services/brevoService';
+import { getResendStatus } from '@/services/emailService';
+import { getResendAccountStatus, getDomainExpirationInfo } from '@/services/resendDevService';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -38,7 +41,14 @@ export async function GET() {
       db.collection('payments').where('verificationStatus', '==', 'VERIFIED').count().get(),
       db.collection('payments').where('verificationStatus', '==', 'PENDING_VERIFICATION').count().get(),
     ];
-    const results = await Promise.allSettled(queries);
+    const [results, brevoAccount, brevoStats, resendStatus, resendAccount, domainExpiration] = await Promise.all([
+      Promise.allSettled(queries),
+      getBrevoAccountStatus().catch(() => null),
+      getBrevoDailyUsageStats().catch(() => null),
+      Promise.resolve(getResendStatus()),
+      getResendAccountStatus().catch(() => null),
+      Promise.resolve(getDomainExpirationInfo()),
+    ]);
     const count = (index: number): number | null => {
       const result = results[index];
       return result.status === 'fulfilled' ? result.value.data().count : null;
@@ -53,6 +63,17 @@ export async function GET() {
         verifiedPaymentRecords: count(4),
         pendingPaymentRecords: count(5),
       },
+      emailProviders: {
+        brevo: {
+          account: brevoAccount,
+          stats: brevoStats,
+        },
+        resend: {
+          ...resendStatus,
+          account: resendAccount,
+        },
+      },
+      domainExpiration,
     }, { headers: { 'Cache-Control': 'private, no-store' } });
   } catch {
     return NextResponse.json({ generatedAt: now.toISOString(), metrics: emptyMetrics }, {

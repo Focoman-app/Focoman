@@ -6,7 +6,8 @@
 
 ## 1. Email providers — Brevo and Resend
 
-- [ ] Create/configure Brevo account and verify the account sender.
+- [x] Create/configure Brevo account and verify the account sender. *(Completed: Account created under `webmaster@focoman.com`, key generated & connected in Dev Portal)*
+- [x] Configure Resend account under `webmaster@focoman.com` with sender `noreply@focoman.com` and `replyTo: support@focoman.com`. *(Completed: Transferred to `webmaster@focoman.com`, Dev Portal integration active)*
 - [ ] Decide provider responsibilities (recommended starting point: keep existing Resend transactional flow; use Brevo for opted-in marketing/campaign mail, unless a reviewed requirement calls for routing selected transactional messages through Brevo).
 - [ ] Add server-only Brevo credentials through local/deployment secret stores; never commit API keys or share them in chat.
 - [ ] Implement provider-specific server-side sending with explicit message routing, truthful delivery/error results, and no automatic cross-provider retry that could duplicate a message.
@@ -14,12 +15,13 @@
 
 ## 2. Sender domain and inbound mailbox routing
 
-- [ ] Confirm where `focoman.com` DNS is managed and inventory existing web, MX, SPF, DKIM, and DMARC records before editing anything.
+- [ ] Transfer Hostinger root domain account ownership to `founder@focoman.com` with personal Gmail as backup recovery email. *(In Progress: Pending 1-hour security cooldown in Hostinger)*
+- [x] Record root domain `focoman.com` expiration date (`2029-11-02` — 3-year registration) and configure expiration alert schedule (`60, 30, 15, 7, 3, 1` days to `webmaster@focoman.com`, `founder@focoman.com`, and personal recovery email) in Dev Portal. *(Completed)*
 - [ ] Add the domain to Brevo and Resend; apply their provider-specific DKIM/domain-verification records and maintain one valid SPF record (merge mechanisms rather than adding conflicting SPF records).
 - [ ] Preserve existing website records and any chosen mailbox MX records. Do not enable Cloudflare Email Routing until its effect on the domain's MX records is reviewed.
-- [ ] Create the approved first four Zoho mailboxes from a laptop after domain ownership and DNS readiness are confirmed: `founder@focoman.com` (company ownership and recovery), `webmaster@focoman.com` (website, DNS, hosting, and technical administration), `support@focoman.com` (all customer, app, and finance support), and `noreply@focoman.com` (automated outbound messages only).
+- [x] Create the approved first four Zoho mailboxes from a laptop after domain ownership and DNS readiness are confirmed: `founder@focoman.com` (company ownership and recovery), `webmaster@focoman.com` (website, DNS, hosting, and technical administration), `support@focoman.com` (all customer, app, and finance support), and `noreply@focoman.com` (automated outbound messages only). *(Completed in Zoho Mail)*
 - [ ] Reserve Zoho's fifth mailbox for a future named employee; do not allocate it to a shared account.
-- [ ] Configure automated messages sent from `noreply@focoman.com` to state that replies are not monitored and direct recipients to `support@focoman.com` for help. Do not use `noreply@focoman.com` as an owner, recovery, or support-login identity.
+- [x] Configure automated messages sent from `noreply@focoman.com` to state that replies are not monitored and direct recipients to `support@focoman.com` for help. Configure `Reply-To: support@focoman.com` on all automated emails. Do not use `noreply@focoman.com` as an owner, recovery, or support-login identity. *(Configured in `apps/web/src/services/emailService.ts`)*
 - [ ] Verify SPF/DKIM/DMARC and test inbox placement and replies before customer rollout.
 
 ## 3. WhatsApp Business Cloud API — notifications and owner bot

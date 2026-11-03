@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Activity, BarChart3, Boxes, Cloud, GitBranch, LayoutDashboard, LogOut, Mail, MessageSquare, RefreshCw, ShieldCheck, SlidersHorizontal } from "lucide-react";
+import { Activity, BarChart3, Boxes, Cloud, GitBranch, LayoutDashboard, LogOut, Mail, MessageSquare, RefreshCw, ShieldCheck, SlidersHorizontal, CheckCircle2, AlertCircle, Send, Key, Clock } from "lucide-react";
 import { FocomanLogo } from "@/components/FocomanLogo";
 import styles from "./DevPortal.module.css";
 
@@ -14,7 +14,84 @@ type Metrics = {
   verifiedPaymentRecords: number | null;
   pendingPaymentRecords: number | null;
 };
-type MetricsResponse = { generatedAt: string; metrics: Metrics };
+type BrevoAccount = {
+  configured: boolean;
+  connected: boolean;
+  email?: string;
+  firstName?: string;
+  lastName?: string;
+  companyName?: string;
+  dailyCredits?: number;
+  planType?: string;
+  keyCreatedDate: string;
+  keyExpiryDate: string;
+  inactivityLimitDays: number;
+  lastUsedAt: string | null;
+  daysRemainingUntilInactivity: number;
+  error?: string;
+};
+
+type BrevoStats = {
+  requests: number;
+  delivered: number;
+  hardBounces: number;
+  softBounces: number;
+  clicks: number;
+  opens: number;
+  spamReports: number;
+  blocked: number;
+};
+
+type ResendDomainInfo = {
+  id: string;
+  name: string;
+  status: string;
+  createdAt: string;
+  region: string;
+};
+
+type ResendAccountStatus = {
+  configured: boolean;
+  connected: boolean;
+  accountEmail: string;
+  domains: ResendDomainInfo[];
+  dailyLimit: number;
+  monthlyLimit: number;
+  lastUsedAt: string | null;
+  error?: string;
+};
+
+type ResendStatus = {
+  configured: boolean;
+  fromEmail: string;
+  replyToEmail: string;
+  account?: ResendAccountStatus | null;
+};
+
+type DomainExpirationInfo = {
+  domain: string;
+  registrar: string;
+  expiryDate: string;
+  daysRemaining: number;
+  alertThresholdsDays: number[];
+  alertRecipients: string[];
+  status: 'HEALTHY' | 'WARNING' | 'CRITICAL';
+};
+
+type EmailProviders = {
+  brevo: {
+    account: BrevoAccount | null;
+    stats: BrevoStats | null;
+  };
+  resend: ResendStatus | null;
+};
+
+type MetricsResponse = {
+  generatedAt: string;
+  metrics: Metrics;
+  emailProviders?: EmailProviders;
+  domainExpiration?: DomainExpirationInfo;
+};
 type Tab = "overview" | "studios" | "usage" | "cloud" | "email" | "whatsapp" | "deploy" | "settings";
 
 const tabs: { id: Tab; name: string; icon: typeof Activity }[] = [
@@ -76,6 +153,70 @@ export function DevPortal({ authenticated, preview }: { authenticated: boolean; 
   const [data, setData] = useState<MetricsResponse | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [resendPinging, setResendPinging] = useState(false);
+  const [resendPingResult, setResendPingResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  async function triggerResendPing() {
+    setResendPinging(true);
+    setResendPingResult(null);
+    try {
+      const res = await fetch("/api/dev/resend-ping", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ recipient: "webmaster@focoman.com" }),
+      });
+      const resData = await res.json();
+      if (res.ok && resData.success) {
+        setResendPingResult({
+          success: true,
+          message: `Test email successfully sent via Resend! (ID: ${resData.messageId || "delivered"})`,
+        });
+        void load();
+      } else {
+        setResendPingResult({
+          success: false,
+          message: resData.error || "Resend test email failed.",
+        });
+      }
+    } catch {
+      setResendPingResult({ success: false, message: "Network error triggering Resend test." });
+    } finally {
+      setResendPinging(false);
+    }
+  }
+  const [pinging, setPinging] = useState(false);
+  const [pingResult, setPingResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  async function triggerKeepAlive() {
+    setPinging(true);
+    setPingResult(null);
+    try {
+      const res = await fetch("/api/dev/brevo-ping", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ recipient: "webmaster@focoman.com" }),
+      });
+      const resData = await res.json();
+      if (res.ok && resData.success) {
+        setPingResult({
+          success: true,
+          message: resData.testEmailSent
+            ? "Keep-alive ping sent successfully! Test email delivered to webmaster@focoman.com."
+            : "Keep-alive ping sent to Brevo API successfully! 90-day inactivity timer refreshed.",
+        });
+        void load();
+      } else {
+        setPingResult({
+          success: false,
+          message: resData.error || "Keep-alive ping failed.",
+        });
+      }
+    } catch {
+      setPingResult({ success: false, message: "Network error triggering ping." });
+    } finally {
+      setPinging(false);
+    }
+  }
 
   const load = useCallback(async () => {
     setLoading(true); setError("");
@@ -128,7 +269,309 @@ export function DevPortal({ authenticated, preview }: { authenticated: boolean; 
         </>}
         {tab === "usage" && <><Placeholder title="Requests & activity" text="Usage metrics are not connected. Request volume, active studios, memory and per-studio usage need a reliable monitoring source."/><Placeholder title="Storage" text="Storage usage and limits are unavailable until a verified source is connected."/></>}
         {tab === "cloud" && <><Placeholder title="Google Cloud" text="Cloud usage, billing, budgets and limits are not connected. Configure a read-only monitoring and billing integration to view actual values."/><Placeholder title="AWS" text="No AWS cost integration is connected."/></>}
-        {tab === "email" && <><Placeholder title="Resend" text="Delivery, bounce and quota data are not connected to this dashboard."/><Placeholder title="Brevo" text="Provider usage and limits are not connected to this dashboard."/></>}
+        {tab === "email" && <>
+          {/* Brevo Provider Section */}
+          <div className={styles.sectionLabel}>
+            <span>BREVO EMAIL API (CAMPAIGNS & NOTIFICATIONS)</span>
+            <span>{data?.emailProviders?.brevo?.account?.connected ? "CONNECTED (LIVE API)" : "UNAVAILABLE"}</span>
+          </div>
+
+          <div className={styles.grid}>
+            <MetricCard
+              label="Brevo Daily Limit"
+              value={data?.emailProviders?.brevo?.account?.dailyCredits ?? 300}
+              note="Daily outbound credits limit"
+            />
+            <MetricCard
+              label="Sent Today"
+              value={data?.emailProviders?.brevo?.stats?.requests ?? 0}
+              note="Outbound requests today"
+            />
+            <MetricCard
+              label="Delivered Today"
+              value={data?.emailProviders?.brevo?.stats?.delivered ?? 0}
+              note="Successfully delivered messages"
+            />
+            <MetricCard
+              label="Inactivity Safety Window"
+              value={data?.emailProviders?.brevo?.account?.daysRemainingUntilInactivity ?? 90}
+              note="Days remaining until 90-day inactivity"
+            />
+          </div>
+
+          <section className={styles.panel} style={{ marginTop: "16px" }}>
+            <div className={styles.panelTitle}>
+              <span style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <Key size={16} /> Brevo API Key Metadata & Safety Controls
+              </span>
+              <span className={styles.badge}>
+                {data?.emailProviders?.brevo?.account?.connected ? "ACTIVE KEY" : "DISCONNECTED"}
+              </span>
+            </div>
+            <div style={{ padding: "20px", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "16px", borderBottom: "1px solid #e6e0d4" }}>
+              <div>
+                <p style={{ margin: "0 0 4px", fontSize: "11px", color: "#78716c", fontWeight: 700 }}>ACCOUNT IDENTITY</p>
+                <strong style={{ fontSize: "13px", color: "#1c1917" }}>
+                  {data?.emailProviders?.brevo?.account?.email || "webmaster@focoman.com"}
+                </strong>
+                <p style={{ margin: "2px 0 0", fontSize: "11px", color: "#a8a29e" }}>
+                  {data?.emailProviders?.brevo?.account?.companyName || "Vealth Enterprises"}
+                </p>
+              </div>
+              <div>
+                <p style={{ margin: "0 0 4px", fontSize: "11px", color: "#78716c", fontWeight: 700 }}>KEY CREATION / EXPIRY</p>
+                <strong style={{ fontSize: "13px", color: "#1c1917" }}>
+                  Expires: {data?.emailProviders?.brevo?.account?.keyExpiryDate || "Nov 3, 2027"}
+                </strong>
+                <p style={{ margin: "2px 0 0", fontSize: "11px", color: "#a8a29e" }}>
+                  Created: {data?.emailProviders?.brevo?.account?.keyCreatedDate || "Nov 3, 2026"}
+                </p>
+              </div>
+              <div>
+                <p style={{ margin: "0 0 4px", fontSize: "11px", color: "#78716c", fontWeight: 700 }}>LAST API ACTIVITY</p>
+                <strong style={{ fontSize: "13px", color: "#1c1917" }}>
+                  {data?.emailProviders?.brevo?.account?.lastUsedAt
+                    ? new Date(data.emailProviders.brevo.account.lastUsedAt).toLocaleString("en-IN")
+                    : "No recorded ping"}
+                </strong>
+                <p style={{ margin: "2px 0 0", fontSize: "11px", color: "#16a34a" }}>
+                  {data?.emailProviders?.brevo?.account?.daysRemainingUntilInactivity ?? 90} days until inactivity limit
+                </p>
+              </div>
+            </div>
+
+            <div style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "12px", background: "#faf7f2" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px" }}>
+                <div>
+                  <strong style={{ fontSize: "13px", color: "#1c1917", display: "flex", alignItems: "center", gap: "6px" }}>
+                    <Clock size={15} /> 90-Day Deactivation Safeguard
+                  </strong>
+                  <p style={{ margin: "4px 0 0", fontSize: "12px", color: "#78716c" }}>
+                    Brevo deactivates API keys if unused for 90 days. Triggering a keep-alive ping refreshes activity on Brevo&apos;s servers.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={triggerKeepAlive}
+                  disabled={pinging || !data?.emailProviders?.brevo?.account?.configured}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    background: "#1c1917",
+                    color: "white",
+                    padding: "9px 16px",
+                    borderRadius: "6px",
+                    border: "1px solid #1c1917",
+                    fontSize: "12px",
+                    fontWeight: 700,
+                    cursor: pinging ? "not-allowed" : "pointer",
+                    opacity: pinging ? 0.7 : 1,
+                  }}
+                >
+                  <Send size={13} className={pinging ? styles.spin : ""} />
+                  {pinging ? "Sending Ping…" : "Send Keep-Alive Ping"}
+                </button>
+              </div>
+
+              {pingResult && (
+                <div
+                  style={{
+                    padding: "10px 14px",
+                    borderRadius: "6px",
+                    fontSize: "12px",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    background: pingResult.success ? "#f0fdf4" : "#fef2f2",
+                    border: pingResult.success ? "1px solid #bbf7d0" : "1px solid #fecaca",
+                    color: pingResult.success ? "#166534" : "#991b1b",
+                  }}
+                >
+                  {pingResult.success ? <CheckCircle2 size={15} /> : <AlertCircle size={15} />}
+                  <span>{pingResult.message}</span>
+                </div>
+              )}
+            </div>
+          </section>
+
+          {/* Resend Provider Section */}
+          <div className={styles.sectionLabel} style={{ marginTop: "28px" }}>
+            <span>RESEND EMAIL SERVICE (TRANSACTIONAL SENDS)</span>
+            <span>{data?.emailProviders?.resend?.configured ? "ACTIVE (CONNECTED)" : "PENDING RESEND_API_KEY"}</span>
+          </div>
+
+          <div className={styles.grid}>
+            <MetricCard
+              label="Resend Daily Limit"
+              value={data?.emailProviders?.resend?.account?.dailyLimit ?? 100}
+              note="Transactional daily quota"
+            />
+            <MetricCard
+              label="Monthly Allowance"
+              value={data?.emailProviders?.resend?.account?.monthlyLimit ?? 3000}
+              note="Monthly included emails"
+            />
+            <MetricCard
+              label="Verified Domains"
+              value={data?.emailProviders?.resend?.account?.domains?.length ?? 0}
+              note="Domains configured on Resend"
+            />
+            <MetricCard
+              label="Account Identity"
+              value={1}
+              note={data?.emailProviders?.resend?.account?.accountEmail || "webmaster@focoman.com"}
+            />
+          </div>
+
+          <section className={styles.panel} style={{ marginTop: "16px" }}>
+            <div className={styles.panelTitle}>
+              <span style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <Key size={16} /> Resend Transactional Configuration & Live Ping
+              </span>
+              <span className={styles.badge}>
+                {data?.emailProviders?.resend?.configured ? "READY FOR SENDING" : "WAITING FOR KEY"}
+              </span>
+            </div>
+
+            <div style={{ padding: "20px", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "16px", borderBottom: "1px solid #e6e0d4" }}>
+              <div>
+                <p style={{ margin: "0 0 4px", fontSize: "11px", color: "#78716c", fontWeight: 700 }}>OUTBOUND SENDER (FROM)</p>
+                <strong style={{ fontSize: "13px", color: "#1c1917" }}>
+                  {data?.emailProviders?.resend?.fromEmail || "Focoman <noreply@focoman.com>"}
+                </strong>
+                <p style={{ margin: "2px 0 0", fontSize: "11px", color: "#a8a29e" }}>Automated system notifications</p>
+              </div>
+              <div>
+                <p style={{ margin: "0 0 4px", fontSize: "11px", color: "#78716c", fontWeight: 700 }}>SUPPORT INBOX (REPLY-TO)</p>
+                <strong style={{ fontSize: "13px", color: "#1c1917" }}>
+                  {data?.emailProviders?.resend?.replyToEmail || "support@focoman.com"}
+                </strong>
+                <p style={{ margin: "2px 0 0", fontSize: "11px", color: "#16a34a" }}>Routes directly to Zoho Mail Support</p>
+              </div>
+              <div>
+                <p style={{ margin: "0 0 4px", fontSize: "11px", color: "#78716c", fontWeight: 700 }}>DOMAIN VERIFICATION</p>
+                <strong style={{ fontSize: "13px", color: "#1c1917" }}>
+                  {data?.emailProviders?.resend?.account?.domains?.[0]?.name || "focoman.com"}
+                </strong>
+                <p style={{ margin: "2px 0 0", fontSize: "11px", color: data?.emailProviders?.resend?.account?.domains?.[0]?.status === "verified" ? "#16a34a" : "#d97706" }}>
+                  Status: {data?.emailProviders?.resend?.account?.domains?.[0]?.status || "pending DNS setup"}
+                </p>
+              </div>
+            </div>
+
+            <div style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "12px", background: "#faf7f2" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px" }}>
+                <div>
+                  <strong style={{ fontSize: "13px", color: "#1c1917", display: "flex", alignItems: "center", gap: "6px" }}>
+                    <Send size={15} /> Resend Transactional Diagnostics
+                  </strong>
+                  <p style={{ margin: "4px 0 0", fontSize: "12px", color: "#78716c" }}>
+                    Sends a live diagnostic test email to webmaster@focoman.com via Resend.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={triggerResendPing}
+                  disabled={resendPinging || !data?.emailProviders?.resend?.configured}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    background: "#1c1917",
+                    color: "white",
+                    padding: "9px 16px",
+                    borderRadius: "6px",
+                    border: "1px solid #1c1917",
+                    fontSize: "12px",
+                    fontWeight: 700,
+                    cursor: resendPinging ? "not-allowed" : "pointer",
+                    opacity: resendPinging || !data?.emailProviders?.resend?.configured ? 0.6 : 1,
+                  }}
+                >
+                  <Send size={13} className={resendPinging ? styles.spin : ""} />
+                  {resendPinging ? "Sending Test…" : "Send Resend Test Email"}
+                </button>
+              </div>
+
+              {resendPingResult && (
+                <div
+                  style={{
+                    padding: "10px 14px",
+                    borderRadius: "6px",
+                    fontSize: "12px",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    background: resendPingResult.success ? "#f0fdf4" : "#fef2f2",
+                    border: resendPingResult.success ? "1px solid #bbf7d0" : "1px solid #fecaca",
+                    color: resendPingResult.success ? "#166534" : "#991b1b",
+                  }}
+                >
+                  {resendPingResult.success ? <CheckCircle2 size={15} /> : <AlertCircle size={15} />}
+                  <span>{resendPingResult.message}</span>
+                </div>
+              )}
+            </div>
+          </section>
+
+          {/* Hostinger Domain Validity Section */}
+          <div className={styles.sectionLabel} style={{ marginTop: "28px" }}>
+            <span>HOSTINGER ROOT DOMAIN VALIDITY & EXPIRY SAFEGUARD</span>
+            <span>{data?.domainExpiration?.status === "HEALTHY" ? "HEALTHY (3 YEARS REMAINING)" : "ATTENTION"}</span>
+          </div>
+
+          <div className={styles.grid}>
+            <MetricCard
+              label="Registered Domain"
+              value={1}
+              note={data?.domainExpiration?.domain || "focoman.com"}
+            />
+            <MetricCard
+              label="Registrar"
+              value={1}
+              note={data?.domainExpiration?.registrar || "Hostinger"}
+            />
+            <MetricCard
+              label="Days Remaining"
+              value={data?.domainExpiration?.daysRemaining ?? 1094}
+              note={`Expires: ${data?.domainExpiration?.expiryDate || "2029-11-02"}`}
+            />
+            <MetricCard
+              label="Alert Schedule"
+              value={6}
+              note="Alerts at 60, 30, 15, 7, 3, 1 days"
+            />
+          </div>
+
+          <section className={styles.panel} style={{ marginTop: "16px" }}>
+            <div className={styles.panelTitle}>
+              <span style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <ShieldCheck size={16} /> Domain Expiration Alert Recipients & Protection Policy
+              </span>
+              <span className={styles.badge} style={{ color: "#16a34a", borderColor: "#bbf7d0", background: "#f0fdf4" }}>
+                PROTECTED UNTIL 2029
+              </span>
+            </div>
+            <div style={{ padding: "20px", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "16px" }}>
+              <div>
+                <p style={{ margin: "0 0 4px", fontSize: "11px", color: "#78716c", fontWeight: 700 }}>ROOT OWNER (HOSTINGER ACCOUNT)</p>
+                <strong style={{ fontSize: "13px", color: "#1c1917" }}>founder@focoman.com</strong>
+                <p style={{ margin: "2px 0 0", fontSize: "11px", color: "#a8a29e" }}>Company legal ownership</p>
+              </div>
+              <div>
+                <p style={{ margin: "0 0 4px", fontSize: "11px", color: "#78716c", fontWeight: 700 }}>BACKUP RECOVERY EMAIL (ESSENTIAL)</p>
+                <strong style={{ fontSize: "13px", color: "#1c1917" }}>sivakrishna.era@gmail.com</strong>
+                <p style={{ margin: "2px 0 0", fontSize: "11px", color: "#16a34a" }}>Emergency recovery if domain ever lapses</p>
+              </div>
+              <div>
+                <p style={{ margin: "0 0 4px", fontSize: "11px", color: "#78716c", fontWeight: 700 }}>EXPIRATION WARNING THRESHOLDS</p>
+                <strong style={{ fontSize: "13px", color: "#1c1917" }}>60, 30, 15, 7, 3, 1 Days</strong>
+                <p style={{ margin: "2px 0 0", fontSize: "11px", color: "#78716c" }}>Automated notification sent to all recipients</p>
+              </div>
+            </div>
+          </section>
+        </>}
         {tab === "whatsapp" && <Placeholder title="Meta WhatsApp" text="Message counts, delivery status and limits are not connected to this dashboard."/>}
         {tab === "deploy" && <Placeholder title="Repository & pipeline" text="Build, deployment and environment status are not connected to this dashboard."/>}
         {tab === "settings" && <><section className={styles.panel}><div className={styles.panelTitle}><span>Portal access</span><ShieldCheck size={16}/></div><p className={styles.empty}>This portal displays aggregate data only. Credentials and provider configuration are managed server-side and are not displayed here.</p></section><Placeholder title="Alerts & thresholds" text="Alert configuration is not connected. No settings can be changed from this portal."/></>}

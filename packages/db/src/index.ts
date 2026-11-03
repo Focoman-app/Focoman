@@ -1653,8 +1653,8 @@ export async function getPlatformPublicStats(): Promise<PlatformPublicStats> {
     const [marketplaceSnap, leadsSnap, studiosSnap, ordersSnap] = await Promise.all([
       db.collection('marketplace_profiles').where('isVisible', '==', true).count().get().catch(() => ({ data: () => ({ count: 0 }) })),
       db.collection('booking_requests').count().get().catch(() => ({ data: () => ({ count: 0 }) })),
-      db.collection('studios').count().get().catch(() => ({ data: () => ({ count: 0 }) })),
-      db.collection('orders').count().get().catch(() => ({ data: () => ({ count: 0 }) })),
+      db.collection('studios').where('isDeleted', '==', false).count().get().catch(() => ({ data: () => ({ count: 0 }) })),
+      db.collection('orders').where('isDeleted', '==', false).count().get().catch(() => ({ data: () => ({ count: 0 }) })),
     ]);
 
     return {
