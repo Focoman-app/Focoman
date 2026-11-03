@@ -291,12 +291,13 @@ function ServicesContent() {
               </div>
               {/* Skip for now on mobile top row */}
               {isOnboarding && (
-                <div className="sm:hidden">
+                <div className="sm:hidden shrink-0">
                   <Link
                     href={`/${studioSlug}/dashboard`}
-                    className="text-xs font-bold text-text-secondary hover:text-text-primary underline"
+                    className="inline-flex items-center gap-1 text-xs font-bold text-text-secondary hover:text-text-primary underline whitespace-nowrap shrink-0"
                   >
-                    Skip →
+                    <span>Skip</span>
+                    <span className="inline-block">→</span>
                   </Link>
                 </div>
               )}
@@ -313,9 +314,10 @@ function ServicesContent() {
             {isOnboarding && (
               <Link
                 href={`/${studioSlug}/dashboard`}
-                className="rounded-xl border border-border-default px-4 py-2 text-xs font-bold text-text-secondary hover:text-text-primary hover:bg-surface-app transition"
+                className="inline-flex items-center gap-1.5 rounded-xl border border-border-default px-4 py-2 text-xs font-bold text-text-secondary hover:text-text-primary hover:bg-surface-app transition whitespace-nowrap shrink-0"
               >
-                Skip for now →
+                <span>Skip for now</span>
+                <span className="inline-block">→</span>
               </Link>
             )}
           </div>
@@ -879,35 +881,19 @@ function ServicesContent() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-text-primary mb-1">
-                    Package Combo Price (₹) *
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="1000"
-                    required
-                    value={packagePrice}
-                    onChange={(e) => setPackagePrice(Number(e.target.value))}
-                    className="w-full rounded-xl border border-border-default px-3 py-2 text-xs font-bold text-text-primary outline-none focus:border-brand-blue-primary"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-text-primary mb-1">
-                    Marketplace Listing
-                  </label>
-                  <label className="flex items-center gap-2 mt-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={packagePublished}
-                      onChange={(e) => setPackagePublished(e.target.checked)}
-                      className="h-4 w-4 rounded border-border-default text-brand-blue-primary"
-                    />
-                    <span className="text-xs text-text-primary">Show in Marketplace</span>
-                  </label>
-                </div>
+              <div>
+                <label className="block text-xs font-bold text-text-primary mb-1">
+                  Package Combo Price (₹) *
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="1000"
+                  required
+                  value={packagePrice}
+                  onChange={(e) => setPackagePrice(Number(e.target.value))}
+                  className="w-full rounded-xl border border-border-default px-3 py-2 text-xs font-bold text-text-primary outline-none focus:border-brand-blue-primary"
+                />
               </div>
 
               <div>

@@ -105,9 +105,7 @@ export async function createOrderAction(rawInput: unknown): Promise<{
     const passkeyPin = validated.passkeyPin?.trim() || undefined;
 
     const studioPrefix = prefixLetters(validated.studioId);
-    const finalPasskey = passkeyPin
-      ? `FOC-${studioPrefix}-${passkeyPin}`
-      : passkey;
+    const finalPasskey = orderId;
 
     const todayStr = getStudioCalendarDate(now);
     const initialOrderStatus: OrderStatus =

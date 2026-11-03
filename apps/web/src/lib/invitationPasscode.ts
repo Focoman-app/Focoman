@@ -49,10 +49,11 @@ export function generateOrderIdentifiers(studioId: string, date: Date = new Date
   const prefix = prefixLetters(studioId);
   const { dateStamp, timeStamp } = generateTimestampDigits(date);
   const code = `${dateStamp}-${timeStamp}`;
+  const orderId = `ORD-${prefix}-${code}`;
   return {
-    orderId: `ORD-${prefix}-${code}`,
-    passkey: `FOC-${prefix}-${code}`,
-    customerId: `CUS-${prefix}-${code}`,
+    orderId,
+    passkey: orderId,
+    customerId: `cus_${Date.now()}_${randomBytes(2).toString("hex")}`,
   };
 }
 
