@@ -2,6 +2,19 @@
 
 All meaningful changes to the Focoman codebase, documentation, architecture, or agent workflow instructions must be recorded in this file according to Section 20 of **[Agents.md](Agents.md)**.
 
+## CHG-071 — Production Domain Routing Live on Vercel & Registrar Policy
+
+- **Task:** CHG-071 — Record production live routing on `focoman.com`, Hostinger registrar security policy, and planned GitHub/Vercel workspace migrations.
+- **Date:** 2026-11-03
+- **Area:** `docs/tasks/email-domain-whatsapp-action-items.md`, DNS & Hosting routing.
+- **Change:**
+  1. Verified production routing on Vercel: `focoman.com` and `www.focoman.com` are live and operational with SSL.
+  2. Documented Hostinger registrar policy: registrar accounts intentionally prohibit self-referential domain emails (`webmaster@focoman.com`) to prevent circular-dependency lockout during DNS outages; master Hostinger account remains on independent external email (`sivakrishna.era@gmail.com`).
+  3. Logged planned migration tasks for GitHub repository (`Sivakrishna30` → organization) and Vercel project ownership.
+- **Verification:**
+  - Tested production DNS resolution for `focoman.com` and `www.focoman.com`.
+  - Updated integration checklist in `docs/tasks/email-domain-whatsapp-action-items.md`.
+
 ## CHG-070 — Resend Live Telemetry & Hostinger Domain Expiry Safeguard in Dev Portal
 
 - **Task:** CHG-070 — Configure Resend live API telemetry, domain verification check, and Hostinger 3-year domain expiration safeguard with threshold alerts.

@@ -15,7 +15,10 @@
 
 ## 2. Sender domain and inbound mailbox routing
 
-- [ ] Transfer Hostinger root domain account ownership to `founder@focoman.com` with personal Gmail as backup recovery email. *(In Progress: Pending 1-hour security cooldown in Hostinger)*
+- [x] Configure custom domain routing on Vercel: `focoman.com` and `www.focoman.com` routed with A record (`76.76.21.21`) and CNAME record (`cname.vercel-dns.com`). Live and operational. *(Completed)*
+- [x] Hostinger Registrar Account Security: Maintained Hostinger account on independent external email (`sivakrishna.era@gmail.com`) to prevent circular-dependency lockout (Hostinger prohibits setting primary account email to a domain managed by that same account). *(Completed)*
+- [ ] Migrate GitHub repository from personal account (`Sivakrishna30`) to professional organization / `webmaster@focoman.com`. *(Planned)*
+- [ ] Migrate Vercel project ownership / account to professional organization / `webmaster@focoman.com`. *(Planned)*
 - [x] Record root domain `focoman.com` expiration date (`2029-11-02` — 3-year registration) and configure expiration alert schedule (`60, 30, 15, 7, 3, 1` days to `webmaster@focoman.com`, `founder@focoman.com`, and personal recovery email) in Dev Portal. *(Completed)*
 - [ ] Add the domain to Brevo and Resend; apply their provider-specific DKIM/domain-verification records and maintain one valid SPF record (merge mechanisms rather than adding conflicting SPF records).
 - [ ] Preserve existing website records and any chosen mailbox MX records. Do not enable Cloudflare Email Routing until its effect on the domain's MX records is reviewed.
