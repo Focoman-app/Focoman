@@ -159,14 +159,9 @@ function SignIn() {
 
           <div className="mx-auto mt-8">
             <div className="rounded-2xl border border-border-default bg-gray-50/50 p-6 sm:p-7">
-              <div className="flex items-center gap-3 mb-5 pb-4 border-b border-border-default">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-blue-soft text-brand-blue-primary">
-                  <ShieldCheck size={20} />
-                </div>
-                <div>
-                  <h2 className="text-sm font-bold text-text-primary">Admin Authentication</h2>
-                  <p className="text-[11px] text-text-secondary">Enter your platform security credentials</p>
-                </div>
+              <div className="mb-5 pb-4 border-b border-border-default">
+                <h2 className="text-sm font-bold text-text-primary">Admin Authentication</h2>
+                <p className="text-[11px] text-text-secondary mt-0.5">Enter your platform security credentials</p>
               </div>
 
               <form onSubmit={submit} className="space-y-4">
