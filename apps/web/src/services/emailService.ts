@@ -1,3 +1,5 @@
+import 'server-only';
+import { getFirestoreServerInstance } from '@focoman/db';
 import { Resend } from "resend";
 
 let resendInstance: Resend | null = null;
@@ -111,6 +113,109 @@ export function buildStudioWelcomeOwnerHtml(params: {
 /**
  * 1. Crew Member Invitation Email Template
  */
+
+/**
+ * 0b. Studio Owner Notification: New Confirmed Booking Registered
+ */
+export function buildOrderConfirmedOwnerHtml(params: {
+  ownerName: string;
+  studioName: string;
+  orderNumber: string;
+  eventType: string;
+  eventDate: string;
+  customerName: string;
+  customerPhone?: string;
+  customerEmail?: string;
+  confirmedPrice: number;
+  advanceAmount: number;
+  remainingAmount: number;
+  omsUrl: string;
+}): string {
+  const formattedPrice = '₹' + Number(params.confirmedPrice || 0).toLocaleString('en-IN');
+  const formattedAdvance = '₹' + Number(params.advanceAmount || 0).toLocaleString('en-IN');
+  const formattedRemaining = '₹' + Number(params.remainingAmount || 0).toLocaleString('en-IN');
+
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>New Order Registered: #${params.orderNumber} - ${params.studioName}</title>
+</head>
+<body style="margin:0;padding:32px 12px;background-color:${STYLES.bodyBg};font-family:${STYLES.fontFamily};color:${STYLES.textPrimary};">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:560px;margin:0 auto;background:${STYLES.cardBg};border-radius:16px;border:1px solid ${STYLES.border};overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.05);">
+    <tr>
+      <td style="padding:28px 32px;background:#18181b;color:#ffffff;">
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:1.5px;color:#a1a1aa;font-weight:700;">NEW ORDER REGISTERED</div>
+        <h1 style="margin:6px 0 0;font-size:22px;font-weight:800;color:#ffffff;">${params.studioName}</h1>
+      </td>
+    </tr>
+
+    <tr>
+      <td style="padding:32px;">
+        <h2 style="margin:0 0 12px;font-size:18px;font-weight:700;color:${STYLES.textPrimary};">
+          Hello ${params.ownerName},
+        </h2>
+        <p style="margin:0 0 20px;font-size:14px;line-height:1.6;color:${STYLES.textSecondary};">
+          A new confirmed order has been registered in your studio operations system.
+        </p>
+
+        <!-- Booking details -->
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:0 0 24px;background:#f8fafc;border:1px solid ${STYLES.border};border-radius:12px;padding:16px;">
+          <tr>
+            <td style="padding:8px 0;font-size:13px;color:${STYLES.textSecondary};width:40%;">Order Number:</td>
+            <td style="padding:8px 0;font-family:monospace;font-size:13px;font-weight:700;color:${STYLES.textPrimary};">#${params.orderNumber}</td>
+          </tr>
+          <tr>
+            <td style="padding:8px 0;font-size:13px;color:${STYLES.textSecondary};">Event Type:</td>
+            <td style="padding:8px 0;font-size:13px;font-weight:700;color:${STYLES.textPrimary};">${params.eventType}</td>
+          </tr>
+          <tr>
+            <td style="padding:8px 0;font-size:13px;color:${STYLES.textSecondary};">Event Date:</td>
+            <td style="padding:8px 0;font-size:13px;font-weight:600;color:${STYLES.textPrimary};">${params.eventDate}</td>
+          </tr>
+          <tr>
+            <td style="padding:8px 0;font-size:13px;color:${STYLES.textSecondary};">Customer:</td>
+            <td style="padding:8px 0;font-size:13px;font-weight:600;color:${STYLES.textPrimary};">${params.customerName}${params.customerPhone ? ' (' + params.customerPhone + ')' : ''}</td>
+          </tr>
+          <tr>
+            <td style="padding:8px 0;font-size:13px;color:${STYLES.textSecondary};">Confirmed Price:</td>
+            <td style="padding:8px 0;font-size:13px;font-weight:700;color:#16a34a;">${formattedPrice}</td>
+          </tr>
+          <tr>
+            <td style="padding:8px 0;font-size:13px;color:${STYLES.textSecondary};">Advance Received:</td>
+            <td style="padding:8px 0;font-size:13px;font-weight:600;color:${STYLES.textPrimary};">${formattedAdvance}</td>
+          </tr>
+          <tr>
+            <td style="padding:8px 0;font-size:13px;color:${STYLES.textSecondary};">Balance Due:</td>
+            <td style="padding:8px 0;font-size:13px;font-weight:600;color:#dc2626;">${formattedRemaining}</td>
+          </tr>
+        </table>
+
+        <!-- CTA Button -->
+        <div style="text-align:center;margin:32px 0 20px;">
+          <a href="${params.omsUrl}" style="display:inline-block;padding:14px 32px;background:#18181b;color:#ffffff;text-decoration:none;font-weight:700;font-size:14px;border-radius:10px;box-shadow:0 4px 14px rgba(0,0,0,0.2);">
+            Open Studio OMS Dashboard
+          </a>
+        </div>
+
+        <p style="margin:0;font-size:12px;line-height:1.5;color:${STYLES.textMuted};text-align:center;">
+          Assign crew members, manage production tasks, and generate invoices in your dashboard.
+        </p>
+      </td>
+    </tr>
+
+    <tr>
+      <td style="padding:20px 32px;background:#f8fafc;border-top:1px solid ${STYLES.border};font-size:11px;color:${STYLES.textMuted};text-align:center;">
+        ${params.studioName} • Focoman Studio Operations
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+`;
+}
+
 export function buildCrewInvitationHtml(params: {
   studioName: string;
   memberName: string;
@@ -878,6 +983,161 @@ export interface ResendStatus {
   replyToEmail: string;
 }
 
+
+/**
+ * Dual-Engine Email Dispatch Router:
+ * - Engine 1: Brevo (Quota limit: 250 sends/day).
+ * - Engine 2: Resend (Automatic rollover when Brevo reaches 250).
+ * - Atomic Firestore transaction guarantees exact limit tracking and NO duplicate delivery.
+ */
+export const BREVO_DAILY_QUOTA_LIMIT = 250;
+
+async function reserveEmailProvider(): Promise<'brevo' | 'resend'> {
+  const brevoApiKey = process.env.BREVO_API_KEY;
+  const resendApiKey = process.env.RESEND_API_KEY;
+
+  if (!brevoApiKey && !resendApiKey) {
+    throw new Error('No email provider credentials configured (neither Brevo nor Resend).');
+  }
+  if (!brevoApiKey) return 'resend';
+  if (!resendApiKey) return 'brevo';
+
+  const todayStr = new Date().toISOString().split('T')[0];
+  try {
+    const db = getFirestoreServerInstance();
+    const counterRef = db.collection('system_email_counters').doc(todayStr);
+
+    const chosenProvider = await db.runTransaction(async (transaction) => {
+      const snap = await transaction.get(counterRef);
+      const data = snap.data();
+      const currentBrevo = typeof data?.brevoCount === 'number' ? data.brevoCount : 0;
+      const currentResend = typeof data?.resendCount === 'number' ? data.resendCount : 0;
+
+      if (currentBrevo < BREVO_DAILY_QUOTA_LIMIT) {
+        transaction.set(
+          counterRef,
+          {
+            brevoCount: currentBrevo + 1,
+            resendCount: currentResend,
+            updatedAt: new Date().toISOString(),
+          },
+          { merge: true }
+        );
+        return 'brevo' as const;
+      } else {
+        transaction.set(
+          counterRef,
+          {
+            brevoCount: currentBrevo,
+            resendCount: currentResend + 1,
+            updatedAt: new Date().toISOString(),
+          },
+          { merge: true }
+        );
+        return 'resend' as const;
+      }
+    });
+
+    return chosenProvider;
+  } catch (err) {
+    console.warn('[EmailRouter] Counter reservation error, defaulting to Brevo fallback:', err);
+    return 'brevo';
+  }
+}
+
+/**
+ * Universal Atomic Email Dispatcher:
+ * Dispatches email once via the selected provider with NO retry duplication.
+ */
+export async function sendUniversalEmail(params: {
+  toEmail: string;
+  recipientName?: string;
+  subject: string;
+  html: string;
+}): Promise<SendEmailResult> {
+  const { fromEmail, replyToEmail } = getSenderConfig();
+  const provider = await reserveEmailProvider();
+
+  if (provider === 'brevo') {
+    const brevoApiKey = process.env.BREVO_API_KEY;
+    if (!brevoApiKey) {
+      return { success: false, recipient: params.toEmail, error: 'Brevo API key not configured.' };
+    }
+
+    try {
+      const res = await fetch('https://api.brevo.com/v3/smtp/email', {
+        method: 'POST',
+        headers: {
+          'api-key': brevoApiKey,
+          'Content-Type': 'application/json',
+          accept: 'application/json',
+        },
+        body: JSON.stringify({
+          sender: { name: 'Focoman', email: 'noreply@focoman.com' },
+          to: [{ email: params.toEmail, name: params.recipientName || params.toEmail }],
+          replyTo: { email: replyToEmail, name: 'Focoman Support' },
+          subject: params.subject,
+          htmlContent: params.html,
+        }),
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        console.error('[EmailService:Brevo] Send failed:', errData);
+        return {
+          success: false,
+          recipient: params.toEmail,
+          error: errData.message || 'Brevo HTTP ' + res.status,
+        };
+      }
+
+      const resData = await res.json();
+      console.log(`[EmailService:Brevo] Dispatched to ${params.toEmail} (ID: ${resData.messageId})`);
+      return {
+        success: true,
+        recipient: params.toEmail,
+        messageId: resData.messageId,
+      };
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      console.error('[EmailService:Brevo] Network error:', errorMsg);
+      return { success: false, recipient: params.toEmail, error: errorMsg };
+    }
+  }
+
+  // Resend provider branch
+  const resend = getResendClient();
+  if (!resend) {
+    return { success: false, recipient: params.toEmail, error: 'Resend client not configured.' };
+  }
+
+  try {
+    const { data, error } = await resend.emails.send({
+      from: fromEmail,
+      replyTo: replyToEmail,
+      to: params.toEmail,
+      subject: params.subject,
+      html: params.html,
+    });
+
+    if (error) {
+      console.error('[EmailService:Resend] Send failed:', error);
+      return { success: false, recipient: params.toEmail, error: error.message };
+    }
+
+    console.log(`[EmailService:Resend] Dispatched to ${params.toEmail} (ID: ${data?.id})`);
+    return {
+      success: true,
+      recipient: params.toEmail,
+      messageId: data?.id,
+    };
+  } catch (err: unknown) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    console.error('[EmailService:Resend] Error:', errorMsg);
+    return { success: false, recipient: params.toEmail, error: errorMsg };
+  }
+}
+
 export function getResendStatus(): ResendStatus {
   const { fromEmail, replyToEmail } = getSenderConfig();
   return {
@@ -892,6 +1152,80 @@ export function getResendStatus(): ResendStatus {
 /**
  * Sends a Crew Member Invitation Email
  */
+
+/**
+ * 0a. Sends Studio Owner Welcome Email on Studio Workspace Registration
+ */
+export async function sendStudioWelcomeOwnerEmail(params: {
+  toEmail: string;
+  ownerName: string;
+  studioName: string;
+  studioSlug: string;
+  baseUrl?: string;
+}): Promise<SendEmailResult> {
+  const baseUrl = params.baseUrl || process.env.NEXT_PUBLIC_APP_URL || "https://focoman.com";
+  const dashboardUrl = `${baseUrl}/${params.studioSlug}/dashboard/oms`;
+
+  const html = buildStudioWelcomeOwnerHtml({
+    ownerName: params.ownerName,
+    studioName: params.studioName,
+    studioSlug: params.studioSlug,
+    dashboardUrl,
+  });
+
+  return sendUniversalEmail({
+    toEmail: params.toEmail,
+    recipientName: params.ownerName,
+    subject: `Welcome to Focoman — ${params.studioName} Workspace Ready`,
+    html,
+  });
+}
+
+/**
+ * 0b. Sends Studio Owner Notification when a New Confirmed Order is Registered
+ */
+export async function sendOrderConfirmedOwnerEmail(params: {
+  toEmail: string;
+  ownerName: string;
+  studioName: string;
+  studioSlug: string;
+  orderNumber: string;
+  eventType: string;
+  eventDate: string;
+  customerName: string;
+  customerPhone?: string;
+  customerEmail?: string;
+  confirmedPrice: number;
+  advanceAmount: number;
+  remainingAmount: number;
+  baseUrl?: string;
+}): Promise<SendEmailResult> {
+  const baseUrl = params.baseUrl || process.env.NEXT_PUBLIC_APP_URL || "https://focoman.com";
+  const omsUrl = `${baseUrl}/${params.studioSlug}/dashboard/oms`;
+
+  const html = buildOrderConfirmedOwnerHtml({
+    ownerName: params.ownerName,
+    studioName: params.studioName,
+    orderNumber: params.orderNumber,
+    eventType: params.eventType,
+    eventDate: params.eventDate,
+    customerName: params.customerName,
+    customerPhone: params.customerPhone,
+    customerEmail: params.customerEmail,
+    confirmedPrice: params.confirmedPrice,
+    advanceAmount: params.advanceAmount,
+    remainingAmount: params.remainingAmount,
+    omsUrl,
+  });
+
+  return sendUniversalEmail({
+    toEmail: params.toEmail,
+    recipientName: params.ownerName,
+    subject: `New Order Registered: #${params.orderNumber} (${params.eventType}) - ${params.studioName}`,
+    html,
+  });
+}
+
 export async function sendCrewInvitationEmail(params: {
   toEmail: string;
   studioName: string;
@@ -907,7 +1241,7 @@ export async function sendCrewInvitationEmail(params: {
   }
 
   const { fromEmail, replyToEmail } = getSenderConfig();
-  const baseUrl = params.baseUrl || process.env.NEXT_PUBLIC_APP_URL || "https://ais-dev-r23tbivkepodqcgcat4bbg-1076087076684.asia-southeast1.run.app";
+  const baseUrl = params.baseUrl || process.env.NEXT_PUBLIC_APP_URL || "https://focoman.com";
   const joinUrl = `${baseUrl}/onboarding/join-studio?code=${encodeURIComponent(params.inviteCode)}`;
 
   const html = buildCrewInvitationHtml({
@@ -962,7 +1296,7 @@ export async function sendCrewAcceptedOwnerEmail(params: {
   }
 
   const { fromEmail, replyToEmail } = getSenderConfig();
-  const baseUrl = params.baseUrl || process.env.NEXT_PUBLIC_APP_URL || "https://ais-dev-r23tbivkepodqcgcat4bbg-1076087076684.asia-southeast1.run.app";
+  const baseUrl = params.baseUrl || process.env.NEXT_PUBLIC_APP_URL || "https://focoman.com";
   const erpUrl = `${baseUrl}/${params.studioSlug}/dashboard/erp`;
 
   const html = buildCrewAcceptedOwnerHtml({
@@ -1018,7 +1352,7 @@ export async function sendOrderConfirmedCustomerEmail(params: {
   }
 
   const { fromEmail, replyToEmail } = getSenderConfig();
-  const baseUrl = params.baseUrl || process.env.NEXT_PUBLIC_APP_URL || "https://ais-dev-r23tbivkepodqcgcat4bbg-1076087076684.asia-southeast1.run.app";
+  const baseUrl = params.baseUrl || process.env.NEXT_PUBLIC_APP_URL || "https://focoman.com";
   const trackUrl = `${baseUrl}/track/${params.passkey}`;
 
   const html = buildOrderConfirmedCustomerHtml({
@@ -1076,7 +1410,7 @@ export async function sendCrewShootAssignedEmail(params: {
   }
 
   const { fromEmail, replyToEmail } = getSenderConfig();
-  const baseUrl = params.baseUrl || process.env.NEXT_PUBLIC_APP_URL || "https://ais-dev-r23tbivkepodqcgcat4bbg-1076087076684.asia-southeast1.run.app";
+  const baseUrl = params.baseUrl || process.env.NEXT_PUBLIC_APP_URL || "https://focoman.com";
   const portalUrl = `${baseUrl}/${params.studioSlug}/dashboard/oms`;
 
   const html = buildCrewShootAssignedHtml({
@@ -1132,7 +1466,7 @@ export async function sendPaymentReminderCustomerEmail(params: {
   }
 
   const { fromEmail, replyToEmail } = getSenderConfig();
-  const baseUrl = params.baseUrl || process.env.NEXT_PUBLIC_APP_URL || "https://ais-dev-r23tbivkepodqcgcat4bbg-1076087076684.asia-southeast1.run.app";
+  const baseUrl = params.baseUrl || process.env.NEXT_PUBLIC_APP_URL || "https://focoman.com";
   const paymentUrl = `${baseUrl}/pay/${params.orderId}`;
 
   const html = buildPaymentReminderCustomerHtml({
@@ -1184,7 +1518,7 @@ export async function sendGalleryReadyCustomerEmail(params: {
   }
 
   const { fromEmail, replyToEmail } = getSenderConfig();
-  const baseUrl = params.baseUrl || process.env.NEXT_PUBLIC_APP_URL || "https://ais-dev-r23tbivkepodqcgcat4bbg-1076087076684.asia-southeast1.run.app";
+  const baseUrl = params.baseUrl || process.env.NEXT_PUBLIC_APP_URL || "https://focoman.com";
   const galleryUrl = `${baseUrl}/track/${params.passkey}`;
 
   const html = buildGalleryReadyCustomerHtml({
@@ -1234,7 +1568,7 @@ export async function sendReviewRequestCustomerEmail(params: {
   }
 
   const { fromEmail, replyToEmail } = getSenderConfig();
-  const baseUrl = params.baseUrl || process.env.NEXT_PUBLIC_APP_URL || "https://ais-dev-r23tbivkepodqcgcat4bbg-1076087076684.asia-southeast1.run.app";
+  const baseUrl = params.baseUrl || process.env.NEXT_PUBLIC_APP_URL || "https://focoman.com";
   const reviewUrl = params.reviewUrl || `${baseUrl}/review`;
 
   const html = buildReviewRequestCustomerHtml({
@@ -1281,7 +1615,7 @@ export async function sendCrewWelcomeMemberEmail(params: {
   }
 
   const { fromEmail, replyToEmail } = getSenderConfig();
-  const baseUrl = params.baseUrl || process.env.NEXT_PUBLIC_APP_URL || "https://ais-dev-r23tbivkepodqcgcat4bbg-1076087076684.asia-southeast1.run.app";
+  const baseUrl = params.baseUrl || process.env.NEXT_PUBLIC_APP_URL || "https://focoman.com";
   const dashboardUrl = `${baseUrl}/${params.studioSlug}/dashboard/oms`;
 
   const html = buildCrewWelcomeMemberHtml({
@@ -1332,7 +1666,7 @@ export async function sendEventStartedEmail(params: {
   }
 
   const { fromEmail, replyToEmail } = getSenderConfig();
-  const baseUrl = params.baseUrl || process.env.NEXT_PUBLIC_APP_URL || "https://ais-dev-r23tbivkepodqcgcat4bbg-1076087076684.asia-southeast1.run.app";
+  const baseUrl = params.baseUrl || process.env.NEXT_PUBLIC_APP_URL || "https://focoman.com";
   const trackingUrl = params.passkey ? `${baseUrl}/track/${params.passkey}` : `${baseUrl}/${params.studioSlug}/dashboard/oms`;
 
   const html = buildEventStartedHtml({
@@ -1388,7 +1722,7 @@ export async function sendPipelineStatusUpdateEmail(params: {
   }
 
   const { fromEmail, replyToEmail } = getSenderConfig();
-  const baseUrl = params.baseUrl || process.env.NEXT_PUBLIC_APP_URL || "https://ais-dev-r23tbivkepodqcgcat4bbg-1076087076684.asia-southeast1.run.app";
+  const baseUrl = params.baseUrl || process.env.NEXT_PUBLIC_APP_URL || "https://focoman.com";
   const portalUrl = params.passkey ? `${baseUrl}/track/${params.passkey}` : `${baseUrl}/${params.studioSlug}/dashboard/oms`;
 
   const html = buildPipelineStatusUpdateHtml({

@@ -21,6 +21,7 @@ import {
 import { Studio, StudioMembership, StudioPlan, StudioServiceConfig, StudioPackage } from "@focoman/types";
 import { requireVerifiedUser, requireStudioMember, getAdminAuthInstance } from "@/lib/serverAuth";
 import { DEFAULT_STUDIO_SERVICES, getDefaultStudioPackages } from "@/lib/studioServices";
+import { sendStudioWelcomeOwnerEmail } from "@/services/emailService";
 
 /**
  * Server Actions for Studio Registration, Workspaces & Settings
@@ -110,6 +111,18 @@ export async function registerStudioAction(input: {
     const result = await registerStudioTransaction(studio, membership);
     if (!result.success) {
       return { success: false, error: result.error || "Failed to register studio." };
+    }
+
+    // Dispatch Welcome Email to Studio Owner in background
+    if (ownerEmail) {
+      void sendStudioWelcomeOwnerEmail({
+        toEmail: ownerEmail,
+        ownerName,
+        studioName: name,
+        studioSlug: slug,
+      }).catch((emailErr) => {
+        console.error("[registerStudioAction] Studio welcome email dispatch failed:", emailErr);
+      });
     }
 
     return { success: true, studio };

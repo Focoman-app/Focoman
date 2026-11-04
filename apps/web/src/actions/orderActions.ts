@@ -40,7 +40,7 @@ import {
 } from "@focoman/db";
 import { CustomerTrackingView, Order, Task, StudioMember, OrderStatus, TaskStatus, PaymentStatus, OrderCollaborator, OrderInstallment, OrderAuditEntry } from "@focoman/types";
 import { requireVerifiedUser, requireStudioMember, requireStudioOwner, getAdminAuthInstance } from "@/lib/serverAuth";
-import { sendOrderConfirmedCustomerEmail, sendCrewShootAssignedEmail, sendPipelineStatusUpdateEmail, sendGalleryReadyCustomerEmail, sendPaymentReminderCustomerEmail } from "@/services/emailService";
+import { sendOrderConfirmedCustomerEmail, sendOrderConfirmedOwnerEmail, sendCrewShootAssignedEmail, sendPipelineStatusUpdateEmail, sendGalleryReadyCustomerEmail, sendPaymentReminderCustomerEmail } from "@/services/emailService";
 
 /**
  * Server Actions for Order Lifecycle, Tasks & Post-Event Production Pipeline (OMS)
@@ -239,6 +239,33 @@ export async function createOrderAction(rawInput: unknown): Promise<{
         }
       })();
     }
+
+    
+    // Dispatch instant order confirmation notification to Studio Owner
+    void (async () => {
+      try {
+        const studio = await getStudioBySlug(validated.studioId);
+        if (studio?.ownerEmail) {
+          await sendOrderConfirmedOwnerEmail({
+            toEmail: studio.ownerEmail,
+            ownerName: studio.ownerName || "Studio Owner",
+            studioName: studio.name || validated.studioId,
+            studioSlug: validated.studioId,
+            orderNumber: newOrder.id,
+            eventType: validated.eventType,
+            eventDate: validated.eventDate,
+            customerName: validated.customerName,
+            customerPhone,
+            customerEmail,
+            confirmedPrice: validated.finalConfirmedPrice,
+            advanceAmount: validated.advanceAmount,
+            remainingAmount,
+          });
+        }
+      } catch (ownerMailErr) {
+        console.error("[createOrderAction] Owner notification email dispatch failed:", ownerMailErr);
+      }
+    })();
 
     return { success: true, order: newOrder, tasks: workflowTasks };
   } catch (err: unknown) {

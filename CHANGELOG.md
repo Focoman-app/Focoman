@@ -2,6 +2,23 @@
 
 All meaningful changes to the Focoman codebase, documentation, architecture, or agent workflow instructions must be recorded in this file according to Section 20 of **[Agents.md](Agents.md)**.
 
+## CHG-074 — Dual-Engine Email Dispatch Router & Studio Owner Notifications
+
+- **Task:** CHG-074 — Implement smart dual-engine email router (Brevo 250 daily quota priority with seamless Resend rollover), wire studio creation welcome emails and studio owner order notifications.
+- **Date:** 2026-11-04
+- **Area:** apps/web/src/services/emailService.ts, apps/web/src/actions/studioActions.ts, apps/web/src/actions/orderActions.ts, CHANGELOG.md.
+- **Change:**
+  1. Built smart dual-engine router (sendUniversalEmail) with atomic Firestore reservation (system_email_counters/{YYYY-MM-DD}) prioritizing Brevo up to 250 sends/day, automatically rolling over to Resend (100/day).
+  2. Guaranteed no duplicate sends: single atomic reservation path per notification with zero cross-provider duplicate retries.
+  3. Created sendStudioWelcomeOwnerEmail and wired into registerStudioAction in studioActions.ts.
+  4. Created sendOrderConfirmedOwnerEmail and buildOrderConfirmedOwnerHtml, wired into createOrderAction in orderActions.ts so studio owners instantly receive order confirmation alerts.
+  5. Replaced legacy Google Cloud Run fallback URLs across all email templates with https://focoman.com.
+- **Verification:**
+  - npx tsc --project apps/web/tsconfig.json --noEmit passed with 0 errors.
+  - npm test passed 36/36 tests.
+  - Live transactional test sent via Brevo (messageId <202611040155.22897020395@smtp-relay.mailin.fr>).
+  - Live atomic quota counter verified in Firestore (system_email_counters).
+
 ## CHG-073 — Dev Portal Production Origin Allowlist Fix
 
 - **Task:** CHG-073 — Allow dev portal authentication from canonical domains (focoman.com, focoman.vercel.app).
