@@ -13,7 +13,10 @@ const inter = Inter({
 });
 
 export const viewport: Viewport = {
-  themeColor: "#18181B",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#FFFFFF" },
+    { media: "(prefers-color-scheme: dark)", color: "#18181B" },
+  ],
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
@@ -38,13 +41,14 @@ export const metadata: Metadata = {
   manifest: "/manifest.json",
   icons: {
     icon: [
-      { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
-      { url: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
+      { url: "/icons/icon-white-192.png", media: "(prefers-color-scheme: light)", type: "image/png" },
+      { url: "/icons/icon-dark-192.png", media: "(prefers-color-scheme: dark)", type: "image/png" },
       { url: "/icon.svg", type: "image/svg+xml" },
     ],
-    shortcut: "/icons/icon-192.png",
+    shortcut: "/icon.svg",
     apple: [
-      { url: "/icons/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
+      { url: "/icons/apple-touch-icon-white.png", media: "(prefers-color-scheme: light)", sizes: "180x180", type: "image/png" },
+      { url: "/icons/apple-touch-icon-dark.png", media: "(prefers-color-scheme: dark)", sizes: "180x180", type: "image/png" },
       { url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
     ],
   },
@@ -57,6 +61,11 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`retro-ui ${inter.variable}`} data-ui-style="retro" suppressHydrationWarning>
+      <head>
+        <link rel="icon" href="/icons/icon-white-192.png" media="(prefers-color-scheme: light)" />
+        <link rel="icon" href="/icons/icon-dark-192.png" media="(prefers-color-scheme: dark)" />
+        <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+      </head>
       <body className={`retro-ui ${inter.className} font-sans`} suppressHydrationWarning>
         <SessionSyncProvider>
           {children}

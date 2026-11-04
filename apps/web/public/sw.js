@@ -1,14 +1,22 @@
 // Focoman Studios Service Worker
-const CACHE_NAME = 'focoman-v2';
+const CACHE_NAME = 'focoman-v3';
 const PRECACHE_ASSETS = [
   '/',
   '/manifest.json',
   '/offline',
   '/icons/icon-192.png',
   '/icons/icon-512.png',
+  '/icons/icon-white-192.png',
+  '/icons/icon-white-512.png',
+  '/icons/icon-dark-192.png',
+  '/icons/icon-dark-512.png',
+  '/icons/icon-monochrome-192.png',
+  '/icons/icon-monochrome-512.png',
   '/icons/icon-maskable-192.png',
   '/icons/icon-maskable-512.png',
   '/icons/apple-touch-icon.png',
+  '/icons/apple-touch-icon-white.png',
+  '/icons/apple-touch-icon-dark.png',
   '/icon.svg',
 ];
 

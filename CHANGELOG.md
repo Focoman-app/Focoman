@@ -2,6 +2,24 @@
 
 All meaningful changes to the Focoman codebase, documentation, architecture, or agent workflow instructions must be recorded in this file according to Section 20 of **[Agents.md](Agents.md)**.
 
+## CHG-077 — Adaptive Theme-Aware Iconography for Device & Browser Display
+
+- **Task:** CHG-077 — Implement adaptive icon architecture supporting real-time Light/Dark mode switching in browser tabs and window headers, Android 13+ Material You monochrome tinting, and dual-palette icon assets.
+- **Date:** 2026-11-04
+- **Area:** apps/web/public/icon.svg, apps/web/public/icons/*, apps/web/public/manifest.json, apps/web/public/sw.js, apps/web/src/app/layout.tsx, tests/pwa.test.ts, CHANGELOG.md.
+- **Change:**
+  1. Updated master vector icon (icon.svg) with CSS media query @media (prefers-color-scheme: dark), dynamically rendering #FFFFFF background in light mode and #18181B in dark mode without JavaScript.
+  2. Built complete dual-theme raster icon matrix: icon-white-* and icon-dark-* (192, 512, maskable, and apple-touch-icon).
+  3. Added Android 13+ Material You themed icons (icon-monochrome-192.png, icon-monochrome-512.png) with purpose: "monochrome" in manifest.json for system-adaptive launcher tinting.
+  4. Configured layout.tsx head links with media="(prefers-color-scheme: light)" and media="(prefers-color-scheme: dark)" for responsive browser tab icon switching.
+  5. Configured Next.js viewport themeColor array reflecting #FFFFFF in light mode and #18181B in dark mode.
+  6. Rotated Service Worker cache to focoman-v3 in sw.js to precache the expanded adaptive icon set.
+  7. Expanded automated test suite in tests/pwa.test.ts verifying monochrome manifest purposes, adaptive SVG CSS rules, and dual-palette assets.
+- **Verification:**
+  - npx tsc --project apps/web/tsconfig.json --noEmit passed with 0 errors.
+  - npm test passed 46/46 tests across monorepo test suites.
+  - Live HTTP 200 verified for /icon.svg, /icons/icon-white-192.png, /icons/icon-dark-192.png, /icons/icon-monochrome-192.png, /manifest.json, /sw.js.
+
 ## CHG-076 — White Background Iconography for PWA & Desktop Launcher
 
 - **Task:** CHG-076 — Transition all PWA launcher, maskable, iOS, and desktop application icons to white background (#FFFFFF) derived from focoman-social-icon-white.svg and rotate Service Worker cache to focoman-v2.

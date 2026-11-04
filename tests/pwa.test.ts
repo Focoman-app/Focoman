@@ -20,17 +20,45 @@ test('PWA manifest.json configuration and icon assets integrity', async (t) => {
     assert.equal(manifest.start_url, '/');
   });
 
-  await t.test('manifest specifies any and maskable launcher icons', () => {
+  await t.test('manifest specifies any, maskable, and monochrome launcher icons', () => {
     assert.ok(Array.isArray(manifest.icons), 'icons must be an array');
     const purposes = manifest.icons.map((i: { purpose: string }) => i.purpose);
     assert.ok(purposes.includes('any'), 'Must include standard "any" icons');
     assert.ok(purposes.includes('maskable'), 'Must include Android "maskable" icons');
+    assert.ok(purposes.includes('monochrome'), 'Must include Android 13+ "monochrome" icons');
 
     for (const icon of manifest.icons) {
       const iconPath = path.join(rootDir, 'apps/web/public', icon.src);
       assert.ok(fs.existsSync(iconPath), `Icon file must exist: ${icon.src}`);
       const stats = fs.statSync(iconPath);
       assert.ok(stats.size > 500, `Icon file must have authentic non-zero size: ${icon.src}`);
+    }
+  });
+
+  await t.test('adaptive icon.svg supports dynamic prefers-color-scheme', () => {
+    const svgPath = path.join(rootDir, 'apps/web/public/icon.svg');
+    assert.ok(fs.existsSync(svgPath), 'icon.svg must exist');
+    const svgContent = fs.readFileSync(svgPath, 'utf-8');
+    assert.ok(svgContent.includes('prefers-color-scheme: dark'), 'icon.svg must contain dark mode media query');
+    assert.ok(svgContent.includes('--bg-color: #FFFFFF'), 'icon.svg must contain light mode default background');
+  });
+
+  await t.test('both dark and white theme icon matrices exist', () => {
+    const requiredIcons = [
+      'icon-white-192.png',
+      'icon-white-512.png',
+      'icon-dark-192.png',
+      'icon-dark-512.png',
+      'apple-touch-icon-white.png',
+      'apple-touch-icon-dark.png',
+      'icon-monochrome-192.png',
+      'icon-monochrome-512.png',
+    ];
+
+    for (const icon of requiredIcons) {
+      const p = path.join(rootDir, 'apps/web/public/icons', icon);
+      assert.ok(fs.existsSync(p), `Icon matrix file must exist: ${icon}`);
+      assert.ok(fs.statSync(p).size > 500, `Icon must have non-zero size: ${icon}`);
     }
   });
 
@@ -59,4 +87,3 @@ test('PWA manifest.json configuration and icon assets integrity', async (t) => {
     assert.ok(stats.size > 1000, 'apple-touch-icon.png must be a valid high-res image');
   });
 });
-
