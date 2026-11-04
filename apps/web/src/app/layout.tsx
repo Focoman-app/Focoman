@@ -3,6 +3,8 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import "@/styles/retro-theme.css";
 import { SessionSyncProvider } from "@/components/SessionSyncProvider";
+import { PwaRegister } from "@/components/pwa/PwaRegister";
+import { PwaInstallPrompt } from "@/components/pwa/PwaInstallPrompt";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -11,6 +13,7 @@ const inter = Inter({
 });
 
 export const viewport: Viewport = {
+  themeColor: "#18181B",
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
@@ -18,16 +21,32 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "Focoman",
-  description: "Business operating system for photography studios",
+  title: {
+    default: "Focoman Studios",
+    template: "%s | Focoman Studios",
+  },
+  description: "Business operating system for photography and cinematography studios.",
+  applicationName: "Focoman Studios",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "Focoman Studios",
+  },
+  formatDetection: {
+    telephone: false,
+  },
   manifest: "/manifest.json",
   icons: {
     icon: [
+      { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
       { url: "/icon.svg", type: "image/svg+xml" },
-      { url: "/icon.png", type: "image/png" },
     ],
-    shortcut: "/icon.svg",
-    apple: "/icon.png",
+    shortcut: "/icons/icon-192.png",
+    apple: [
+      { url: "/icons/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
+      { url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
+    ],
   },
 };
 
@@ -42,6 +61,8 @@ export default function RootLayout({
         <SessionSyncProvider>
           {children}
         </SessionSyncProvider>
+        <PwaRegister />
+        <PwaInstallPrompt />
       </body>
     </html>
   );

@@ -2,6 +2,24 @@
 
 All meaningful changes to the Focoman codebase, documentation, architecture, or agent workflow instructions must be recorded in this file according to Section 20 of **[Agents.md](Agents.md)**.
 
+## CHG-075 — Professional Progressive Web App (PWA) Architecture & Cross-Platform Installation
+
+- **Task:** CHG-075 — Configure complete, professional Progressive Web App (PWA) capabilities for Focoman Studios across Android, iOS, Windows, and macOS with offline resilience and native installation triggers.
+- **Date:** 2026-11-04
+- **Area:** apps/web/public/manifest.json, apps/web/public/sw.js, apps/web/public/icons/*, apps/web/src/app/layout.tsx, apps/web/src/app/offline/page.tsx, apps/web/src/components/pwa/*, tests/pwa.test.ts, package.json, CHANGELOG.md.
+- **Change:**
+  1. Updated Web App Manifest (manifest.json) with approved identity Focoman Studios (short name Focoman), display: standalone, obsidian brand palette (theme_color: #18181B, background_color: #09090B), categories, and quick shortcuts for Dashboard (/dashboard) and Track (/track).
+  2. Generated high-resolution, crisp PNG icons using sharp derived from vector master focoman-social-icon.svg: standard launcher icons (192x192, 512x512), Android adaptive maskable icons with 80% safe zone padding (192x192, 512x512), and Apple touch icons (180x180).
+  3. Built robust Service Worker (public/sw.js) implementing static shell precaching, stale-while-revalidate for static assets, network-first strategy for dynamic server actions and Firestore operations, and automatic offline fallback navigation.
+  4. Created modern offline fallback view (apps/web/src/app/offline/page.tsx) with real-time browser network status listeners and connection retry capabilities.
+  5. Implemented client PWA controller components: PwaRegister.tsx for non-blocking service worker registration and PwaInstallPrompt.tsx with Chromium beforeinstallprompt handling and iOS Safari share guide.
+  6. Configured Apple mobile web app metadata tags in layout.tsx (apple-mobile-web-app-capable: yes, black-translucent status bar, and viewport theme colors).
+  7. Added automated unit tests (tests/pwa.test.ts) validating manifest schema, icon sizes, and service worker lifecycle.
+- **Verification:**
+  - npx tsc --project apps/web/tsconfig.json --noEmit passed with 0 errors.
+  - npm test passed 44/44 tests across backend, dev portal, and PWA suites.
+  - Dev server HTTP 200 validated for /manifest.json, /sw.js, /offline, and all icon assets (icon-192, icon-512, icon-maskable-192, icon-maskable-512, apple-touch-icon).
+
 ## CHG-074 — Dual-Engine Email Dispatch Router & Studio Owner Notifications
 
 - **Task:** CHG-074 — Implement smart dual-engine email router (Brevo 250 daily quota priority with seamless Resend rollover), wire studio creation welcome emails and studio owner order notifications.
