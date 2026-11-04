@@ -16,7 +16,7 @@ test('PWA manifest.json configuration and icon assets integrity', async (t) => {
     assert.equal(manifest.short_name, 'Focoman');
     assert.equal(manifest.display, 'standalone');
     assert.equal(manifest.theme_color, '#18181B');
-    assert.equal(manifest.background_color, '#09090B');
+    assert.equal(manifest.background_color, '#FFFFFF');
     assert.equal(manifest.start_url, '/');
   });
 
@@ -59,3 +59,4 @@ test('PWA manifest.json configuration and icon assets integrity', async (t) => {
     assert.ok(stats.size > 1000, 'apple-touch-icon.png must be a valid high-res image');
   });
 });
+

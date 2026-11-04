@@ -2,6 +2,21 @@
 
 All meaningful changes to the Focoman codebase, documentation, architecture, or agent workflow instructions must be recorded in this file according to Section 20 of **[Agents.md](Agents.md)**.
 
+## CHG-076 — White Background Iconography for PWA & Desktop Launcher
+
+- **Task:** CHG-076 — Transition all PWA launcher, maskable, iOS, and desktop application icons to white background (#FFFFFF) derived from focoman-social-icon-white.svg and rotate Service Worker cache to focoman-v2.
+- **Date:** 2026-11-04
+- **Area:** apps/web/public/icons/*, apps/web/public/manifest.json, apps/web/public/sw.js, apps/web/public/icon.png, apps/web/public/apple-touch-icon.png, tests/pwa.test.ts, CHANGELOG.md.
+- **Change:**
+  1. Generated white background PNG icons using sharp from focoman-social-icon-white.svg: 192x192 and 512x512 standard launcher icons, 180x180 Apple touch icons, and Android adaptive maskable icons with safe-zone glyph scaling.
+  2. Updated manifest.json background_color to #FFFFFF to harmonize splash screens on desktop and mobile launchers with the white icon palette.
+  3. Incremented Service Worker cache version from focoman-v1 to focoman-v2 in sw.js to ensure immediate cache eviction and re-fetching of white icons on installed apps.
+  4. Updated automated PWA unit tests in tests/pwa.test.ts to validate the #FFFFFF background configuration and asset integrity.
+- **Verification:**
+  - npx tsc --project apps/web/tsconfig.json --noEmit passed with 0 errors.
+  - npm test passed 44/44 tests across monorepo test suites.
+  - Dev server HTTP 200 validated for all white icon assets and updated manifest/sw.
+
 ## CHG-075 — Professional Progressive Web App (PWA) Architecture & Cross-Platform Installation
 
 - **Task:** CHG-075 — Configure complete, professional Progressive Web App (PWA) capabilities for Focoman Studios across Android, iOS, Windows, and macOS with offline resilience and native installation triggers.

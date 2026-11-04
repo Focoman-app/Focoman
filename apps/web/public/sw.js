@@ -1,5 +1,5 @@
 // Focoman Studios Service Worker
-const CACHE_NAME = 'focoman-v1';
+const CACHE_NAME = 'focoman-v2';
 const PRECACHE_ASSETS = [
   '/',
   '/manifest.json',
@@ -124,3 +124,4 @@ self.addEventListener('fetch', (event) => {
     fetch(request).catch(() => caches.match(request))
   );
 });
+
