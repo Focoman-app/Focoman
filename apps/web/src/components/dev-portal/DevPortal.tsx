@@ -128,17 +128,13 @@ function SignIn() {
   return (
     <div className="min-h-screen bg-surface-app text-text-primary selection:bg-brand-blue-soft flex flex-col items-center justify-center p-4 py-12">
       <div className="w-full max-w-md">
-        <div className="mb-6 flex items-center justify-between">
+        <div className="mb-6 flex items-center">
           <a
             href="/"
             className="inline-flex items-center gap-2 text-xs font-semibold text-text-secondary hover:text-text-primary transition"
           >
             ← Back to Home
           </a>
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-border-default bg-white px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-text-secondary shadow-xs">
-            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            Internal Ops
-          </span>
         </div>
 
         <div className="w-full rounded-3xl border border-border-default bg-white p-8 shadow-sm sm:p-10">
