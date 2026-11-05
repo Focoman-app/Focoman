@@ -56,18 +56,6 @@ export function TrackOrderClient({ view, rawIdentifier }: TrackOrderClientProps)
   const [collaboratorError, setCollaboratorError] = useState<string | null>(null);
   const [showShareModal, setShowShareModal] = useState(false);
 
-  // Photo Selection & Review Deliverables State
-  const [selectedPhotos, setSelectedPhotos] = useState<Record<string, boolean>>({
-    "Preview_01.jpg": true,
-    "Preview_02.jpg": true,
-    "Teaser_Reel.mp4": false,
-    "Master_Album.pdf": true,
-  });
-  const [customerReviewNotes, setCustomerReviewNotes] = useState<string>(
-    "Looking forward to the candid photos album proof."
-  );
-  const [reviewSavedSuccess, setReviewSavedSuccess] = useState<string | null>(null);
-
   // Sync / Claim state
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncSuccess, setSyncSuccess] = useState(false);
@@ -328,12 +316,6 @@ export function TrackOrderClient({ view, rawIdentifier }: TrackOrderClientProps)
     }
   };
 
-  const handleSavePhotoReview = (e: React.FormEvent) => {
-    e.preventDefault();
-    setReviewSavedSuccess("Photo selections & review comments saved successfully!");
-    setTimeout(() => setReviewSavedSuccess(null), 4000);
-  };
-
   const handleSwitchAccount = async () => {
     await signOutUser();
     setCurrentUser(null);
@@ -469,7 +451,7 @@ export function TrackOrderClient({ view, rawIdentifier }: TrackOrderClientProps)
                     </span>
                   </div>
                   <p className="text-xs text-text-secondary leading-relaxed">
-                    Enter the 6-digit access PIN provided by <strong className="text-text-primary">{order.studioName}</strong> to unlock order status and gallery previews.
+                    Enter the 6-digit access PIN provided by <strong className="text-text-primary">{order.studioName}</strong> to unlock order status and milestones.
                   </p>
 
                   <form onSubmit={handleVerifyPasskey} className="space-y-3">
@@ -538,7 +520,7 @@ export function TrackOrderClient({ view, rawIdentifier }: TrackOrderClientProps)
                     Studio Inactive &bull; Historical Order Record Preserved
                   </p>
                   <p className="text-[11px] text-slate-600 mt-0.5">
-                    The photography studio associated with this booking is no longer actively operating on FocoMan. Your order summary, milestones, and deliverables remain safely preserved for your reference.
+                    The photography studio associated with this booking is no longer actively operating on FocoMan. You can still view the order summary and milestones shown below.
                   </p>
                 </div>
               </div>
@@ -633,12 +615,11 @@ export function TrackOrderClient({ view, rawIdentifier }: TrackOrderClientProps)
                 <div>
                   <p className="font-bold text-text-primary">
                     {isCustomerOwnerMatch ? `Primary Customer Account (${currentUser?.email})` :
-                     collaboratorMatch ? `Family & Friends Access: ${collaboratorMatch.role === "EDITOR" ? "Can Edit (Photos & Reviews)" : "Can View Only"} (${currentUser?.email})` :
+                     collaboratorMatch ? `Family & Friends Access: ${collaboratorMatch.role === "EDITOR" ? "Can Edit" : "Can View Only"} (${currentUser?.email})` :
                      "Viewing as Guest (PIN Session)"}
                   </p>
                   <p className="text-[11px] text-text-tertiary">
-                    {canEdit ? "You have edit permissions to select photos, add comments, and confirm review milestones." :
-                     "You have view-only access to deliverables and order milestones."}
+                    You can view order progress here. Photo selection and reviews are not available yet.
                   </p>
                 </div>
               </div>
@@ -668,7 +649,7 @@ export function TrackOrderClient({ view, rawIdentifier }: TrackOrderClientProps)
                       Family &amp; Friends Access Permissions
                     </h2>
                     <p className="text-xs text-text-secondary">
-                      Grant Google Drive-style access: &quot;Can View&quot; (gallery only) or &quot;Can Edit&quot; (photo selections, comments &amp; reviews).
+                      Share access to this order. These roles do not change access to files in Google Drive.
                     </p>
                   </div>
                 </div>
@@ -689,8 +670,8 @@ export function TrackOrderClient({ view, rawIdentifier }: TrackOrderClientProps)
                   onChange={(e) => setInviteRole(e.target.value as "VIEWER" | "EDITOR")}
                   className="rounded-xl border border-border-default px-3 py-2 text-xs font-bold text-text-primary bg-white focus:border-brand-blue-primary"
                 >
-                  <option value="VIEWER">Can View (Deliverables &amp; Status)</option>
-                  <option value="EDITOR">Can Edit (Photo Selection &amp; Review)</option>
+                  <option value="VIEWER">Can View</option>
+                  <option value="EDITOR">Can Edit</option>
                 </select>
                 <button
                   type="submit"
@@ -841,6 +822,14 @@ export function TrackOrderClient({ view, rawIdentifier }: TrackOrderClientProps)
               </div>
             </div>
           </div>
+
+          {/* No authorized deliverable source is connected to this portal yet. */}
+          <section aria-labelledby="media-availability-title" className="rounded-3xl border border-border-default bg-white p-6 shadow-sm sm:p-8">
+            <h2 id="media-availability-title" className="text-lg font-bold text-text-primary">Photos &amp; Deliverables</h2>
+            <p className="mt-2 text-sm text-text-secondary">
+              Media previews are not available in this tracking portal yet. Please contact your studio for photos, videos, and album files.
+            </p>
+          </section>
 
           {/* Order Lifecycle Pipeline — Unified Vertical Workflow */}
           <div className="rounded-3xl border border-border-default bg-white p-6 shadow-sm sm:p-8 space-y-6">
