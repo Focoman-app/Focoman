@@ -2,6 +2,14 @@
 
 All meaningful changes to the Focoman codebase, documentation, architecture, or agent workflow instructions must be recorded in this file according to Section 20 of **[Agents.md](Agents.md)**.
 
+## CHG-078 — Plan Minimal Billing Documents, Excel Exports and Drive Previews
+
+- **Date:** 2026-11-05
+- **Status:** Explicitly approved by the user on 2026-11-05; technical blueprint in progress.
+- **Area:** docs/plan/, docs/Index.md, CHANGELOG.md.
+- **Change:** Recorded required versus optional billing information, plain PDF/print, real XLSX export coverage, payment-source deduplication, authorization, and conditional Google-hosted preview delivery. Added module/integration task records and official Drive references.
+- **Verification:** Read-only source/dependency inspection and official Drive documentation review. No application code changed, tests run, browser UAT performed, deployment or provider configuration changed.
+
 ## CHG-077 — Adaptive Theme-Aware Iconography for Device & Browser Display
 
 - **Task:** CHG-077 — Implement adaptive icon architecture supporting real-time Light/Dark mode switching in browser tabs and window headers, Android 13+ Material You monochrome tinting, and dual-palette icon assets.

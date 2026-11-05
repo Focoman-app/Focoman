@@ -75,3 +75,7 @@ When evaluating specifications and implementation guidelines:
 ## 8. Brand Assets
 
 - **Brand Assets Directory:** `assets/brand/`
+
+## 9. Active Delivery Plans
+
+- **[Minimal billing, Excel exports and Drive previews](plan/analysis/minimal-billing-exports-drive.md)** — Approved on 2026-11-05; plain invoice/receipt PDF and print, complete authorized business-data Excel exports, and Google-hosted preview feasibility. See [task map](plan/README.md).
