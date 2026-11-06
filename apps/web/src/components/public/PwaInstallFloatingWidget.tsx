@@ -102,7 +102,7 @@ export function PwaInstallFloatingWidget() {
           <button
             type="button"
             onClick={() => setIsExpanded(true)}
-            className="inline-flex items-center gap-2 rounded-full bg-[#EA580C] px-3.5 py-2 text-xs sm:text-sm font-bold text-white hover:bg-[#D9460F] active:translate-y-[1px] transition cursor-pointer"
+            className="inline-flex items-center gap-2 rounded-full bg-[#1C1917] px-3.5 py-2 text-xs sm:text-sm font-bold text-white hover:bg-[#292524] active:translate-y-[1px] transition cursor-pointer shadow-[0_2px_0_#000000]"
             aria-label="Expand Install App Options"
           >
             <img
@@ -168,8 +168,8 @@ export function PwaInstallFloatingWidget() {
           ) : (
             <>
               {showManualHint && (
-                <div className="mt-3 rounded-xl border border-[#FDBA74] bg-[#FFF5EA] p-2.5 text-[11px] font-medium text-[#7C2D12] leading-relaxed">
-                  <div className="flex items-center gap-1.5 font-bold text-[#9A3412] mb-1">
+                <div className="mt-3 rounded-xl border border-[#D8D2C4] bg-[#F5F3EF] p-2.5 text-[11px] font-medium text-[#44403C] leading-relaxed">
+                  <div className="flex items-center gap-1.5 font-bold text-[#1C1917] mb-1">
                     <Smartphone className="h-3.5 w-3.5 shrink-0" />
                     <span>How to install on this browser:</span>
                   </div>
@@ -192,7 +192,7 @@ export function PwaInstallFloatingWidget() {
                 <button
                   type="button"
                   onClick={handleInstallClick}
-                  className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl bg-[#EA580C] px-4 py-2.5 text-xs font-bold text-white shadow-[0_2px_0_#9A3412] hover:bg-[#D9460F] active:translate-y-[1px] active:shadow-none transition cursor-pointer"
+                  className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl bg-[#1C1917] px-4 py-2.5 text-xs font-bold text-white shadow-[0_2px_0_#000000] hover:bg-[#292524] active:translate-y-[1px] active:shadow-none transition cursor-pointer"
                 >
                   <Download className="h-3.5 w-3.5" />
                   <span>Install</span>
