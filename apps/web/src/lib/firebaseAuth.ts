@@ -6,18 +6,22 @@ import {
   signOut,
   onAuthStateChanged,
   onIdTokenChanged,
+  setPersistence,
+  browserLocalPersistence,
   User,
   UserCredential,
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword
 } from "firebase/auth";
 import { auth } from "./firebase";
 
 /**
  * Client-side Firebase Authentication helper functions
+ * Strictly Google OAuth + Session Cookie (No password collection or storage)
  */
 
 const googleProvider = new GoogleAuthProvider();
+googleProvider.setCustomParameters({
+  prompt: "select_account",
+});
 
 let inFlightSync: Promise<boolean> | null = null;
 let lastSyncedToken: string | null = null;
@@ -80,6 +84,14 @@ export async function syncServerSession(force = false): Promise<boolean> {
  * Fallback: popup sign-in if same-tab redirect throws or is blocked.
  */
 export async function signInWithGoogle(): Promise<UserCredential | void> {
+  if (typeof window !== "undefined") {
+    try {
+      await setPersistence(auth, browserLocalPersistence);
+    } catch {
+      // Ignore if persistence is already configured
+    }
+  }
+
   const isIframe = typeof window !== "undefined" && window.self !== window.top;
   const isVercel = typeof window !== "undefined" && window.location.hostname.includes("vercel.app");
   const isCustomHost =
@@ -148,14 +160,6 @@ export async function signInWithGooglePopup(): Promise<UserCredential> {
   const credential = await signInWithPopup(auth, googleProvider);
   await syncServerSession(true);
   return credential;
-}
-
-export async function loginWithEmail(email: string, password: string): Promise<UserCredential> {
-  return await signInWithEmailAndPassword(auth, email, password);
-}
-
-export async function registerWithEmail(email: string, password: string): Promise<UserCredential> {
-  return await createUserWithEmailAndPassword(auth, email, password);
 }
 
 export async function signOutUser(): Promise<void> {

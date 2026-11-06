@@ -1,8 +1,11 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import Link from "next/link";
 import { Order } from "@focoman/types";
+import { calculateOrderPaymentBreakdown } from "@focoman/domain";
+import { FileSpreadsheet } from "lucide-react";
+import { exportWorkbookToExcel } from "@/utils/excelExport";
 
 interface BusinessReportsViewProps {
   studioSlug: string;
@@ -48,34 +51,55 @@ export function BusinessReportsView({
     });
   }, [orders, timeframe]);
 
-  // Financial Metrics
-  const totalRevenue = useMemo(
-    () => filteredOrders.reduce((sum, o) => sum + (o.pricing?.finalConfirmedPrice || 0), 0),
+  // Financial Metrics (using canonical payment breakdown to include advances + installments without double counting)
+  const activeFilteredOrders = useMemo(
+    () => filteredOrders.filter((o) => o.orderStatus !== "CANCELLED"),
     [filteredOrders]
+  );
+
+  const totalRevenue = useMemo(
+    () =>
+      activeFilteredOrders.reduce(
+        (sum, o) => sum + calculateOrderPaymentBreakdown(o).confirmedPrice,
+        0
+      ),
+    [activeFilteredOrders]
   );
 
   const collectedRevenue = useMemo(
-    () => filteredOrders.reduce((sum, o) => sum + (o.pricing?.advanceAmount || 0), 0),
-    [filteredOrders]
+    () =>
+      activeFilteredOrders.reduce(
+        (sum, o) => sum + calculateOrderPaymentBreakdown(o).totalPaid,
+        0
+      ),
+    [activeFilteredOrders]
   );
 
   const pendingReceivables = useMemo(
-    () => filteredOrders.reduce((sum, o) => sum + Math.max(0, o.pricing?.remainingAmount || 0), 0),
-    [filteredOrders]
+    () =>
+      activeFilteredOrders.reduce(
+        (sum, o) => sum + calculateOrderPaymentBreakdown(o).remainingAmount,
+        0
+      ),
+    [activeFilteredOrders]
   );
 
   const totalOrdersCount = filteredOrders.length;
   const completedOrdersCount = filteredOrders.filter((o) => o.orderStatus === "COMPLETED").length;
   const inProgressOrdersCount = filteredOrders.filter((o) => o.orderStatus === "POST_EVENT_IN_PROGRESS" || o.orderStatus === "AWAITING_EVENT").length;
-  const avgOrderValue = totalOrdersCount > 0 ? Math.round(totalRevenue / totalOrdersCount) : 0;
+  const avgOrderValue = activeFilteredOrders.length > 0 ? Math.round(totalRevenue / activeFilteredOrders.length) : 0;
   const collectionRate = totalRevenue > 0 ? Math.round((collectedRevenue / totalRevenue) * 100) : 0;
 
   // Pending balance orders (Actionable list for studio owner)
   const pendingOrders = useMemo(() => {
-    return filteredOrders
-      .filter((o) => (o.pricing?.remainingAmount || 0) > 0 && o.orderStatus !== "CANCELLED")
-      .sort((a, b) => (b.pricing?.remainingAmount || 0) - (a.pricing?.remainingAmount || 0));
-  }, [filteredOrders]);
+    return activeFilteredOrders
+      .filter((o) => calculateOrderPaymentBreakdown(o).remainingAmount > 0)
+      .sort(
+        (a, b) =>
+          calculateOrderPaymentBreakdown(b).remainingAmount -
+          calculateOrderPaymentBreakdown(a).remainingAmount
+      );
+  }, [activeFilteredOrders]);
 
   // Shoot Category Breakdown
   const categoryStats = useMemo(() => {
@@ -134,6 +158,161 @@ export function BusinessReportsView({
     window.print();
   };
 
+  const handleExportReportsExcel = useCallback(() => {
+    exportWorkbookToExcel(`${studioSlug}_Business_Report_${timeframe}`, [
+      {
+        name: "Orders & Payments Ledger",
+        rows: filteredOrders,
+        columns: [
+          { header: "Order ID", key: "orderNumber", width: 22 },
+          {
+            header: "Customer Name",
+            key: "customerName",
+            width: 24,
+            getValue: (o) => o.customer?.name || "Client",
+          },
+          { header: "Event Type", key: "eventType", width: 20 },
+          { header: "Event Date", key: "eventDate", width: 14 },
+          { header: "Order Status", key: "orderStatus", width: 22 },
+          { header: "Payment Status", key: "paymentStatus", width: 18 },
+          {
+            header: "Confirmed Price (INR)",
+            key: "confirmedPrice",
+            type: "currency",
+            width: 18,
+            sumInTotals: true,
+            getValue: (o) => calculateOrderPaymentBreakdown(o).confirmedPrice,
+          },
+          {
+            header: "Advance Paid (INR)",
+            key: "advancePaid",
+            type: "currency",
+            width: 18,
+            sumInTotals: true,
+            getValue: (o) => calculateOrderPaymentBreakdown(o).advanceAmount,
+          },
+          {
+            header: "Installments Paid (INR)",
+            key: "installmentsPaid",
+            type: "currency",
+            width: 20,
+            sumInTotals: true,
+            getValue: (o) => calculateOrderPaymentBreakdown(o).installmentsTotal,
+          },
+          {
+            header: "Total Collected (INR)",
+            key: "totalPaid",
+            type: "currency",
+            width: 20,
+            sumInTotals: true,
+            getValue: (o) => calculateOrderPaymentBreakdown(o).totalPaid,
+          },
+          {
+            header: "Balance Due (INR)",
+            key: "balanceDue",
+            type: "currency",
+            width: 18,
+            sumInTotals: true,
+            getValue: (o) => calculateOrderPaymentBreakdown(o).remainingAmount,
+          },
+        ],
+      },
+      {
+        name: "Pending Receivables",
+        rows: pendingOrders,
+        columns: [
+          { header: "Order ID", key: "orderNumber", width: 22 },
+          {
+            header: "Customer Name",
+            key: "customerName",
+            width: 24,
+            getValue: (o) => o.customer?.name || "Client",
+          },
+          {
+            header: "Phone",
+            key: "phone",
+            width: 16,
+            getValue: (o) => o.customer?.phone || "-",
+          },
+          { header: "Event Type", key: "eventType", width: 20 },
+          { header: "Event Date", key: "eventDate", width: 14 },
+          {
+            header: "Total Amount (INR)",
+            key: "total",
+            type: "currency",
+            width: 18,
+            sumInTotals: true,
+            getValue: (o) => calculateOrderPaymentBreakdown(o).confirmedPrice,
+          },
+          {
+            header: "Total Paid (INR)",
+            key: "paid",
+            type: "currency",
+            width: 18,
+            sumInTotals: true,
+            getValue: (o) => calculateOrderPaymentBreakdown(o).totalPaid,
+          },
+          {
+            header: "Balance Due (INR)",
+            key: "due",
+            type: "currency",
+            width: 18,
+            sumInTotals: true,
+            getValue: (o) => calculateOrderPaymentBreakdown(o).remainingAmount,
+          },
+        ],
+      },
+      {
+        name: "Category Breakdown",
+        rows: categoryStats,
+        columns: [
+          { header: "Event Category", key: "name", width: 26 },
+          {
+            header: "Shoots Booked",
+            key: "count",
+            type: "number",
+            width: 16,
+            sumInTotals: true,
+          },
+          {
+            header: "Booked Revenue (INR)",
+            key: "revenue",
+            type: "currency",
+            width: 22,
+            sumInTotals: true,
+          },
+          {
+            header: "Revenue Share (%)",
+            key: "pct",
+            width: 18,
+            getValue: (c) => `${c.pct}%`,
+          },
+        ],
+      },
+      {
+        name: "Monthly Revenue Trend",
+        rows: monthlyRevenueData,
+        columns: [
+          { header: "Month", key: "month", width: 18 },
+          {
+            header: "Orders Count",
+            key: "orders",
+            type: "number",
+            width: 16,
+            sumInTotals: true,
+          },
+          {
+            header: "Booked Revenue (INR)",
+            key: "revenue",
+            type: "currency",
+            width: 22,
+            sumInTotals: true,
+          },
+        ],
+      },
+    ]);
+  }, [studioSlug, timeframe, filteredOrders, pendingOrders, categoryStats, monthlyRevenueData]);
+
   return (
     <div className="p-4 sm:p-6 lg:p-8 space-y-8 max-w-7xl mx-auto">
       {/* Page Header */}
@@ -152,7 +331,7 @@ export function BusinessReportsView({
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5 shrink-0">
+        <div className="flex flex-wrap items-center gap-2.5 shrink-0">
           {/* Timeframe Filter */}
           <div className="inline-flex rounded-xl border border-border-default bg-white p-1 shadow-2xs text-xs">
             <button
@@ -198,6 +377,16 @@ export function BusinessReportsView({
           </div>
 
           <button
+            type="button"
+            onClick={handleExportReportsExcel}
+            className="rounded-xl border border-border-default bg-white px-3.5 py-2 text-xs font-bold text-text-primary shadow-2xs hover:bg-slate-50 hover:border-brand-blue-primary transition flex items-center gap-1.5 cursor-pointer"
+            title="Export multi-sheet Business Report to Excel (.xlsx)"
+          >
+            <FileSpreadsheet className="h-4 w-4 text-brand-blue-primary" />
+            <span>Export Excel</span>
+          </button>
+
+          <button
             onClick={handlePrint}
             className="rounded-xl border border-border-default bg-white px-3.5 py-2 text-xs font-bold text-text-primary shadow-2xs hover:bg-slate-50 transition flex items-center gap-1.5"
             title="Print or Export Summary"
@@ -233,21 +422,21 @@ export function BusinessReportsView({
         {/* Cash Collected */}
         <div className="rounded-2xl border border-border-default bg-white p-5 shadow-xs">
           <div className="flex items-center justify-between text-xs font-semibold text-text-secondary">
-            <span>Cash Collected (Advances)</span>
+            <span>Cash Collected (Total Paid)</span>
             <span className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-50 text-brand-blue-primary font-bold text-xs">
               ✓
             </span>
           </div>
           <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-2xl sm:text-3xl font-extrabold text-brand-blue-primary">
+            <span className="text-2xl sm:text-3xl font-extrabold text-brand-blue-primary tabular-nums">
               ₹{collectedRevenue.toLocaleString("en-IN")}
             </span>
-            <span className="text-xs font-bold text-emerald-600">
+            <span className="text-xs font-bold text-emerald-600 tabular-nums">
               ({collectionRate}%)
             </span>
           </div>
           <p className="mt-1 text-[11px] text-text-secondary">
-            Deposits and verified receipts
+            Advances and recorded installments
           </p>
         </div>
 
@@ -430,43 +619,46 @@ export function BusinessReportsView({
                   <th className="py-3 px-4">Order ID &amp; Client</th>
                   <th className="py-3 px-4">Event Date</th>
                   <th className="py-3 px-4">Total Amount</th>
-                  <th className="py-3 px-4">Advance Paid</th>
+                  <th className="py-3 px-4">Total Paid</th>
                   <th className="py-3 px-4 text-brand-orange-primary">Balance Due</th>
                   <th className="py-3 px-4 text-right">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border-divider">
-                {pendingOrders.map((ord) => (
-                  <tr key={ord.id} className="hover:bg-slate-50/70 transition">
-                    <td className="py-3.5 px-4">
-                      <div className="font-bold text-text-primary">{ord.customer?.name || "Client"}</div>
-                      <div className="text-[11px] text-text-secondary font-mono">
-                        {ord.orderNumber || ord.id.slice(0, 8)} · {ord.eventType}
-                      </div>
-                    </td>
-                    <td className="py-3.5 px-4 text-text-secondary">
-                      {ord.eventDate || "Date TBD"}
-                    </td>
-                    <td className="py-3.5 px-4 font-semibold text-text-primary">
-                      ₹{(ord.pricing?.finalConfirmedPrice || 0).toLocaleString("en-IN")}
-                    </td>
-                    <td className="py-3.5 px-4 text-emerald-600 font-semibold">
-                      ₹{(ord.pricing?.advanceAmount || 0).toLocaleString("en-IN")}
-                    </td>
-                    <td className="py-3.5 px-4 font-extrabold text-brand-orange-primary text-sm">
-                      ₹{(ord.pricing?.remainingAmount || 0).toLocaleString("en-IN")}
-                    </td>
-                    <td className="py-3.5 px-4 text-right">
-                      <Link
-                        href={`/${studioSlug}/dashboard/oms?orderId=${ord.id}`}
-                        className="inline-flex items-center gap-1 rounded-lg border border-border-default bg-white px-2.5 py-1 text-xs font-bold text-text-primary shadow-2xs hover:border-brand-blue-primary hover:text-brand-blue-primary transition"
-                      >
-                        <span>View Order</span>
-                        <span>→</span>
-                      </Link>
-                    </td>
-                  </tr>
-                ))}
+                {pendingOrders.map((ord) => {
+                  const breakdown = calculateOrderPaymentBreakdown(ord);
+                  return (
+                    <tr key={ord.id} className="hover:bg-slate-50/70 transition">
+                      <td className="py-3.5 px-4">
+                        <div className="font-bold text-text-primary">{ord.customer?.name || "Client"}</div>
+                        <div className="text-[11px] text-text-secondary font-mono">
+                          {ord.orderNumber || ord.id.slice(0, 8)} · {ord.eventType}
+                        </div>
+                      </td>
+                      <td className="py-3.5 px-4 text-text-secondary tabular-nums">
+                        {ord.eventDate || "Date TBD"}
+                      </td>
+                      <td className="py-3.5 px-4 font-mono font-semibold text-text-primary tabular-nums">
+                        ₹{breakdown.confirmedPrice.toLocaleString("en-IN")}
+                      </td>
+                      <td className="py-3.5 px-4 font-mono text-emerald-600 font-semibold tabular-nums">
+                        ₹{breakdown.totalPaid.toLocaleString("en-IN")}
+                      </td>
+                      <td className="py-3.5 px-4 font-mono font-extrabold text-brand-orange-primary text-sm tabular-nums">
+                        ₹{breakdown.remainingAmount.toLocaleString("en-IN")}
+                      </td>
+                      <td className="py-3.5 px-4 text-right">
+                        <Link
+                          href={`/${studioSlug}/dashboard/oms?orderId=${ord.id}`}
+                          className="inline-flex items-center gap-1 rounded-lg border border-border-default bg-white px-2.5 py-1 text-xs font-bold text-text-primary shadow-2xs hover:border-brand-blue-primary hover:text-brand-blue-primary transition"
+                        >
+                          <span>View Order</span>
+                          <span>→</span>
+                        </Link>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

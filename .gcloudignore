@@ -10,5 +10,4 @@ apps/web/.next/
 docs/
 assets/
 *.log
-bun.lock
 pnpm-workspace.yaml

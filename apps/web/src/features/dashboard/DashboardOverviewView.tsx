@@ -3,9 +3,11 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import Link from "next/link";
 import { OrderStatus, Order, BookingRequest } from "@focoman/types";
-import { getStudioCalendarDate } from "@focoman/domain";
+import { getStudioCalendarDate, calculateOrderPaymentBreakdown } from "@focoman/domain";
 import { useStudioWorkspace } from "@/components/StudioWorkspaceProvider";
 import { getStudioBookingRequestsAction } from "@/actions/marketplaceActions";
+import { FileSpreadsheet } from "lucide-react";
+import { exportTableToExcel, exportWorkbookToExcel } from "@/utils/excelExport";
 
 const STATUS_LABELS: Record<OrderStatus, string> = {
   AWAITING_EVENT: "Awaiting Event",
@@ -301,7 +303,7 @@ export function DashboardOverviewView({
       else if (o.orderStatus === "POST_EVENT_IN_PROGRESS") postEvent += 1;
       else if (o.orderStatus === "COMPLETED") completed += 1;
 
-      pendingCollections += o.pricing?.remainingAmount || 0;
+      pendingCollections += calculateOrderPaymentBreakdown(o).remainingAmount;
     });
 
     return {
@@ -480,8 +482,8 @@ export function DashboardOverviewView({
             </div>
           </div>
 
-          {/* Shared Period Filter */}
-          <div className="flex items-center gap-2">
+          {/* Shared Period Filter & Excel Export */}
+          <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs font-semibold text-text-tertiary hidden sm:inline">Period:</span>
             <select
               value={period}
@@ -495,6 +497,84 @@ export function DashboardOverviewView({
               <option value="LAST_YEAR">Last Year</option>
               <option value="CUSTOM">Custom Date Range</option>
             </select>
+            <button
+              type="button"
+              onClick={() =>
+                exportWorkbookToExcel(`${studioSlug}_Overview_Report_${period}`, [
+                  {
+                    name: "Period Orders",
+                    rows: periodOrders,
+                    columns: [
+                      { header: "Order #", key: "orderNumber", width: 22 },
+                      {
+                        header: "Customer",
+                        key: "customer",
+                        width: 24,
+                        getValue: (o) => o.customer.name,
+                      },
+                      { header: "Event Type", key: "eventType", width: 20 },
+                      { header: "Event Date", key: "eventDate", width: 14 },
+                      {
+                        header: "Status",
+                        key: "orderStatus",
+                        width: 20,
+                        getValue: (o: Order) => STATUS_LABELS[o.orderStatus] || o.orderStatus,
+                      },
+                      {
+                        header: "Confirmed Price (INR)",
+                        key: "confirmedPrice",
+                        type: "currency",
+                        width: 18,
+                        sumInTotals: true,
+                        getValue: (o) => calculateOrderPaymentBreakdown(o).confirmedPrice,
+                      },
+                      {
+                        header: "Total Paid (INR)",
+                        key: "totalPaid",
+                        type: "currency",
+                        width: 18,
+                        sumInTotals: true,
+                        getValue: (o) => calculateOrderPaymentBreakdown(o).totalPaid,
+                      },
+                      {
+                        header: "Balance Due (INR)",
+                        key: "balanceDue",
+                        type: "currency",
+                        width: 18,
+                        sumInTotals: true,
+                        getValue: (o) => calculateOrderPaymentBreakdown(o).remainingAmount,
+                      },
+                    ],
+                  },
+                  {
+                    name: "Trend Breakdown",
+                    rows: chartBuckets,
+                    columns: [
+                      { header: "Period Bucket", key: "label", width: 24 },
+                      {
+                        header: "Orders Count",
+                        key: "orders",
+                        type: "number",
+                        width: 16,
+                        sumInTotals: true,
+                      },
+                      {
+                        header: "Booked Revenue (INR)",
+                        key: "revenue",
+                        type: "currency",
+                        width: 22,
+                        sumInTotals: true,
+                      },
+                    ],
+                  },
+                ])
+              }
+              className="rounded-xl border border-border-default bg-white px-3 py-1.5 text-xs font-bold text-text-primary hover:border-brand-blue-primary hover:bg-surface-app transition inline-flex items-center gap-1.5 shadow-2xs cursor-pointer"
+              title="Export Business Overview & Period Orders to Excel (.xlsx)"
+            >
+              <FileSpreadsheet className="h-3.5 w-3.5 text-brand-blue-primary" />
+              <span>Export Excel</span>
+            </button>
           </div>
         </div>
 
@@ -818,7 +898,76 @@ export function DashboardOverviewView({
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                disabled={displayedOrders.length === 0}
+                onClick={() =>
+                  exportTableToExcel(
+                    `${studioSlug}_Confirmed_Orders_${ordersStatusFilter}`,
+                    "Confirmed Orders",
+                    [
+                      { header: "Order #", key: "orderNumber", width: 22 },
+                      {
+                        header: "Customer Name",
+                        key: "customerName",
+                        width: 24,
+                        getValue: (o) => o.customer.name,
+                      },
+                      {
+                        header: "Customer Phone",
+                        key: "customerPhone",
+                        width: 16,
+                        getValue: (o) => o.customer.phone || "-",
+                      },
+                      { header: "Event Type", key: "eventType", width: 20 },
+                      { header: "Event Date", key: "eventDate", width: 14 },
+                      {
+                        header: "Location",
+                        key: "eventLocation",
+                        width: 24,
+                        getValue: (o) => o.eventLocation || "-",
+                      },
+                      {
+                        header: "Lifecycle Status",
+                        key: "orderStatus",
+                        width: 22,
+                        getValue: (o) => STATUS_LABELS[o.orderStatus] || o.orderStatus,
+                      },
+                      {
+                        header: "Confirmed Price (INR)",
+                        key: "confirmedPrice",
+                        type: "currency",
+                        width: 18,
+                        sumInTotals: true,
+                        getValue: (o) => calculateOrderPaymentBreakdown(o).confirmedPrice,
+                      },
+                      {
+                        header: "Total Paid (INR)",
+                        key: "totalPaid",
+                        type: "currency",
+                        width: 18,
+                        sumInTotals: true,
+                        getValue: (o) => calculateOrderPaymentBreakdown(o).totalPaid,
+                      },
+                      {
+                        header: "Balance Due (INR)",
+                        key: "balanceDue",
+                        type: "currency",
+                        width: 18,
+                        sumInTotals: true,
+                        getValue: (o) => calculateOrderPaymentBreakdown(o).remainingAmount,
+                      },
+                    ],
+                    displayedOrders
+                  )
+                }
+                className="rounded-xl border border-border-default bg-white px-3 py-1.5 text-xs font-bold text-text-primary hover:border-brand-blue-primary hover:bg-surface-app transition inline-flex items-center gap-1.5 shadow-2xs disabled:opacity-50 cursor-pointer"
+                title="Export displayed Confirmed Orders table to Excel (.xlsx)"
+              >
+                <FileSpreadsheet className="h-3.5 w-3.5 text-brand-blue-primary" />
+                <span>Export Excel</span>
+              </button>
               <Link
                 href={`/${studioSlug}/dashboard/oms`}
                 className="btn-brand-outline text-xs py-1.5 px-3"
@@ -905,8 +1054,9 @@ export function DashboardOverviewView({
                 </thead>
                 <tbody className="divide-y divide-border-default">
                   {displayedOrders.map((order) => {
-                    const price = order.pricing?.finalConfirmedPrice || 0;
-                    const due = order.pricing?.remainingAmount || 0;
+                    const breakdown = calculateOrderPaymentBreakdown(order);
+                    const price = breakdown.confirmedPrice;
+                    const due = breakdown.remainingAmount;
 
                     return (
                       <tr
@@ -1008,6 +1158,62 @@ export function DashboardOverviewView({
               </p>
             </div>
           </div>
+
+          <button
+            type="button"
+            disabled={upcomingShoots.length === 0}
+            onClick={() =>
+              exportTableToExcel(
+                `${studioSlug}_Upcoming_Shoots`,
+                "Upcoming Shoots",
+                [
+                  { header: "Order #", key: "orderNumber", width: 22 },
+                  {
+                    header: "Customer",
+                    key: "customerName",
+                    width: 24,
+                    getValue: (o) => o.customer.name,
+                  },
+                  {
+                    header: "Phone",
+                    key: "phone",
+                    width: 16,
+                    getValue: (o) => o.customer.phone || "-",
+                  },
+                  { header: "Event Type", key: "eventType", width: 20 },
+                  { header: "Event Date", key: "eventDate", width: 14 },
+                  {
+                    header: "Location",
+                    key: "location",
+                    width: 26,
+                    getValue: (o) => o.eventLocation || "-",
+                  },
+                  {
+                    header: "Confirmed Price (INR)",
+                    key: "price",
+                    type: "currency",
+                    width: 18,
+                    sumInTotals: true,
+                    getValue: (o) => calculateOrderPaymentBreakdown(o).confirmedPrice,
+                  },
+                  {
+                    header: "Balance Due (INR)",
+                    key: "due",
+                    type: "currency",
+                    width: 18,
+                    sumInTotals: true,
+                    getValue: (o) => calculateOrderPaymentBreakdown(o).remainingAmount,
+                  },
+                ],
+                upcomingShoots
+              )
+            }
+            className="rounded-xl border border-border-default bg-white px-3 py-1.5 text-xs font-bold text-text-primary hover:border-brand-blue-primary hover:bg-surface-app transition inline-flex items-center gap-1.5 shadow-2xs disabled:opacity-50 cursor-pointer"
+            title="Export Upcoming Shoots schedule to Excel (.xlsx)"
+          >
+            <FileSpreadsheet className="h-3.5 w-3.5 text-brand-blue-primary" />
+            <span>Export Excel</span>
+          </button>
         </div>
 
         {/* Panel Body */}
@@ -1108,12 +1314,60 @@ export function DashboardOverviewView({
               </div>
             </div>
 
-            <Link
-              href={`/${studioSlug}/dashboard/marketplace`}
-              className="btn-brand-outline text-xs py-1.5 px-3"
-            >
-              Open Marketplace →
-            </Link>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                disabled={marketplaceLeads.length === 0}
+                onClick={() =>
+                  exportTableToExcel(
+                    `${studioSlug}_Marketplace_Leads`,
+                    "Marketplace Leads",
+                    [
+                      {
+                        header: "Client Name",
+                        key: "customerName",
+                        width: 24,
+                        getValue: (l) => l.customerName || "Direct Client",
+                      },
+                      {
+                        header: "Client Phone",
+                        key: "customerPhone",
+                        width: 16,
+                        getValue: (l) => l.customerPhone || "-",
+                      },
+                      {
+                        header: "Package / Event",
+                        key: "packageName",
+                        width: 26,
+                        getValue: (l) => l.packageName || l.eventType || "Custom Inquiry",
+                      },
+                      { header: "Event Date", key: "eventDate", width: 14 },
+                      { header: "Lead Status", key: "bookingStatus", width: 20 },
+                      {
+                        header: "Agreed / Quoted Price (INR)",
+                        key: "agreedPrice",
+                        type: "currency",
+                        width: 22,
+                        sumInTotals: true,
+                        getValue: (l) => l.agreedPrice || l.originalPrice || 0,
+                      },
+                    ],
+                    marketplaceLeads
+                  )
+                }
+                className="rounded-xl border border-border-default bg-white px-3 py-1.5 text-xs font-bold text-text-primary hover:border-brand-blue-primary hover:bg-surface-app transition inline-flex items-center gap-1.5 shadow-2xs disabled:opacity-50 cursor-pointer"
+                title="Export Marketplace Leads to Excel (.xlsx)"
+              >
+                <FileSpreadsheet className="h-3.5 w-3.5 text-brand-blue-primary" />
+                <span>Export Excel</span>
+              </button>
+              <Link
+                href={`/${studioSlug}/dashboard/marketplace`}
+                className="btn-brand-outline text-xs py-1.5 px-3"
+              >
+                Open Marketplace →
+              </Link>
+            </div>
           </div>
 
           {/* Panel Body */}

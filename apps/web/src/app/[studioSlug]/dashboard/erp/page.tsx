@@ -11,6 +11,8 @@ import {
 import { getStudioOrdersAction, confirmResourceAvailabilityAction } from "@/actions/orderActions";
 import { useStudioWorkspace } from "@/components/StudioWorkspaceProvider";
 import { StudioInvitationSummary } from "@focoman/types";
+import { FileSpreadsheet } from "lucide-react";
+import { exportWorkbookToExcel } from "@/utils/excelExport";
 
 const SKILL_LABELS: Record<string, string> = {
   PHOTOGRAPHY: "Photographer",
@@ -364,19 +366,108 @@ export default function ErpPage({ params }: { params: Promise<{ studioSlug: stri
                 Crew assignments, certified skills, and event availability tracking · {allCrew.length} Active Crew Members
               </p>
             </div>
-            <button
-              onClick={() => {
-                setShowModal(true);
-                setModalError(null);
-                setForm((prev) => ({
-                  ...prev,
-                  claimCode: prev.claimCode || Math.floor(100000 + Math.random() * 900000).toString(),
-                }));
-              }}
-              className="btn-brand-purple"
-            >
-              + Add Crew Member
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                disabled={filtered.length === 0 && temporaryCrewList.length === 0}
+                onClick={() =>
+                  exportWorkbookToExcel(`${studioSlug}_Studio_ERP_Crew`, [
+                    {
+                      name: "Active Crew & Workload",
+                      rows: filtered,
+                      columns: [
+                        { header: "Crew ID", key: "id", width: 22 },
+                        { header: "Name", key: "name", width: 24 },
+                        {
+                          header: "Role",
+                          key: "role",
+                          width: 18,
+                          getValue: (m: StudioMember) =>
+                            m.role === "STUDIO_OWNER" ? "Studio Owner" : "Crew Member",
+                        },
+                        {
+                          header: "Email",
+                          key: "email",
+                          width: 26,
+                          getValue: (m: StudioMember) => m.email || "-",
+                        },
+                        {
+                          header: "Phone",
+                          key: "phone",
+                          width: 16,
+                          getValue: (m: StudioMember) => m.phone || "-",
+                        },
+                        {
+                          header: "Certified Skills",
+                          key: "skills",
+                          width: 30,
+                          getValue: (m: StudioMember) =>
+                            m.skills && m.skills.length > 0
+                              ? m.skills.map((s: string) => SKILL_LABELS[s] || s).join(", ")
+                              : "All / General",
+                        },
+                        {
+                          header: "Assigned Orders Count",
+                          key: "assignedOrders",
+                          type: "number",
+                          width: 20,
+                          sumInTotals: true,
+                          getValue: (m: StudioMember) =>
+                            orders.filter((o) =>
+                              (o.assignedResources || []).some(
+                                (r) =>
+                                  r.memberId === m.id ||
+                                  (r.memberName || "").toLowerCase() ===
+                                    (m.name || "").toLowerCase()
+                              )
+                            ).length,
+                        },
+                      ],
+                    },
+                    {
+                      name: "Temporary Crew Workload",
+                      rows: temporaryCrewList,
+                      columns: [
+                        { header: "Temp Crew ID", key: "id", width: 20 },
+                        { header: "Name", key: "name", width: 24 },
+                        {
+                          header: "Assigned Services",
+                          key: "services",
+                          width: 30,
+                          getValue: (t: { services: string[] }) =>
+                            (t.services || []).join(", ") || "-",
+                        },
+                        {
+                          header: "Assigned Orders Count",
+                          key: "orderCount",
+                          type: "number",
+                          width: 20,
+                          sumInTotals: true,
+                        },
+                      ],
+                    },
+                  ])
+                }
+                className="rounded-xl border border-border-default bg-white px-3.5 py-2 text-xs font-bold text-text-primary hover:bg-surface-app hover:border-brand-purple-primary transition inline-flex items-center gap-1.5 shadow-2xs disabled:opacity-50 cursor-pointer"
+                title="Export filtered Crew Members and Workload to Excel (.xlsx)"
+              >
+                <FileSpreadsheet className="h-3.5 w-3.5 text-brand-purple-primary" />
+                <span>Export Excel</span>
+              </button>
+              <button
+                onClick={() => {
+                  setShowModal(true);
+                  setModalError(null);
+                  setForm((prev) => ({
+                    ...prev,
+                    claimCode: prev.claimCode || Math.floor(100000 + Math.random() * 900000).toString(),
+                  }));
+                }}
+                className="btn-brand-purple"
+              >
+                + Add Crew Member
+              </button>
+            </div>
           </div>
 
           <div className="mt-4 flex flex-col gap-3 sm:flex-row">

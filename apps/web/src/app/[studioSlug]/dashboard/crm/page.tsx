@@ -7,6 +7,9 @@ import { getStudioCustomersAction, createCustomerAction } from "@/actions/custom
 import { getStudioOrdersAction, getDeletedStudioOrdersAction, restoreOrderAction } from "@/actions/orderActions";
 import { useStudioWorkspace } from "@/components/StudioWorkspaceProvider";
 import { isLifetimeProEmail } from "@/lib/proEntitlements";
+import { calculateOrderPaymentBreakdown } from "@focoman/domain";
+import { FileSpreadsheet } from "lucide-react";
+import { exportTableToExcel } from "@/utils/excelExport";
 
 const STATUS_COLORS: Record<string, string> = {
   AWAITING_EVENT: "badge-brand-blue",
@@ -109,8 +112,11 @@ export default function CrmPage({ params }: { params: Promise<{ studioSlug: stri
     orders.forEach(o => {
       if (metrics[o.customer.id]) {
         metrics[o.customer.id].totalOrders += 1;
-        metrics[o.customer.id].lifetimeValue += o.pricing.finalConfirmedPrice || 0;
-        metrics[o.customer.id].pendingReceivables += o.pricing.remainingAmount || 0;
+        if (o.orderStatus !== "CANCELLED") {
+          const breakdown = calculateOrderPaymentBreakdown(o);
+          metrics[o.customer.id].lifetimeValue += breakdown.confirmedPrice;
+          metrics[o.customer.id].pendingReceivables += breakdown.remainingAmount;
+        }
         
         if (!metrics[o.customer.id].latestOrder || new Date(o.createdAt) > new Date(metrics[o.customer.id].latestOrder!)) {
           metrics[o.customer.id].latestOrder = o.createdAt;
@@ -209,15 +215,88 @@ export default function CrmPage({ params }: { params: Promise<{ studioSlug: stri
                 Client records, lifetime value metrics, and booking histories · {customers.length} Confirmed Client Records
               </p>
             </div>
-            <button
-              onClick={() => {
-                setShowModal(true);
-                setModalError(null);
-              }}
-              className="btn-brand-orange"
-            >
-              + Add Customer
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                disabled={filtered.length === 0}
+                onClick={() =>
+                  exportTableToExcel(
+                    `${studioSlug}_Customer_CRM`,
+                    "Customers",
+                    [
+                      { header: "Customer ID", key: "id", width: 22 },
+                      { header: "Customer Name", key: "name", width: 24 },
+                      {
+                        header: "Phone",
+                        key: "phone",
+                        width: 16,
+                        getValue: (c) => c.phone || "-",
+                      },
+                      {
+                        header: "Email",
+                        key: "email",
+                        width: 26,
+                        getValue: (c) => c.email || "-",
+                      },
+                      {
+                        header: "Location / Address",
+                        key: "address",
+                        width: 26,
+                        getValue: (c) => c.address || "-",
+                      },
+                      {
+                        header: "Total Orders",
+                        key: "totalOrders",
+                        type: "number",
+                        width: 14,
+                        sumInTotals: true,
+                        getValue: (c) => customerMetrics[c.id]?.totalOrders || 0,
+                      },
+                      {
+                        header: "Lifetime Value (INR)",
+                        key: "lifetimeValue",
+                        type: "currency",
+                        width: 20,
+                        sumInTotals: true,
+                        getValue: (c) => customerMetrics[c.id]?.lifetimeValue || 0,
+                      },
+                      {
+                        header: "Pending Receivables (INR)",
+                        key: "pendingReceivables",
+                        type: "currency",
+                        width: 22,
+                        sumInTotals: true,
+                        getValue: (c) => customerMetrics[c.id]?.pendingReceivables || 0,
+                      },
+                      {
+                        header: "Latest Order Date",
+                        key: "latestOrder",
+                        width: 16,
+                        getValue: (c) =>
+                          customerMetrics[c.id]?.latestOrder
+                            ? customerMetrics[c.id].latestOrder!.slice(0, 10)
+                            : "-",
+                      },
+                    ],
+                    filtered
+                  )
+                }
+                className="rounded-xl border border-border-default bg-white px-3.5 py-2 text-xs font-bold text-text-primary hover:bg-surface-app hover:border-brand-orange-primary transition inline-flex items-center gap-1.5 shadow-2xs disabled:opacity-50 cursor-pointer"
+                title="Export filtered customers with LTV & pending dues to Excel (.xlsx)"
+              >
+                <FileSpreadsheet className="h-3.5 w-3.5 text-brand-orange-primary" />
+                <span>Export Excel</span>
+              </button>
+              <button
+                onClick={() => {
+                  setShowModal(true);
+                  setModalError(null);
+                }}
+                className="btn-brand-orange"
+              >
+                + Add Customer
+              </button>
+            </div>
           </div>
 
           <div className="mt-4 flex flex-col gap-3 sm:flex-row">

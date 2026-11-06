@@ -7,6 +7,7 @@ import { PricingTwoPanels } from "@/components/public/PricingTwoPanels";
 import { ValueAddedServices } from "@/components/public/ValueAddedServices";
 import { FaqAccordion } from "@/components/public/FaqAccordion";
 import { StructuredData } from "@/components/public/StructuredData";
+import { PwaInstallFloatingWidget } from "@/components/public/PwaInstallFloatingWidget";
 import { RetroHeroVisual } from "@/components/home/RetroHeroVisual";
 import { getPlatformPublicStats } from "@focoman/db";
 
@@ -359,6 +360,9 @@ export default async function HomePage() {
           </div>
         </div>
       </footer>
+
+      {/* Floating Bottom-Right Collapsible PWA Install Button */}
+      <PwaInstallFloatingWidget />
     </div>
   );
 }

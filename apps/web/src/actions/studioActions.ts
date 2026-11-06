@@ -21,7 +21,6 @@ import {
 import { Studio, StudioMembership, StudioPlan, StudioServiceConfig, StudioPackage } from "@focoman/types";
 import { requireVerifiedUser, requireStudioMember, getAdminAuthInstance } from "@/lib/serverAuth";
 import { DEFAULT_STUDIO_SERVICES, getDefaultStudioPackages } from "@/lib/studioServices";
-import { sendStudioWelcomeOwnerEmail } from "@/services/emailService";
 
 /**
  * Server Actions for Studio Registration, Workspaces & Settings
@@ -113,18 +112,6 @@ export async function registerStudioAction(input: {
       return { success: false, error: result.error || "Failed to register studio." };
     }
 
-    // Dispatch Welcome Email to Studio Owner in background
-    if (ownerEmail) {
-      void sendStudioWelcomeOwnerEmail({
-        toEmail: ownerEmail,
-        ownerName,
-        studioName: name,
-        studioSlug: slug,
-      }).catch((emailErr) => {
-        console.error("[registerStudioAction] Studio welcome email dispatch failed:", emailErr);
-      });
-    }
-
     return { success: true, studio };
   } catch (err: unknown) {
     console.error("[registerStudioAction] Error:", err);
@@ -159,6 +146,7 @@ export async function updateStudioAction(input: {
     instagram?: string;
     configuredServices?: StudioServiceConfig[];
     features?: Partial<Studio['features']>;
+    billingProfile?: Studio['billingProfile'];
   };
   idToken: string;
 }): Promise<{ success: boolean; studio?: Studio; error?: string }> {
@@ -174,6 +162,7 @@ export async function updateStudioAction(input: {
       ...(input.updates.instagram !== undefined ? { instagram: input.updates.instagram.trim() } : {}),
       ...(input.updates.configuredServices ? { configuredServices: input.updates.configuredServices } : {}),
       ...(input.updates.features ? { features: input.updates.features as any } : {}),
+      ...(input.updates.billingProfile ? { billingProfile: input.updates.billingProfile } : {}),
     });
 
     return { success: true, studio: updated || undefined };

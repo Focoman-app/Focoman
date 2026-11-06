@@ -3,7 +3,7 @@
 import { useMemo, useState, useEffect, useCallback, use, Fragment } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { OrderStatus, TaskStatus, Order, Task, PaymentStatus, ResourceSuggestion, Customer, OrderInstallment, StudioMember, StudioServiceConfig, StudioPackage } from "@focoman/types";
+import { OrderStatus, TaskStatus, Order, Task, PaymentStatus, ResourceSuggestion, Customer, OrderInstallment, StudioMember, StudioServiceConfig, StudioPackage, OrderDriveDeliverable, StudioBillingProfile } from "@focoman/types";
 import {
   getStudioOrdersAction,
   getOrderTasksAction,
@@ -15,16 +15,21 @@ import {
   cancelOrderAction,
   deleteOrderAction,
   sendManualPaymentReminderAction,
+  updateOrderDriveDeliverablesAction,
 } from "@/actions/orderActions";
 import { getStudioMembersAction } from "@/actions/memberActions";
 import { getStudioCustomersAction } from "@/actions/customerActions";
-import { getStudioServicesAction } from "@/actions/studioActions";
+import { getStudioServicesAction, updateStudioAction } from "@/actions/studioActions";
 import { DEFAULT_STUDIO_SERVICES } from "@/lib/studioServices";
 import { useStudioWorkspace } from "@/components/StudioWorkspaceProvider";
 import { AddCrewMemberModal } from "@/components/AddCrewMemberModal";
 import { OrderVerticalWorkflow } from "@/components/workflow/OrderVerticalWorkflow";
 import { getEventDaysRemaining, calculateOrderAging, calculateTaskAgeBadge } from "@/utils/dateUtils";
-import { getStudioTimestampIST, getStudioCalendarDate } from "@focoman/domain";
+import { getStudioTimestampIST, getStudioCalendarDate, calculateOrderPaymentBreakdown } from "@focoman/domain";
+import { FileSpreadsheet, FileText, Receipt } from "lucide-react";
+import { exportWorkbookToExcel } from "@/utils/excelExport";
+import { MinimalBillingModal } from "@/components/billing/MinimalBillingModal";
+import { GoogleDriveDeliverablesSection } from "@/components/deliverables/GoogleDriveDeliverablesSection";
 
 const STATUS_LABELS: Record<OrderStatus, string> = {
   AWAITING_EVENT: "Awaiting Event",
@@ -151,6 +156,11 @@ export default function OmsPage({
   // New Order Modal State
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [billingModalState, setBillingModalState] = useState<{
+    isOpen: boolean;
+    tab: "INVOICE" | "RECEIPT";
+    receiptId?: string;
+  }>({ isOpen: false, tab: "INVOICE" });
 
   useEffect(() => {
     const orderIdParam = searchParams.get("orderId");
@@ -1236,6 +1246,182 @@ export default function OmsPage({
     });
   }, [orders, statusFilter, query, sortBy]);
 
+  const handleExportOmsExcel = useCallback(() => {
+    const paymentRows: Array<{
+      receiptNumber: string;
+      orderNumber: string;
+      customerName: string;
+      eventType: string;
+      paymentType: string;
+      paymentDate: string;
+      amount: number;
+      notes: string;
+    }> = [];
+
+    filtered.forEach((order) => {
+      const breakdown = calculateOrderPaymentBreakdown(order);
+      breakdown.receipts.forEach((rcp) => {
+        paymentRows.push({
+          receiptNumber: rcp.receiptNumber,
+          orderNumber: order.orderNumber,
+          customerName: order.customer.name,
+          eventType: order.eventType,
+          paymentType: rcp.label,
+          paymentDate: rcp.date || "-",
+          amount: rcp.amount,
+          notes: rcp.notes || "",
+        });
+      });
+    });
+
+    exportWorkbookToExcel(`${studioSlug}_OMS_Orders_And_Payments`, [
+      {
+        name: "Orders Summary",
+        rows: filtered,
+        columns: [
+          { header: "Order ID", key: "orderNumber", width: 22 },
+          {
+            header: "Customer Name",
+            key: "customerName",
+            width: 24,
+            getValue: (o) => o.customer.name,
+          },
+          {
+            header: "Customer Phone",
+            key: "customerPhone",
+            width: 16,
+            getValue: (o) => o.customer.phone || "-",
+          },
+          {
+            header: "Customer Email",
+            key: "customerEmail",
+            width: 26,
+            getValue: (o) => o.customer.email || "-",
+          },
+          { header: "Event Type", key: "eventType", width: 20 },
+          { header: "Event Date", key: "eventDate", width: 14 },
+          {
+            header: "Services Included",
+            key: "services",
+            width: 34,
+            getValue: (o) => (o.services || []).join(", "),
+          },
+          {
+            header: "Order Status",
+            key: "orderStatus",
+            width: 22,
+            getValue: (o: Order) => STATUS_LABELS[o.orderStatus] || o.orderStatus,
+          },
+          { header: "Payment Status", key: "paymentStatus", width: 18 },
+          {
+            header: "Confirmed Price (INR)",
+            key: "confirmedPrice",
+            type: "currency",
+            width: 18,
+            sumInTotals: true,
+            getValue: (o) => calculateOrderPaymentBreakdown(o).confirmedPrice,
+          },
+          {
+            header: "Advance Paid (INR)",
+            key: "advancePaid",
+            type: "currency",
+            width: 18,
+            sumInTotals: true,
+            getValue: (o) => calculateOrderPaymentBreakdown(o).advanceAmount,
+          },
+          {
+            header: "Installments Paid (INR)",
+            key: "installmentsPaid",
+            type: "currency",
+            width: 20,
+            sumInTotals: true,
+            getValue: (o) => calculateOrderPaymentBreakdown(o).installmentsTotal,
+          },
+          {
+            header: "Total Paid (INR)",
+            key: "totalPaid",
+            type: "currency",
+            width: 18,
+            sumInTotals: true,
+            getValue: (o) => calculateOrderPaymentBreakdown(o).totalPaid,
+          },
+          {
+            header: "Balance Due (INR)",
+            key: "balanceDue",
+            type: "currency",
+            width: 18,
+            sumInTotals: true,
+            getValue: (o) => calculateOrderPaymentBreakdown(o).remainingAmount,
+          },
+        ],
+      },
+      {
+        name: "Payments & Receipts",
+        rows: paymentRows,
+        columns: [
+          { header: "Receipt No", key: "receiptNumber", width: 24 },
+          { header: "Order ID", key: "orderNumber", width: 22 },
+          { header: "Customer Name", key: "customerName", width: 24 },
+          { header: "Event Type", key: "eventType", width: 20 },
+          { header: "Payment Type", key: "paymentType", width: 18 },
+          { header: "Payment Date", key: "paymentDate", width: 14 },
+          {
+            header: "Amount Received (INR)",
+            key: "amount",
+            type: "currency",
+            width: 20,
+            sumInTotals: true,
+          },
+          { header: "Notes", key: "notes", width: 28 },
+        ],
+      },
+    ]);
+  }, [filtered, studioSlug]);
+
+  const handleSaveDriveDeliverables = useCallback(
+    async (updatedDeliverables: OrderDriveDeliverable[]) => {
+      if (!selected) return { success: false, error: "No order selected." };
+      const token = (await getIdToken(false)) ?? workspaceToken;
+      if (!token) return { success: false, error: "Authentication required." };
+
+      const res = await updateOrderDriveDeliverablesAction({
+        orderId: selected.id,
+        studioId: studioSlug,
+        deliverables: updatedDeliverables,
+        idToken: token,
+      });
+
+      if (res.success) {
+        setOrders((prev) =>
+          prev.map((o) =>
+            o.id === selected.id
+              ? {
+                  ...o,
+                  driveDeliverables: res.deliverables || updatedDeliverables,
+                  ...(res.order?.auditLog ? { auditLog: res.order.auditLog } : {}),
+                }
+              : o
+          )
+        );
+      }
+      return { success: res.success, error: res.error };
+    },
+    [selected, getIdToken, workspaceToken, studioSlug]
+  );
+
+  const handleSaveStudioBillingProfile = useCallback(
+    async (profile: StudioBillingProfile) => {
+      const token = (await getIdToken(false)) ?? workspaceToken;
+      if (!token) return;
+      await updateStudioAction({
+        studioSlug,
+        updates: { billingProfile: profile },
+        idToken: token,
+      });
+    },
+    [getIdToken, workspaceToken, studioSlug]
+  );
+
   return (
     <div className="flex h-full bg-surface-app">
       <div
@@ -1262,12 +1448,24 @@ export default function OmsPage({
                 Production lifecycle workflows, delivery milestones, and client accounts · {orders.length} Confirmed Orders
               </p>
             </div>
-            <button
-              onClick={handleOpenCreateModal}
-              className="btn-brand-blue"
-            >
-              + Register Confirmed Order
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={handleExportOmsExcel}
+                disabled={filtered.length === 0}
+                className="rounded-xl border border-border-default bg-white px-3.5 py-2 text-xs font-bold text-text-primary hover:bg-surface-app hover:border-brand-blue-primary transition inline-flex items-center gap-1.5 shadow-2xs disabled:opacity-50 cursor-pointer"
+                title="Export filtered orders and payment ledger to Excel (.xlsx)"
+              >
+                <FileSpreadsheet className="h-3.5 w-3.5 text-brand-blue-primary" />
+                <span>Export Excel</span>
+              </button>
+              <button
+                onClick={handleOpenCreateModal}
+                className="btn-brand-blue"
+              >
+                + Register Confirmed Order
+              </button>
+            </div>
           </div>
 
           <div className="mt-4 flex flex-col sm:flex-row gap-2.5">
@@ -1585,6 +1783,20 @@ export default function OmsPage({
                     )}
                     <button
                       type="button"
+                      onClick={() =>
+                        setBillingModalState({
+                          isOpen: true,
+                          tab: "INVOICE",
+                        })
+                      }
+                      className="rounded-lg border border-border-default bg-white px-2.5 py-1 text-[11px] font-semibold text-text-primary hover:text-brand-blue-primary hover:border-brand-blue-primary hover:bg-blue-50/50 shadow-2xs transition flex items-center gap-1 cursor-pointer"
+                      title="Generate, print, or download Invoice & Payment Receipts (PDF)"
+                    >
+                      <FileText className="h-3 w-3 text-brand-blue-primary" />
+                      <span>Invoice & Receipts</span>
+                    </button>
+                    <button
+                      type="button"
                       disabled={isUpdatingPayment}
                       onClick={handleStartEditingPricing}
                       className="rounded-lg border border-border-default bg-white px-2.5 py-1 text-[11px] font-semibold text-text-secondary hover:text-brand-blue-primary hover:border-brand-blue-primary hover:bg-blue-50/50 shadow-2xs transition disabled:opacity-50 flex items-center gap-1"
@@ -1763,17 +1975,14 @@ export default function OmsPage({
                             </div>
                           </div>
 
-                          {/* Real-time inline validation error in clear vivid red */}
                           {isExceeding && (
                             <p className="text-xs font-bold text-red-600 bg-red-50 p-2 rounded-lg border border-red-200 flex items-center gap-1.5">
-                              <span>⚠️</span>
                               <span>Payment amount cannot exceed remaining balance of ₹{remainingForNew.toLocaleString()}.</span>
                             </p>
                           )}
 
                           {installmentError && (
                             <p className="text-xs font-bold text-red-600 bg-red-50 p-2 rounded-lg border border-red-200 flex items-center gap-1.5">
-                              <span>⚠️</span>
                               <span>{installmentError}</span>
                             </p>
                           )}
@@ -1850,10 +2059,8 @@ export default function OmsPage({
                     })()}
                   </div>
 
-                  {/* Inline overall validation banner */}
                   {pricingError && (
                     <div className="rounded-xl bg-red-50 border border-red-200 p-2.5 text-xs text-status-danger font-medium flex items-center gap-2">
-                      <span>⚠️</span>
                       <span>{pricingError}</span>
                     </div>
                   )}
@@ -1887,70 +2094,123 @@ export default function OmsPage({
                   </div>
                 </>
               ) : (
-                <>
-                  <div className="flex justify-between items-center">
-                    <span className="text-text-secondary">Confirmed Price:</span>
-                    <span className="font-bold text-text-primary">
-                      ₹{selected.pricing.finalConfirmedPrice.toLocaleString()}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <span className="text-text-secondary">Advance Received:</span>
-                      <div className="text-[10px] text-text-tertiary">
-                        Recorded on {selected.pricing.advanceDate || (selected.createdAt ? selected.createdAt.split("T")[0] : "-")}
+                (() => {
+                  const breakdown = calculateOrderPaymentBreakdown(selected);
+                  return (
+                    <>
+                      <div className="flex justify-between items-center">
+                        <span className="text-text-secondary">Confirmed Price:</span>
+                        <span className="font-mono font-bold text-text-primary tabular-nums">
+                          ₹{breakdown.confirmedPrice.toLocaleString("en-IN")}
+                        </span>
                       </div>
-                    </div>
-                    <span className="font-bold text-brand-blue-primary">
-                      ₹{selected.pricing.advanceAmount.toLocaleString()}
-                    </span>
-                  </div>
-
-                  {selected.pricing.installments && selected.pricing.installments.length > 0 && (
-                    <div className="pt-2 border-t border-border-default/60 space-y-1.5">
-                      {selected.pricing.installments.map((inst, idx) => (
-                        <div key={inst.id || idx} className="flex justify-between items-center">
-                          <div>
-                            <span className="text-text-secondary font-medium">Payment:</span>
-                            <span className="text-[10px] text-text-tertiary ml-1.5">
-                              Recorded on {inst.date}{inst.notes ? ` · ${inst.notes}` : ""}
-                            </span>
+                      <div className="flex justify-between items-center">
+                        <div>
+                          <span className="text-text-secondary">Advance Received:</span>
+                          <div className="text-[10px] text-text-tertiary">
+                            Recorded on {breakdown.advanceDate || "-"}
                           </div>
-                          <span className="font-bold text-text-primary">
-                            ₹{inst.amount.toLocaleString()}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {breakdown.advanceAmount > 0 && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setBillingModalState({
+                                  isOpen: true,
+                                  tab: "RECEIPT",
+                                  receiptId: "ADVANCE",
+                                })
+                              }
+                              className="inline-flex items-center gap-1 rounded border border-border-default bg-white px-2 py-0.5 text-[10px] font-semibold text-text-secondary hover:border-brand-blue-primary hover:text-brand-blue-primary transition cursor-pointer"
+                              title="View / Download Advance Payment Receipt"
+                            >
+                              <Receipt className="h-2.5 w-2.5" />
+                              <span>Receipt</span>
+                            </button>
+                          )}
+                          <span className="font-mono font-bold text-brand-blue-primary tabular-nums">
+                            ₹{breakdown.advanceAmount.toLocaleString("en-IN")}
                           </span>
                         </div>
-                      ))}
-                    </div>
-                  )}
+                      </div>
 
-                  <div className="flex justify-between items-center pt-2 border-t border-border-default">
-                    <span className="text-text-secondary">Remaining Balance:</span>
-                    <span className="font-bold text-brand-orange-primary">
-                      ₹{selected.pricing.remainingAmount.toLocaleString()}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center pt-2 border-t border-border-default">
-                    <span className="text-text-secondary">Payment Status:</span>
-                    {(() => {
-                      const isPaid = selected.paymentStatus === "PAID";
-                      const hasInstallments = Boolean(selected.pricing.installments && selected.pricing.installments.length > 0);
-                      const isAdvance = selected.paymentStatus === "ADVANCE_RECEIVED" || (!hasInstallments && selected.pricing.advanceAmount > 0 && selected.pricing.remainingAmount > 0);
-                      const isPartial = !isPaid && hasInstallments && (selected.pricing.remainingAmount > 0 || selected.paymentStatus === "PARTIAL");
+                      {breakdown.installments.length > 0 && (
+                        <div className="pt-2 border-t border-border-default/60 space-y-1.5">
+                          {breakdown.installments.map((inst, idx) => {
+                            const instReceiptId = inst.id || `INST_${idx + 1}`;
+                            return (
+                              <div key={instReceiptId} className="flex justify-between items-center">
+                                <div>
+                                  <span className="text-text-secondary font-medium">
+                                    Installment #{idx + 1}:
+                                  </span>
+                                  <span className="text-[10px] text-text-tertiary ml-1.5">
+                                    Recorded on {inst.date}{inst.notes ? ` · ${inst.notes}` : ""}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setBillingModalState({
+                                        isOpen: true,
+                                        tab: "RECEIPT",
+                                        receiptId: instReceiptId,
+                                      })
+                                    }
+                                    className="inline-flex items-center gap-1 rounded border border-border-default bg-white px-2 py-0.5 text-[10px] font-semibold text-text-secondary hover:border-brand-blue-primary hover:text-brand-blue-primary transition cursor-pointer"
+                                    title={`View / Download Installment #${idx + 1} Receipt`}
+                                  >
+                                    <Receipt className="h-2.5 w-2.5" />
+                                    <span>Receipt</span>
+                                  </button>
+                                  <span className="font-mono font-bold text-text-primary tabular-nums">
+                                    ₹{inst.amount.toLocaleString("en-IN")}
+                                  </span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
 
-                      if (isPaid) {
-                        return <span className="font-bold text-status-success">Payment Completed</span>;
-                      }
-                      if (isAdvance) {
-                        return <span className="font-bold text-sky-700">ADVANCE RECEIVED</span>;
-                      }
-                      if (isPartial) {
-                        return <span className="font-bold text-brand-orange-primary">PARTIAL</span>;
-                      }
-                      return <span className="font-bold text-text-secondary">PENDING</span>;
-                    })()}
-                  </div>
-                </>
+                      <div className="flex justify-between items-center pt-2 border-t border-border-default">
+                        <span className="text-text-secondary font-medium">Total Paid to Date:</span>
+                        <span className="font-mono font-bold text-status-success tabular-nums">
+                          ₹{breakdown.totalPaid.toLocaleString("en-IN")}
+                        </span>
+                      </div>
+
+                      <div className="flex justify-between items-center pt-2 border-t border-border-default">
+                        <span className="text-text-secondary">Remaining Balance:</span>
+                        <span className="font-mono font-bold text-brand-orange-primary tabular-nums">
+                          ₹{breakdown.remainingAmount.toLocaleString("en-IN")}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center pt-2 border-t border-border-default">
+                        <span className="text-text-secondary">Payment Status:</span>
+                        {(() => {
+                          const isPaid = selected.paymentStatus === "PAID" || breakdown.remainingAmount === 0 && breakdown.confirmedPrice > 0;
+                          const hasInstallments = breakdown.installments.length > 0;
+                          const isAdvance = !isPaid && !hasInstallments && breakdown.advanceAmount > 0;
+                          const isPartial = !isPaid && hasInstallments && breakdown.totalPaid > 0;
+
+                          if (isPaid) {
+                            return <span className="font-bold text-status-success">Payment Completed</span>;
+                          }
+                          if (isAdvance) {
+                            return <span className="font-bold text-sky-700">ADVANCE RECEIVED</span>;
+                          }
+                          if (isPartial) {
+                            return <span className="font-bold text-brand-orange-primary">PARTIAL</span>;
+                          }
+                          return <span className="font-bold text-text-secondary">PENDING</span>;
+                        })()}
+                      </div>
+                    </>
+                  );
+                })()
               )}
             </div>
           </div>
@@ -2046,6 +2306,15 @@ export default function OmsPage({
               </div>
             </div>
           )}
+
+          {/* 5B. Google Drive Deliverables & Client Preview */}
+          <GoogleDriveDeliverablesSection
+            orderId={selected.id}
+            deliverables={selected.driveDeliverables || []}
+            canManageLinks={true}
+            canSubmitClientReview={false}
+            onSaveDeliverables={handleSaveDriveDeliverables}
+          />
 
           {/* 6. Customer Order Access and Tracking Link (Sharing Option Info) */}
           <div className="rounded-2xl border border-brand-blue-soft bg-brand-blue-background/60 p-4 space-y-3">
@@ -3284,6 +3553,40 @@ export default function OmsPage({
         initialSkills={addMemberInitialSkills}
         onSuccess={handleMemberCreated}
       />
+
+      {/* Minimal Plain-White Invoice & Payment Receipt Modal */}
+      {selected && (
+        <MinimalBillingModal
+          isOpen={billingModalState.isOpen}
+          onClose={() => setBillingModalState((prev) => ({ ...prev, isOpen: false }))}
+          order={{
+            id: selected.id,
+            orderNumber: selected.orderNumber,
+            eventType: selected.eventType,
+            eventDate: selected.eventDate,
+            eventLocation: selected.eventLocation,
+            services: selected.services,
+            packages: selected.packages,
+            customerName: selected.customer.name,
+            customerPhone: selected.customer.phone,
+            customerEmail: selected.customer.email,
+            paymentStatus: selected.paymentStatus,
+            pricing: selected.pricing,
+            createdAt: selected.createdAt,
+          }}
+          studioId={studioSlug}
+          studioName={studio?.name || studioSlug}
+          studioLogoUrl={studio?.logoUrl}
+          studioCity={studio?.city}
+          studioPhone={studio?.ownerPhone}
+          studioEmail={studio?.ownerEmail}
+          initialProfile={studio?.billingProfile}
+          initialTab={billingModalState.tab}
+          initialReceiptId={billingModalState.receiptId}
+          canEditProfile={true}
+          onSaveBillingProfile={handleSaveStudioBillingProfile}
+        />
+      )}
     </div>
   );
 }

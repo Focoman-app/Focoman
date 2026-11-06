@@ -162,10 +162,130 @@ export function generateResourceSuggestions(
   }).sort((a, b) => b.matchScore - a.matchScore);
 }
 
+export interface OrderReceiptEntry {
+  id: string;
+  receiptNumber: string;
+  type: 'ADVANCE' | 'INSTALLMENT';
+  label: string;
+  amount: number;
+  date: string;
+  notes?: string;
+  recordedBy?: string;
+}
+
+export interface OrderPaymentBreakdown {
+  confirmedPrice: number;
+  advanceAmount: number;
+  advanceDate: string;
+  installments: NonNullable<Order['pricing']['installments']>;
+  installmentsTotal: number;
+  totalPaid: number;
+  remainingAmount: number;
+  receipts: OrderReceiptEntry[];
+}
+
+/**
+ * Single source of truth for order payment totals and discrete receipt items.
+ * Prevents double-counting between advanceAmount and installments[].
+ */
+export function calculateOrderPaymentBreakdown(
+  order: Pick<Order, 'orderNumber' | 'pricing' | 'paymentStatus' | 'createdAt' | 'eventDate'>
+): OrderPaymentBreakdown {
+  const confirmedPrice = Math.max(
+    0,
+    Number(order.pricing?.finalConfirmedPrice ?? order.pricing?.estimatedPrice ?? 0) || 0
+  );
+  const advanceAmount = Math.max(0, Number(order.pricing?.advanceAmount ?? 0) || 0);
+  const advanceDate =
+    order.pricing?.advanceDate ||
+    (order.createdAt ? order.createdAt.slice(0, 10) : order.eventDate || '');
+
+  const rawInstallments = Array.isArray(order.pricing?.installments)
+    ? order.pricing.installments
+    : [];
+  const installments = rawInstallments.filter((inst) => inst && Number(inst.amount) > 0);
+  const installmentsTotal = installments.reduce(
+    (sum, inst) => sum + (Math.max(0, Number(inst.amount) || 0)),
+    0
+  );
+
+  const rawPaid = advanceAmount + installmentsTotal;
+  let totalPaid = rawPaid;
+  if (order.paymentStatus === 'PAID') {
+    if (rawPaid === 0 && confirmedPrice > 0) {
+      totalPaid = confirmedPrice;
+    } else if (confirmedPrice > 0) {
+      totalPaid = Math.max(rawPaid, confirmedPrice);
+    }
+  }
+  if (confirmedPrice > 0 && totalPaid > confirmedPrice) {
+    totalPaid = confirmedPrice;
+  }
+
+  const remainingAmount =
+    order.paymentStatus === 'PAID'
+      ? 0
+      : Math.max(0, confirmedPrice - totalPaid);
+
+  const receipts: OrderReceiptEntry[] = [];
+  const cleanOrderNum = (order.orderNumber || 'ORD').replace(/\s+/g, '');
+
+  if (advanceAmount > 0) {
+    receipts.push({
+      id: 'ADVANCE',
+      receiptNumber: `RCP-${cleanOrderNum}-ADV`,
+      type: 'ADVANCE',
+      label: 'Advance Payment',
+      amount: advanceAmount,
+      date: advanceDate,
+      notes: 'Booking Advance Payment',
+    });
+  }
+
+  installments.forEach((inst, idx) => {
+    const seq = String(idx + 1).padStart(2, '0');
+    receipts.push({
+      id: inst.id || `INST_${idx + 1}`,
+      receiptNumber: `RCP-${cleanOrderNum}-${seq}`,
+      type: 'INSTALLMENT',
+      label: `Installment #${idx + 1}`,
+      amount: Math.max(0, Number(inst.amount) || 0),
+      date: inst.date || advanceDate,
+      notes: inst.notes,
+      recordedBy: inst.recordedBy,
+    });
+  });
+
+  // Fallback receipt if order was marked PAID directly with 0 advance & 0 installments
+  if (receipts.length === 0 && order.paymentStatus === 'PAID' && totalPaid > 0) {
+    receipts.push({
+      id: 'FULL_PAYMENT',
+      receiptNumber: `RCP-${cleanOrderNum}-01`,
+      type: 'INSTALLMENT',
+      label: 'Full Settlement',
+      amount: totalPaid,
+      date: advanceDate,
+      notes: 'Full Order Payment',
+    });
+  }
+
+  return {
+    confirmedPrice,
+    advanceAmount,
+    advanceDate,
+    installments,
+    installmentsTotal,
+    totalPaid,
+    remainingAmount,
+    receipts,
+  };
+}
+
 /**
  * Transforms full Order into safe CustomerOrderView DTO (hiding private internal notes, internal tasks, crew info, internal financials).
  */
 export function toCustomerOrderView(order: Order, studioName: string): CustomerOrderView {
+  const breakdown = calculateOrderPaymentBreakdown(order);
   return {
     id: order.id,
     orderNumber: order.orderNumber,
@@ -175,10 +295,10 @@ export function toCustomerOrderView(order: Order, studioName: string): CustomerO
     eventDate: order.eventDate,
     eventLocation: order.eventLocation || order.locationInfo?.address,
     services: order.services,
-    totalAmount: order.pricing.finalConfirmedPrice || order.pricing.estimatedPrice,
-    advanceAmount: order.pricing.advanceAmount,
-    amountPaid: order.pricing.advanceAmount, // or calculated from payments
-    remainingAmount: order.pricing.remainingAmount,
+    totalAmount: breakdown.confirmedPrice,
+    advanceAmount: breakdown.advanceAmount,
+    amountPaid: breakdown.totalPaid,
+    remainingAmount: breakdown.remainingAmount,
     paymentStatus: order.paymentStatus,
     orderStatus: order.orderStatus,
     bookingStatus: order.bookingStatus,
@@ -197,10 +317,15 @@ export function toCustomerTrackingView(
     studioId?: string;
     studioOwnerId?: string;
     studioOwnerEmail?: string;
+    studioLogoUrl?: string;
+    studioCity?: string;
+    studioPhone?: string;
+    studioBillingProfile?: CustomerTrackingView['order']['studioBillingProfile'];
     staffEmails?: string[];
     staffUids?: string[];
   }
 ): CustomerTrackingView {
+  const breakdown = calculateOrderPaymentBreakdown(order);
   return {
     order: {
       id: order.id,
@@ -212,23 +337,34 @@ export function toCustomerTrackingView(
       trackingPasskey: order.trackingPasskey,
       passkeyPin: order.passkeyPin,
       studioName,
+      studioLogoUrl: studioInfo?.studioLogoUrl,
+      studioCity: studioInfo?.studioCity,
+      studioPhone: studioInfo?.studioPhone,
+      studioBillingProfile: studioInfo?.studioBillingProfile,
       customerName: order.customer.name,
       customerEmail: order.customer.email,
+      customerPhone: order.customer.phone,
       customerUid: order.customer.uid,
       collaborators: order.collaborators,
       eventType: order.eventType,
       eventDate: order.eventDate,
       eventLocation: order.eventLocation || order.locationInfo?.address,
       services: order.services,
-      totalAmount: order.pricing.finalConfirmedPrice || order.pricing.estimatedPrice,
-      advanceAmount: order.pricing.advanceAmount,
-      remainingAmount: order.pricing.remainingAmount,
+      packages: order.packages,
+      totalAmount: breakdown.confirmedPrice,
+      advanceAmount: breakdown.advanceAmount,
+      advanceDate: breakdown.advanceDate,
+      amountPaid: breakdown.totalPaid,
+      remainingAmount: breakdown.remainingAmount,
+      installments: breakdown.installments,
+      driveDeliverables: order.driveDeliverables || [],
       paymentStatus: order.paymentStatus,
       orderStatus: order.orderStatus,
       staffEmails: studioInfo?.staffEmails,
       staffUids: studioInfo?.staffUids,
       isHeadless: order.isHeadless || order.studioStatus === "INACTIVE" || false,
       studioStatus: order.studioStatus || (studioInfo?.studioOwnerId ? "ACTIVE" : (order.isHeadless ? "INACTIVE" : "ACTIVE")),
+      createdAt: order.createdAt,
     },
     tasks: tasks.map((task) => ({
       title: task.title,
@@ -566,9 +702,10 @@ export function calculateCustomerLTV(orders: Order[]): {
 
     // Cancelled orders do not accumulate pending receivables
     if (o.orderStatus !== 'CANCELLED') {
-      lifetimeValue += o.pricing.finalConfirmedPrice || 0;
+      const breakdown = calculateOrderPaymentBreakdown(o);
+      lifetimeValue += breakdown.confirmedPrice;
       if (o.paymentStatus !== 'PAID') {
-        pendingReceivables += o.pricing.remainingAmount || 0;
+        pendingReceivables += breakdown.remainingAmount;
       }
     }
 

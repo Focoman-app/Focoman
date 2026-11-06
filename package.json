@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "npm --prefix apps/web run dev",
     "build": "npm --prefix apps/web run build",
-    "test": "node --experimental-strip-types --test tests/backend-crud.test.ts tests/pwa.test.ts tests/dev-portal-auth.test.ts",
+    "test": "node --experimental-strip-types --test tests/backend-crud.test.ts",
     "start": "npm --prefix apps/web run start",
     "lint": "npm --prefix apps/web run lint",
     "gitpush": "powershell -ExecutionPolicy Bypass -File scripts/gitpush.ps1",

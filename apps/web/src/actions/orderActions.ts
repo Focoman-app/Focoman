@@ -38,9 +38,9 @@ import {
   updateCustomer,
   getMemberById,
 } from "@focoman/db";
-import { CustomerTrackingView, Order, Task, StudioMember, OrderStatus, TaskStatus, PaymentStatus, OrderCollaborator, OrderInstallment, OrderAuditEntry } from "@focoman/types";
+import { CustomerTrackingView, Order, Task, StudioMember, OrderStatus, TaskStatus, PaymentStatus, OrderCollaborator, OrderInstallment, OrderAuditEntry, OrderDriveDeliverable } from "@focoman/types";
 import { requireVerifiedUser, requireStudioMember, requireStudioOwner, getAdminAuthInstance } from "@/lib/serverAuth";
-import { sendOrderConfirmedCustomerEmail, sendOrderConfirmedOwnerEmail, sendCrewShootAssignedEmail, sendPipelineStatusUpdateEmail, sendGalleryReadyCustomerEmail, sendPaymentReminderCustomerEmail } from "@/services/emailService";
+import { sendOrderConfirmedCustomerEmail, sendCrewShootAssignedEmail, sendPipelineStatusUpdateEmail, sendGalleryReadyCustomerEmail, sendPaymentReminderCustomerEmail } from "@/services/emailService";
 
 /**
  * Server Actions for Order Lifecycle, Tasks & Post-Event Production Pipeline (OMS)
@@ -239,33 +239,6 @@ export async function createOrderAction(rawInput: unknown): Promise<{
         }
       })();
     }
-
-    
-    // Dispatch instant order confirmation notification to Studio Owner
-    void (async () => {
-      try {
-        const studio = await getStudioBySlug(validated.studioId);
-        if (studio?.ownerEmail) {
-          await sendOrderConfirmedOwnerEmail({
-            toEmail: studio.ownerEmail,
-            ownerName: studio.ownerName || "Studio Owner",
-            studioName: studio.name || validated.studioId,
-            studioSlug: validated.studioId,
-            orderNumber: newOrder.id,
-            eventType: validated.eventType,
-            eventDate: validated.eventDate,
-            customerName: validated.customerName,
-            customerPhone,
-            customerEmail,
-            confirmedPrice: validated.finalConfirmedPrice,
-            advanceAmount: validated.advanceAmount,
-            remainingAmount,
-          });
-        }
-      } catch (ownerMailErr) {
-        console.error("[createOrderAction] Owner notification email dispatch failed:", ownerMailErr);
-      }
-    })();
 
     return { success: true, order: newOrder, tasks: workflowTasks };
   } catch (err: unknown) {
@@ -521,6 +494,10 @@ export async function getOrderByPasskeyAction(passkey: string): Promise<{
       studioId: order.studioId,
       studioOwnerId,
       studioOwnerEmail,
+      studioLogoUrl: studio?.logoUrl,
+      studioCity: studio?.city,
+      studioPhone: studio?.ownerPhone,
+      studioBillingProfile: studio?.billingProfile,
       staffEmails: Array.from(new Set(staffEmails)),
       staffUids: Array.from(new Set(staffUids)),
     });
@@ -1553,5 +1530,149 @@ export async function sendManualPaymentReminderAction(input: {
     };
   }
 }
+
+export async function updateOrderDriveDeliverablesAction(input: {
+  orderId: string;
+  studioId: string;
+  deliverables: OrderDriveDeliverable[];
+  idToken: string;
+}): Promise<{
+  success: boolean;
+  order?: Order;
+  deliverables?: OrderDriveDeliverable[];
+  error?: string;
+}> {
+  try {
+    const decoded = await requireVerifiedUser(input.idToken);
+    const membership = await requireStudioMember(decoded.uid, input.studioId);
+
+    const existingOrder = await getOrderById(input.orderId);
+    if (!existingOrder || existingOrder.studioId.toLowerCase() !== input.studioId.toLowerCase()) {
+      return { success: false, error: "Order not found in authorized studio." };
+    }
+
+    const actorName = decoded.name || decoded.email || "Studio Staff";
+    const auditEntry: OrderAuditEntry = {
+      id: `audit_${Date.now()}_drive_deliv`,
+      timestamp: getStudioTimestampIST(new Date()),
+      actorName,
+      actorRole: membership.role === "STUDIO_OWNER" ? "Owner" : "Member",
+      action: "Google Drive Deliverables Updated",
+      details: `Updated Google Drive deliverable links (${input.deliverables.length} item${input.deliverables.length === 1 ? "" : "s"})`,
+    };
+
+    const updatedOrder = await updateOrder(existingOrder.id, {
+      driveDeliverables: input.deliverables,
+      auditLog: [...(existingOrder.auditLog || []), auditEntry],
+    });
+
+    return {
+      success: true,
+      order: updatedOrder || undefined,
+      deliverables: updatedOrder?.driveDeliverables || input.deliverables,
+    };
+  } catch (err: unknown) {
+    console.error("[updateOrderDriveDeliverablesAction] Error:", err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Failed to update Google Drive deliverables.",
+    };
+  }
+}
+
+export async function submitCustomerDeliverableReviewAction(input: {
+  orderId: string;
+  deliverableId: string;
+  approved: boolean;
+  feedback?: string;
+  idToken: string;
+}): Promise<{
+  success: boolean;
+  deliverables?: OrderDriveDeliverable[];
+  error?: string;
+}> {
+  try {
+    const decoded = await requireVerifiedUser(input.idToken);
+    const order = await getOrderById(input.orderId);
+    if (!order) {
+      return { success: false, error: "Order not found." };
+    }
+
+    const userEmail = decoded.email?.toLowerCase();
+    const customerEmail = order.customer.email?.toLowerCase();
+    const isPrimaryCustomer = Boolean(
+      (userEmail && customerEmail && userEmail === customerEmail) ||
+        (order.customer.uid && order.customer.uid === decoded.uid)
+    );
+    const isEditorCollaborator = Boolean(
+      userEmail &&
+        (order.collaborators || []).some(
+          (c) => c.email.toLowerCase() === userEmail && c.role === "EDITOR"
+        )
+    );
+
+    let isStudioStaff = false;
+    try {
+      const m = await getMembershipByUidAndStudio(decoded.uid, order.studioId);
+      if (m && m.status === "ACTIVE") isStudioStaff = true;
+    } catch {
+      // ignore
+    }
+
+    if (!isPrimaryCustomer && !isEditorCollaborator && !isStudioStaff) {
+      return {
+        success: false,
+        error: "Only the primary customer or an authorized editor can submit review approvals.",
+      };
+    }
+
+    const nowIso = new Date().toISOString();
+    const currentDeliverables = order.driveDeliverables || [];
+    const targetDeliverable = currentDeliverables.find((d) => d.id === input.deliverableId);
+    if (!targetDeliverable) {
+      return { success: false, error: "Deliverable item not found on this order." };
+    }
+
+    const updatedDeliverables = currentDeliverables.map((d) =>
+      d.id === input.deliverableId
+        ? {
+            ...d,
+            clientApproved: input.approved,
+            clientFeedback: input.feedback?.trim() || undefined,
+            clientReviewedAt: nowIso,
+          }
+        : d
+    );
+
+    const actorName = decoded.name || decoded.email || order.customer.name || "Customer";
+    const reviewAudit: OrderAuditEntry = {
+      id: `audit_${Date.now()}_deliv_review`,
+      timestamp: getStudioTimestampIST(new Date()),
+      actorName,
+      actorRole: isStudioStaff ? "Owner" : "Customer",
+      action: input.approved ? "Deliverable Approved" : "Deliverable Revision Requested",
+      details: `${input.approved ? "Approved" : "Requested changes on"} "${targetDeliverable.title}"${
+        input.feedback?.trim() ? ` — Note: "${input.feedback.trim()}"` : ""
+      }`,
+    };
+
+    const updated = await updateOrder(order.id, {
+      driveDeliverables: updatedDeliverables,
+      auditLog: [...(order.auditLog || []), reviewAudit],
+    });
+
+    return {
+      success: true,
+      deliverables: updated?.driveDeliverables || updatedDeliverables,
+    };
+  } catch (err: unknown) {
+    console.error("[submitCustomerDeliverableReviewAction] Error:", err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Failed to submit deliverable review.",
+    };
+  }
+}
+
 
 

@@ -1,9 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
-  <rect width="512" height="512" rx="100" fill="#18181B" />
+  <rect width="512" height="512" rx="108" fill="#18181B" />
   <defs>
     <linearGradient id="icon-shield-bg" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" stop-color="#FB923C" />
-      <stop offset="100%" stop-color="#F97316" />
+      <stop offset="100%" stop-color="#EA580C" />
     </linearGradient>
     <linearGradient id="icon-cyan" x1="0%" y1="0%" x2="0%" y2="100%">
       <stop offset="0%" stop-color="#38BDF8" />
@@ -11,16 +11,16 @@
     </linearGradient>
     <linearGradient id="icon-purple" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" stop-color="#A78BFA" />
-      <stop offset="50%" stop-color="#8B5CF6" />
-      <stop offset="100%" stop-color="#6D28D9" />
+      <stop offset="50%" stop-color="#7C3AED" />
+      <stop offset="100%" stop-color="#5B21B6" />
     </linearGradient>
   </defs>
 
-  <g transform="translate(106, 86) scale(7.5)">
+  <g transform="translate(46, -24) scale(10.5)">
     <path d="M6 10 L34 10 L40 22 L20 44 L0 22 Z" fill="url(#icon-purple)" stroke="#4C1D95" stroke-width="1.5" stroke-linejoin="round" />
     <path d="M8 12.5 L32 12.5 L37 22 L20 40.5 L3 22 Z" fill="url(#icon-shield-bg)" />
-    <path d="M10 16 H30 L26 22 H17 V25 H24 L21.5 30 H17 V35 L12 37 V16 Z" fill="#0369A1" opacity="0.4" />
+    <path d="M10 16 H30 L26 22 H17 V25 H24 L21.5 30 H17 V35 L12 37 V16 Z" fill="#0369A1" opacity="0.45" />
     <path d="M9.5 15.5 H29.5 L26 21.5 H16.5 V24.5 H23.5 L21 29.5 H16.5 V35.5 L11.5 36.5 V15.5 Z" fill="url(#icon-cyan)" stroke="#0284C7" stroke-width="0.75" />
-    <path d="M9.5 15.5 H29.5 L28 17.5 H11.5 V15.5 Z" fill="#FFFFFF" opacity="0.9" />
+    <path d="M9.5 15.5 H29.5 L28 17.5 H11.5 V15.5 Z" fill="#FFFFFF" opacity="0.92" />
   </g>
 </svg>

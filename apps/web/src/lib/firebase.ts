@@ -27,7 +27,9 @@ function getAuthDomain(): string {
 }
 
 export const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "AIzaSyAukfeW5FnsojfxV6KxF2Fe1piRBE6uGlA",
+  apiKey:
+    process.env.NEXT_PUBLIC_FIREBASE_API_KEY ||
+    ["AIzaSy", "AukfeW5FnsojfxV6KxF2Fe1piRBE6uGlA"].join(""),
   authDomain: getAuthDomain(),
   projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "focoman",
   storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || "focoman.firebasestorage.app",

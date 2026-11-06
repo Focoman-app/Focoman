@@ -252,6 +252,34 @@ export interface OrderCollaborator {
   addedAt: string;
 }
 
+export interface StudioBillingProfile {
+  issuerType?: 'STUDIO' | 'INDIVIDUAL';
+  issuerName?: string;
+  showLogo?: boolean;
+  address?: string;
+  phone?: string;
+  email?: string;
+  gstin?: string;
+  bankDetails?: string;
+  upiId?: string;
+  authorizedSignatory?: string;
+  footerNotes?: string;
+}
+
+export interface OrderDriveDeliverable {
+  id: string;
+  title: string;
+  category: 'FOLDER' | 'IMAGE' | 'VIDEO' | 'PDF' | 'OTHER';
+  driveUrl: string;
+  driveId?: string;
+  notes?: string;
+  clientApproved?: boolean;
+  clientFeedback?: string;
+  clientReviewedAt?: string;
+  addedAt: string;
+  addedBy?: string;
+}
+
 export interface CustomerTrackingView {
   order: {
     id: string;
@@ -263,23 +291,34 @@ export interface CustomerTrackingView {
     trackingPasskey: string;
     passkeyPin?: string;
     studioName: string;
+    studioLogoUrl?: string;
+    studioCity?: string;
+    studioPhone?: string;
+    studioBillingProfile?: StudioBillingProfile;
     customerName: string;
     customerEmail?: string;
+    customerPhone?: string;
     customerUid?: string;
     collaborators?: OrderCollaborator[];
     eventType: string;
     eventDate: string;
     eventLocation?: string;
     services: string[];
+    packages?: string[];
     totalAmount: number;
     advanceAmount: number;
+    advanceDate?: string;
+    amountPaid?: number;
     remainingAmount: number;
+    installments?: OrderInstallment[];
+    driveDeliverables?: OrderDriveDeliverable[];
     paymentStatus: PaymentStatus;
     orderStatus: OrderStatus;
     staffEmails?: string[];
     staffUids?: string[];
     isHeadless?: boolean;
     studioStatus?: string;
+    createdAt?: string;
   };
   tasks: Array<{
     title: string;
@@ -355,6 +394,7 @@ export interface Studio extends SoftDeletable {
     marketplace: boolean;
     reports?: boolean;
   };
+  billingProfile?: StudioBillingProfile;
   createdAt: string;
   updatedAt: string;
 }
@@ -543,6 +583,7 @@ export interface Order extends SoftDeletable {
   notifySms?: boolean;
   notifyEmail?: boolean;
   collaborators?: OrderCollaborator[];
+  driveDeliverables?: OrderDriveDeliverable[];
   createdBy?: string;
   createdByRole?: string;
   updatedBy?: string;
