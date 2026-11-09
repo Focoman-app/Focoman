@@ -18,7 +18,7 @@ export default function PricingPage() {
             Simple &amp; Flexible Studio Pricing
           </h1>
           <p className="mx-auto mt-4 max-w-2xl text-base text-text-secondary">
-            Basic Order Management &amp; Studio Marketplace are 100% Free for everyone. Selectively add Customer Relations, Studio Operations - ERP, Business Reports, Drive Review, or WhatsApp capabilities as your studio grows.
+            Basic Order Management &amp; Studio Marketplace are 100% Free for everyone. Upgrade to the ₹999/month or ₹1,999/month plan as your studio operations grow.
           </p>
         </div>
       </section>

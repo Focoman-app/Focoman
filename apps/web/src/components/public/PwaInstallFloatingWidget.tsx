@@ -97,26 +97,26 @@ export function PwaInstallFloatingWidget() {
   return (
     <div className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-50">
       {!isExpanded ? (
-        /* Collapsed Default State: Compact "Install App" Floating Button */
-        <div className="inline-flex items-center rounded-full border-2 border-[#1C1917] bg-[#FFFFFF] p-1 shadow-[0_4px_0_#1C1917,0_8px_20px_rgba(28,25,23,0.18)] transition-all hover:-translate-y-0.5">
+        /* Collapsed Default State: Compact "Install App" Floating Button (Clean White Theme) */
+        <div className="inline-flex items-center rounded-full border-2 border-[#D8D2C4] bg-white p-1 shadow-[0_4px_16px_rgba(28,25,23,0.12),0_2px_0_#C4BCAB] transition-all hover:-translate-y-0.5">
           <button
             type="button"
             onClick={() => setIsExpanded(true)}
-            className="inline-flex items-center gap-2 rounded-full bg-[#1C1917] px-3.5 py-2 text-xs sm:text-sm font-bold text-white hover:bg-[#292524] active:translate-y-[1px] transition cursor-pointer shadow-[0_2px_0_#000000]"
+            className="inline-flex items-center gap-2 rounded-full border border-[#D8D2C4] bg-white px-3.5 py-2 text-xs sm:text-sm font-bold text-[#1C1917] hover:bg-[#FAF7F2] active:translate-y-[1px] transition cursor-pointer shadow-[0_2px_0_#C4BCAB]"
             aria-label="Expand Install App Options"
           >
             <img
               src="/icon.svg"
               alt=""
-              className="h-5 w-5 rounded bg-white p-0.5 shrink-0"
+              className="h-5 w-5 rounded object-contain shrink-0"
             />
             <span className="whitespace-nowrap">Install App</span>
-            <Download className="h-3.5 w-3.5 shrink-0" />
+            <Download className="h-3.5 w-3.5 shrink-0 text-[#1C1917]" />
           </button>
           <button
             type="button"
             onClick={handleCloseClick}
-            className="ml-1 mr-0.5 flex h-7 w-7 items-center justify-center rounded-full text-[#57534E] hover:bg-[#FAF7F2] hover:text-[#1C1917] transition cursor-pointer"
+            className="ml-1 mr-0.5 flex h-7 w-7 items-center justify-center rounded-full text-[#78716C] hover:bg-[#FAF7F2] hover:text-[#1C1917] transition cursor-pointer"
             aria-label="Dismiss Install App Button"
             title="Dismiss"
           >
@@ -124,15 +124,15 @@ export function PwaInstallFloatingWidget() {
           </button>
         </div>
       ) : (
-        /* Expanded State: Floating Card with Install, Later, and Close (X) */
+        /* Expanded State: Floating Card with Install, Later, and Close (X) (Clean White Theme) */
         <div
           role="dialog"
           aria-label="Install Focoman App"
-          className="w-[290px] sm:w-[330px] rounded-2xl border-2 border-[#1C1917] bg-[#FFFDF9] p-4 shadow-[0_5px_0_#1C1917,0_14px_30px_rgba(28,25,23,0.22)] transition-all"
+          className="w-[290px] sm:w-[330px] rounded-2xl border-2 border-[#D8D2C4] bg-white p-4 shadow-[0_4px_20px_rgba(28,25,23,0.14),0_3px_0_#C4BCAB] transition-all"
         >
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-center gap-3">
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-[#D8D2C4] bg-white p-1 shadow-2xs">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-[#D8D2C4] bg-[#FAF7F2] p-1 shadow-2xs">
                 <img
                   src="/icon.svg"
                   alt="Focoman"
@@ -168,7 +168,7 @@ export function PwaInstallFloatingWidget() {
           ) : (
             <>
               {showManualHint && (
-                <div className="mt-3 rounded-xl border border-[#D8D2C4] bg-[#F5F3EF] p-2.5 text-[11px] font-medium text-[#44403C] leading-relaxed">
+                <div className="mt-3 rounded-xl border border-[#D8D2C4] bg-[#FAF7F2] p-2.5 text-[11px] font-medium text-[#44403C] leading-relaxed">
                   <div className="flex items-center gap-1.5 font-bold text-[#1C1917] mb-1">
                     <Smartphone className="h-3.5 w-3.5 shrink-0" />
                     <span>How to install on this browser:</span>
@@ -192,7 +192,7 @@ export function PwaInstallFloatingWidget() {
                 <button
                   type="button"
                   onClick={handleInstallClick}
-                  className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl bg-[#1C1917] px-4 py-2.5 text-xs font-bold text-white shadow-[0_2px_0_#000000] hover:bg-[#292524] active:translate-y-[1px] active:shadow-none transition cursor-pointer"
+                  className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl border-2 border-[#1C1917] bg-white px-4 py-2.5 text-xs font-bold text-[#1C1917] shadow-[0_2px_0_#1C1917] hover:bg-[#FAF7F2] active:translate-y-[1px] active:shadow-none transition cursor-pointer"
                 >
                   <Download className="h-3.5 w-3.5" />
                   <span>Install</span>
@@ -200,7 +200,7 @@ export function PwaInstallFloatingWidget() {
                 <button
                   type="button"
                   onClick={handleLaterClick}
-                  className="inline-flex items-center justify-center rounded-xl border border-[#D8D2C4] bg-white px-4 py-2.5 text-xs font-bold text-[#57534E] shadow-[0_2px_0_#C4BCAB] hover:bg-[#FAF7F2] hover:text-[#1C1917] active:translate-y-[1px] active:shadow-none transition cursor-pointer"
+                  className="inline-flex items-center justify-center rounded-xl border border-[#D8D2C4] bg-[#FAF7F2] px-4 py-2.5 text-xs font-bold text-[#57534E] shadow-[0_2px_0_#C4BCAB] hover:bg-white hover:text-[#1C1917] active:translate-y-[1px] active:shadow-none transition cursor-pointer"
                 >
                   Later
                 </button>

@@ -23,9 +23,9 @@ export function PricingTwoPanels({ hasMultiStudios = false }: PricingTwoPanelsPr
         </div>
       )}
 
-      {/* 2 Similarly Designed Side-by-Side Panels */}
-      <div className="grid gap-8 lg:grid-cols-2">
-        {/* PANEL 1: FREE */}
+      {/* 3 Similarly Designed Side-by-Side Panels */}
+      <div className="grid gap-8 lg:grid-cols-3">
+        {/* PANEL 1: FREE (₹0) */}
         <div className="relative overflow-hidden rounded-2xl sm:rounded-3xl border-2 border-[#D8D2C4] bg-[#FFFDF9] p-6 sm:p-8 shadow-[0_3px_0_#C4BCAB] hover:border-[#BFB8A7] transition-all duration-200 flex flex-col justify-between">
           <div className="space-y-6">
             {/* Header / Badge */}
@@ -47,7 +47,7 @@ export function PricingTwoPanels({ hasMultiStudios = false }: PricingTwoPanelsPr
             {/* Price */}
             <div className="rounded-xl border border-[#D8D2C4] bg-[#FAF7F2] p-4 flex items-baseline justify-between shadow-[0_1px_0_#D8D2C4]">
               <div>
-                <span className="font-mono text-xs font-semibold text-[#8C857B] block">Free Tier Price</span>
+                <span className="font-mono text-xs font-semibold text-[#8C857B] block">Free Plan</span>
                 <div className="mt-0.5 flex items-baseline gap-1">
                   <span className="retro-serif-heading text-3xl sm:text-4xl font-black tracking-tight text-[#1C1917]">₹0</span>
                   <span className="font-mono text-xs text-[#57534E] font-medium">/forever</span>
@@ -85,7 +85,7 @@ export function PricingTwoPanels({ hasMultiStudios = false }: PricingTwoPanelsPr
           </div>
         </div>
 
-        {/* PANEL 2: PROFESSIONAL */}
+        {/* PANEL 2: ₹999/MONTH PLAN */}
         <div className="relative overflow-hidden rounded-2xl sm:rounded-3xl border-2 border-brand-orange-soft bg-gradient-to-br from-[#FFFDF9] via-orange-50/30 to-[#FFFDF9] p-6 sm:p-8 shadow-[0_3px_0_#C4BCAB] hover:border-brand-orange-primary/60 transition-all duration-200 flex flex-col justify-between">
           <div className="space-y-6">
             {/* Header / Badge */}
@@ -97,31 +97,39 @@ export function PricingTwoPanels({ hasMultiStudios = false }: PricingTwoPanelsPr
 
             <div>
               <h2 className="retro-serif-heading text-2xl sm:text-3xl font-black text-[#1C1917]">
-                Build your own plan using our flexible model
+                Advanced OMS, CRM &amp; Studio Operations
               </h2>
-              <p className="mt-1.5 text-xs text-[#57534E] leading-relaxed">
-                Select from the below modules based on your requirements.
+              <p className="mt-1.5 text-xs sm:text-sm text-[#57534E] leading-relaxed">
+                Includes everything in the Free plan, plus client photo review, customer management, studio operations, and Basic Business Dashboard.
               </p>
             </div>
 
-            {/* Price with Strike-Through */}
+            {/* Price */}
             <div className="rounded-xl border border-brand-orange-soft bg-brand-orange-background/50 p-4 flex items-baseline justify-between shadow-[0_1px_0_#E8D7C8]">
               <div>
-                <span className="font-mono text-xs font-semibold text-[#8C857B] block">Modular Pricing Starting From</span>
-                <div className="mt-0.5 flex items-baseline gap-2">
-                  <span className="font-mono text-lg line-through text-[#8C857B] font-bold">₹299</span>
-                  <span className="retro-serif-heading text-3xl sm:text-4xl font-black tracking-tight text-brand-orange-primary">₹0</span>
-                  <span className="font-mono text-xs text-brand-orange-primary font-bold">/limited period</span>
+                <span className="font-mono text-xs font-semibold text-[#8C857B] block">Monthly Plan</span>
+                <div className="mt-0.5 flex items-baseline gap-1">
+                  <span className="retro-serif-heading text-3xl sm:text-4xl font-black tracking-tight text-brand-orange-primary">₹999</span>
+                  <span className="font-mono text-xs text-[#57534E] font-medium">/month</span>
                 </div>
               </div>
             </div>
 
-            {/* Feature Overview (Display Only) */}
+            {/* Feature Overview */}
             <div className="space-y-3 pt-2">
               <span className="font-mono text-xs font-bold text-[#1C1917] uppercase tracking-wider block">
-                Available Add-On Modules:
+                Everything in Free, plus:
               </span>
               <div className="space-y-2.5 text-xs text-[#57534E]">
+                <div className="flex items-start gap-2.5">
+                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-orange-100 text-[11px] font-extrabold text-brand-orange-primary mt-0.5 border border-orange-200">
+                    ✓
+                  </span>
+                  <span className="text-[#1C1917] font-medium leading-tight">
+                    Advanced OMS with Google Drive Photo Preview &amp; Selection, including supported customer review functionality
+                  </span>
+                </div>
+
                 <div className="flex items-start gap-2.5">
                   <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-orange-100 text-[11px] font-extrabold text-brand-orange-primary mt-0.5 border border-orange-200">
                     ✓
@@ -145,25 +153,7 @@ export function PricingTwoPanels({ hasMultiStudios = false }: PricingTwoPanelsPr
                     ✓
                   </span>
                   <span className="text-[#1C1917] font-medium leading-tight">
-                    Business Reports and Analytics
-                  </span>
-                </div>
-
-                <div className="flex items-start gap-2.5">
-                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-orange-100 text-[11px] font-extrabold text-brand-orange-primary mt-0.5 border border-orange-200">
-                    ✓
-                  </span>
-                  <span className="text-[#1C1917] font-medium leading-tight">
-                    OMS Advanced - Drive Preview and Review
-                  </span>
-                </div>
-
-                <div className="flex items-start gap-2.5">
-                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-orange-100 text-[11px] font-extrabold text-brand-orange-primary mt-0.5 border border-orange-200">
-                    ✓
-                  </span>
-                  <span className="text-[#1C1917] font-medium leading-tight">
-                    WhatsApp Alerts and Operations Bot
+                    Basic Business Dashboard (Order counts, Revenue overview, and Pending payment overview)
                   </span>
                 </div>
               </div>
@@ -175,6 +165,84 @@ export function PricingTwoPanels({ hasMultiStudios = false }: PricingTwoPanelsPr
             <Link
               href="/checkout"
               className="w-full rounded-xl bg-brand-orange-primary px-6 py-3.5 text-xs font-bold text-white shadow-[0_3px_0_#B84600] active:translate-y-[2px] active:shadow-none transition hover:bg-orange-600 flex items-center justify-center gap-2"
+            >
+              <span>Check Details and Build Plan</span>
+              <span>→</span>
+            </Link>
+          </div>
+        </div>
+
+        {/* PANEL 3: ₹1,999/MONTH PLAN */}
+        <div className="relative overflow-hidden rounded-2xl sm:rounded-3xl border-2 border-[#D8D2C4] bg-[#FFFDF9] p-6 sm:p-8 shadow-[0_3px_0_#C4BCAB] hover:border-[#BFB8A7] transition-all duration-200 flex flex-col justify-between">
+          <div className="space-y-6">
+            {/* Header / Badge */}
+            <div className="flex items-center justify-between">
+              <span className="inline-block rounded-full bg-brand-blue-background border border-brand-blue-soft px-3.5 py-1 font-mono text-[11px] font-extrabold uppercase tracking-widest text-brand-blue-primary shadow-2xs">
+                [ COMPLETE ]
+              </span>
+            </div>
+
+            <div>
+              <h2 className="retro-serif-heading text-2xl sm:text-3xl font-black text-[#1C1917]">
+                WhatsApp Operations &amp; Business Reports
+              </h2>
+              <p className="mt-1.5 text-xs sm:text-sm text-[#57534E] leading-relaxed">
+                Includes everything in the ₹999 plan, plus WhatsApp operations, interactive studio bot, and exportable business reports.
+              </p>
+            </div>
+
+            {/* Price */}
+            <div className="rounded-xl border border-[#D8D2C4] bg-[#FAF7F2] p-4 flex items-baseline justify-between shadow-[0_1px_0_#D8D2C4]">
+              <div>
+                <span className="font-mono text-xs font-semibold text-[#8C857B] block">Monthly Plan</span>
+                <div className="mt-0.5 flex items-baseline gap-1">
+                  <span className="retro-serif-heading text-3xl sm:text-4xl font-black tracking-tight text-[#1C1917]">₹1,999</span>
+                  <span className="font-mono text-xs text-[#57534E] font-medium">/month</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Feature Overview */}
+            <div className="space-y-3 pt-2">
+              <span className="font-mono text-xs font-bold text-[#1C1917] uppercase tracking-wider block">
+                Everything in ₹999 Plan, plus:
+              </span>
+              <div className="space-y-2.5 text-xs text-[#57534E]">
+                <div className="flex items-start gap-2.5">
+                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-[11px] font-extrabold text-emerald-700 mt-0.5 border border-emerald-300">
+                    ✓
+                  </span>
+                  <span className="text-[#1C1917] font-medium leading-tight">
+                    WhatsApp Operations &amp; Interactive Bot
+                  </span>
+                </div>
+
+                <div className="flex items-start gap-2.5">
+                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-[11px] font-extrabold text-emerald-700 mt-0.5 border border-emerald-300">
+                    ✓
+                  </span>
+                  <span className="text-[#1C1917] font-medium leading-tight">
+                    Advanced Business Reports &amp; Analytics
+                  </span>
+                </div>
+
+                <div className="flex items-start gap-2.5">
+                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-[11px] font-extrabold text-emerald-700 mt-0.5 border border-emerald-300">
+                    ✓
+                  </span>
+                  <span className="text-[#1C1917] font-medium leading-tight">
+                    Excel Report Exports
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* CTA Button to Checkout Page */}
+          <div className="mt-8 pt-6 border-t border-[#D8D2C4]">
+            <Link
+              href="/checkout"
+              className="w-full rounded-xl bg-[#1C1917] px-6 py-3.5 text-xs font-bold text-white shadow-[0_3px_0_#0F172A] active:translate-y-[2px] active:shadow-none transition hover:bg-[#2C2825] flex items-center justify-center gap-2"
             >
               <span>Check Details and Build Plan</span>
               <span>→</span>

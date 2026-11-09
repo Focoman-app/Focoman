@@ -1,0 +1,429 @@
+import "server-only";
+import { generateTimestampDigits, prefixLetters } from "@/lib/invitationPasscode";
+import { UpdateTaskStatusSchema } from "@focoman/validation";
+import {
+  canCompleteOrder,
+  getStudioCalendarDate,
+  getStudioTimestampIST,
+} from "@focoman/domain";
+import {
+  getMemberById,
+  getOrderById,
+  getStudioBySlug,
+  getTaskById,
+  getTaskByIdIncludeDeleted,
+  getTasksByOrder,
+  restoreTask,
+  saveTask,
+  softDeleteTask,
+  updateOrder,
+  updateTask,
+} from "@focoman/db";
+import type { OrderAuditEntry, OrderStatus, Task, TaskStatus } from "@focoman/types";
+import {
+  requireStudioMember,
+  requireStudioOwner,
+  requireVerifiedUser,
+} from "@/lib/serverAuth";
+import {
+  sendGalleryReadyCustomerEmail,
+  sendPaymentReminderCustomerEmail,
+  sendPipelineStatusUpdateEmail,
+} from "@/services/emailService";
+import { findActiveMemberRecord } from "./orderAccessHelpers";
+
+export async function createTaskCore(input: {
+  orderId: string;
+  studioId: string;
+  title: string;
+  serviceCategory: "PHOTOGRAPHY" | "VIDEOGRAPHY" | "ALBUM" | "GENERAL";
+  assignedMemberId?: string;
+  assignedMemberName?: string;
+  idToken: string;
+}): Promise<{ success: boolean; task?: Task; error?: string }> {
+  try {
+    const decoded = await requireVerifiedUser(input.idToken);
+    await requireStudioOwner(decoded.uid, input.studioId);
+
+    const order = await getOrderById(input.orderId);
+    if (!order || order.studioId !== input.studioId.toLowerCase()) {
+      return { success: false, error: "Order not found in authorized studio." };
+    }
+
+    const existingTasks = await getTasksByOrder(input.orderId);
+    const { dateStamp, timeStamp } = generateTimestampDigits();
+    const taskId = `TSK-${prefixLetters(input.studioId)}-${dateStamp}-${timeStamp}`;
+    const now = new Date().toISOString();
+
+    const task: Task = {
+      id: taskId,
+      orderId: input.orderId,
+      studioId: input.studioId.toLowerCase(),
+      title: input.title.trim(),
+      serviceCategory: input.serviceCategory,
+      assignedMemberId: input.assignedMemberId || "unassigned",
+      assignedMemberName: input.assignedMemberName || "Unassigned Crew",
+      status: "ASSIGNED",
+      sequenceOrder: existingTasks.length + 1,
+      isDeleted: false,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    await saveTask(task);
+    return { success: true, task };
+  } catch (err: unknown) {
+    console.error("[createTaskAction] Error:", err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Failed to create task",
+    };
+  }
+}
+
+export async function updateTaskStatusCore(rawInput: unknown): Promise<{
+  success: boolean;
+  task?: Task;
+  newOrderStatus?: OrderStatus;
+  error?: string;
+}> {
+  try {
+    const validated = UpdateTaskStatusSchema.parse(rawInput);
+
+    const decoded = await requireVerifiedUser(validated.idToken);
+    const studioId = validated.studioId;
+    const membership = await requireStudioMember(decoded.uid, studioId);
+
+    const existingTask = await getTaskById(validated.taskId);
+    if (
+      !existingTask ||
+      existingTask.studioId !== studioId.toLowerCase() ||
+      existingTask.orderId !== validated.orderId
+    ) {
+      return { success: false, error: "Task not found in authorized studio." };
+    }
+
+    const linkedOrder = await getOrderById(validated.orderId);
+    if (!linkedOrder || linkedOrder.studioId !== studioId.toLowerCase()) {
+      return { success: false, error: "Order not found in authorized studio." };
+    }
+
+    const todayStr = getStudioCalendarDate();
+    const isEventUpcoming =
+      linkedOrder.eventDate > todayStr ||
+      (linkedOrder.eventDate >= todayStr &&
+        linkedOrder.orderStatus === "AWAITING_EVENT");
+    if (
+      isEventUpcoming &&
+      validated.status !== "ASSIGNED" &&
+      validated.status !== "AWAITING_EVENT"
+    ) {
+      return {
+        success: false,
+        error: `Production tasks are locked until the event shoot date (${linkedOrder.eventDate}) has completed.`,
+      };
+    }
+
+    if (validated.status && validated.status !== "ASSIGNED") {
+      const allOrderTasks = await getTasksByOrder(validated.orderId);
+      if (existingTask.title.toLowerCase().includes("photo editing")) {
+        const rawTask = allOrderTasks.find((t) =>
+          t.title.toLowerCase().includes("raw photo")
+        );
+        if (rawTask && rawTask.status !== "COMPLETED") {
+          return {
+            success: false,
+            error:
+              "Cannot proceed with Photo Editing until Raw Photo Selection is completed by the customer.",
+          };
+        }
+      }
+      if (
+        existingTask.serviceCategory === "ALBUM" ||
+        existingTask.title.toLowerCase().includes("album")
+      ) {
+        const photoEditTask = allOrderTasks.find((t) =>
+          t.title.toLowerCase().includes("photo editing")
+        );
+        if (photoEditTask && photoEditTask.status !== "COMPLETED") {
+          return {
+            success: false,
+            error:
+              "Cannot proceed with Album Design until Photo Editing is completed and approved.",
+          };
+        }
+      }
+      if (existingTask.title.toLowerCase().includes("final delivery")) {
+        const pendingOthers = allOrderTasks.filter(
+          (t) => t.id !== existingTask.id && t.status !== "COMPLETED"
+        );
+        if (pendingOthers.length > 0 && validated.status === "COMPLETED") {
+          return {
+            success: false,
+            error: `Cannot complete Final Delivery until all ${pendingOthers.length} preceding production task(s) are completed.`,
+          };
+        }
+      }
+    }
+
+    if (membership.role !== "STUDIO_OWNER") {
+      const member = await findActiveMemberRecord(studioId, decoded.email);
+      if (!member || existingTask.assignedMemberId !== member.id) {
+        return {
+          success: false,
+          error: "Access denied: This task is not assigned to your crew profile.",
+        };
+      }
+    }
+
+    const updatedTask = await updateTask(validated.taskId, {
+      status: validated.status as TaskStatus,
+      reworkNotes: validated.reworkNotes,
+    });
+
+    if (!updatedTask) {
+      return { success: false, error: "Task not found" };
+    }
+
+    const order = linkedOrder;
+    let newOrderStatus: OrderStatus | undefined = undefined;
+
+    if (order) {
+      const taskAudit: OrderAuditEntry = {
+        id: `audit_${Date.now()}_task`,
+        timestamp: getStudioTimestampIST(new Date()),
+        actorName:
+          decoded.name ||
+          decoded.email ||
+          existingTask.assignedMemberName ||
+          "Crew Member",
+        actorRole: membership.role === "STUDIO_OWNER" ? "Owner" : "Member",
+        action: "Task Status Updated",
+        details: `Updated task "${existingTask.title}" (${existingTask.serviceCategory}) status to ${validated.status}`,
+      };
+
+      const allTasks = await getTasksByOrder(validated.orderId);
+      const isCompletable = canCompleteOrder(order.paymentStatus, allTasks);
+
+      if (isCompletable && order.orderStatus !== "COMPLETED") {
+        await updateOrder(validated.orderId, {
+          orderStatus: "COMPLETED",
+          auditLog: [...(order.auditLog || []), taskAudit],
+        });
+        newOrderStatus = "COMPLETED";
+      } else if (!isCompletable && order.orderStatus === "AWAITING_EVENT") {
+        const hasStarted = allTasks.some((t) => t.status !== "ASSIGNED");
+        if (hasStarted) {
+          await updateOrder(validated.orderId, {
+            orderStatus: "POST_EVENT_IN_PROGRESS",
+            auditLog: [...(order.auditLog || []), taskAudit],
+          });
+          newOrderStatus = "POST_EVENT_IN_PROGRESS";
+        } else {
+          await updateOrder(validated.orderId, {
+            auditLog: [...(order.auditLog || []), taskAudit],
+          });
+        }
+      } else {
+        await updateOrder(validated.orderId, {
+          auditLog: [...(order.auditLog || []), taskAudit],
+        });
+      }
+
+      void (async () => {
+        try {
+          const studio = await getStudioBySlug(studioId);
+          const studioName = studio?.name || studioId;
+
+          if (order.customer?.email) {
+            if (
+              validated.status === "COMPLETED" &&
+              (existingTask.title.toLowerCase().includes("final delivery") ||
+                existingTask.title.toLowerCase().includes("gallery"))
+            ) {
+              await sendGalleryReadyCustomerEmail({
+                toEmail: order.customer.email,
+                studioName,
+                customerName: order.customer.name,
+                orderId: order.id,
+                eventTitle: order.eventType,
+                passkey: order.trackingPasskey,
+              });
+            } else {
+              await sendPipelineStatusUpdateEmail({
+                toEmail: order.customer.email,
+                studioName,
+                studioSlug: studioId,
+                recipientName: order.customer.name,
+                orderId: order.id,
+                eventTitle: order.eventType,
+                taskTitle: existingTask.title,
+                newStatus: validated.status,
+                details: validated.reworkNotes,
+                passkey: order.trackingPasskey,
+              });
+            }
+
+            const isAlbumOrFinalTask =
+              existingTask.serviceCategory === "ALBUM" ||
+              existingTask.title.toLowerCase().includes("album") ||
+              existingTask.title.toLowerCase().includes("final delivery") ||
+              existingTask.title.toLowerCase().includes("gallery");
+
+            if (
+              validated.status === "COMPLETED" &&
+              isAlbumOrFinalTask &&
+              order.pricing.remainingAmount > 0 &&
+              order.paymentStatus !== "PAID"
+            ) {
+              await sendPaymentReminderCustomerEmail({
+                toEmail: order.customer.email,
+                studioName,
+                customerName: order.customer.name,
+                orderId: order.id,
+                eventTitle: order.eventType,
+                amountDue: `₹${order.pricing.remainingAmount.toLocaleString()}`,
+                dueDate: order.eventDate,
+              });
+            }
+          }
+
+          if (
+            existingTask.assignedMemberId &&
+            existingTask.assignedMemberId !== "unassigned"
+          ) {
+            const member = await getMemberById(existingTask.assignedMemberId);
+            if (member?.email) {
+              await sendPipelineStatusUpdateEmail({
+                toEmail: member.email,
+                studioName,
+                studioSlug: studioId,
+                recipientName: member.name,
+                orderId: order.id,
+                eventTitle: order.eventType,
+                taskTitle: existingTask.title,
+                newStatus: validated.status,
+                details: validated.reworkNotes,
+              });
+            }
+          }
+
+          if (studio?.ownerEmail) {
+            await sendPipelineStatusUpdateEmail({
+              toEmail: studio.ownerEmail,
+              studioName,
+              studioSlug: studioId,
+              recipientName: studio.ownerName || "Studio Owner",
+              orderId: order.id,
+              eventTitle: order.eventType,
+              taskTitle: existingTask.title,
+              newStatus: validated.status,
+              details: validated.reworkNotes,
+            });
+          }
+        } catch (mailErr) {
+          console.warn(
+            "[updateTaskStatusAction] Status change email notification error:",
+            mailErr
+          );
+        }
+      })();
+    }
+
+    return { success: true, task: updatedTask, newOrderStatus };
+  } catch (err: unknown) {
+    console.error("[updateTaskStatusAction] Error:", err);
+    return {
+      success: false,
+      error:
+        (err as any)?.errors?.[0]?.message ||
+        (err instanceof Error ? err.message : "Failed to update task"),
+    };
+  }
+}
+
+export async function updateTaskCore(input: {
+  taskId: string;
+  studioId: string;
+  updates: Partial<
+    Pick<
+      Task,
+      | "title"
+      | "serviceCategory"
+      | "assignedMemberId"
+      | "assignedMemberName"
+      | "status"
+      | "reworkNotes"
+    >
+  >;
+  idToken: string;
+}): Promise<{ success: boolean; task?: Task; error?: string }> {
+  try {
+    const decoded = await requireVerifiedUser(input.idToken);
+    await requireStudioOwner(decoded.uid, input.studioId);
+
+    const task = await getTaskById(input.taskId);
+    if (!task || task.studioId !== input.studioId.toLowerCase()) {
+      return { success: false, error: "Task not found in authorized studio." };
+    }
+
+    const updated = await updateTask(input.taskId, input.updates);
+    return { success: true, task: updated || undefined };
+  } catch (err: unknown) {
+    console.error("[updateTaskAction] Error:", err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Failed to update task",
+    };
+  }
+}
+
+export async function deleteTaskCore(input: {
+  taskId: string;
+  studioId: string;
+  idToken: string;
+}): Promise<{ success: boolean; error?: string }> {
+  try {
+    const decoded = await requireVerifiedUser(input.idToken);
+    await requireStudioOwner(decoded.uid, input.studioId);
+
+    const task = await getTaskById(input.taskId);
+    if (!task || task.studioId !== input.studioId.toLowerCase()) {
+      return { success: false, error: "Task not found in authorized studio." };
+    }
+
+    await softDeleteTask(input.taskId, decoded.uid);
+    return { success: true };
+  } catch (err: unknown) {
+    console.error("[deleteTaskAction] Error:", err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Failed to delete task",
+    };
+  }
+}
+
+export async function restoreTaskCore(input: {
+  taskId: string;
+  studioId: string;
+  idToken: string;
+}): Promise<{ success: boolean; error?: string }> {
+  try {
+    const decoded = await requireVerifiedUser(input.idToken);
+    await requireStudioOwner(decoded.uid, input.studioId);
+
+    const task = await getTaskByIdIncludeDeleted(input.taskId);
+    if (!task || task.studioId !== input.studioId.toLowerCase()) {
+      return { success: false, error: "Task not found in the authorized studio." };
+    }
+
+    await restoreTask(input.taskId);
+    return { success: true };
+  } catch (err: unknown) {
+    console.error("[restoreTaskAction] Error:", err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Failed to restore task",
+    };
+  }
+}

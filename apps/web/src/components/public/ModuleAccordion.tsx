@@ -20,20 +20,20 @@ const MODULES: ModuleData[] = [
     tagColor: "bg-brand-blue-background text-brand-blue-primary border-brand-blue-light/50",
     cards: [
       {
-        title: "Confirmed Order",
-        desc: "Create and manage confirmed orders with customer details, event information, package details, pricing, payments, and the complete post-event workflow through final delivery.",
+        title: "Order Creation & Management",
+        desc: "Register and manage confirmed orders from both direct studio bookings and Studio Marketplace bookings in one centralized system.",
       },
       {
-        title: "Studio Marketplace Orders",
-        desc: "Manage leads and bookings from Studio Marketplace packages, including customer details, selected packages, advance payment, booking confirmation, event planning, and the post-event workflow.",
+        title: "End-to-End Production Workflow",
+        desc: "Manage the complete order production lifecycle, including pre-event preparation, crew and task assignments, event execution, post-event editing, customer reviews, rework, and final delivery.",
       },
       {
-        title: "Order Status Tracking",
-        desc: "View pending, active, and completed orders in one place and check the current status of each order throughout the booking and production workflow.",
+        title: "Studio-Wide Order Overview",
+        desc: "Get a centralized overview of all orders, track their current statuses, monitor pending payments and SLA status, and stay informed about ongoing, pending, and completed orders to keep every order on schedule.",
       },
       {
-        title: "Client Passkey Tracking",
-        desc: "Give clients a password-protected private link to check their event progress and access their gallery, photos, and delivery links without creating an account.",
+        title: "Google Drive Integration & Client Review",
+        desc: "Integrate Google Drive to preview and select photos, add customer comments, review deliverables, and manage approvals directly within FocoMan.",
       },
     ],
   },
@@ -45,20 +45,20 @@ const MODULES: ModuleData[] = [
     tagColor: "bg-brand-orange-background text-brand-orange-primary border-brand-orange-soft",
     cards: [
       {
-        title: "Customer Directory and Profiles",
-        desc: "Centralized client directory with verified phone numbers, email addresses, and postal addresses.",
+        title: "Centralized Customer Management",
+        desc: "Create and manage customer profiles with contact details, addresses, and booking information in one centralized directory, with quick search and easy access to customer records.",
       },
       {
-        title: "Order, Payment and Receivables History",
-        desc: "Instant visibility into all past and active photoshoot orders, cumulative customer spend, historical receipts, advance deposits, and outstanding receivables across years of service.",
+        title: "Customer Booking & Payment History",
+        desc: "View each customer’s past and active orders, booking values, payment history, and outstanding balances to maintain a complete record of their relationship with the studio.",
       },
       {
-        title: "Booking and Inquiry Records",
-        desc: "Review past booking inquiries and requests directly attached to customer profile records.",
+        title: "Studio-Wide Customer Overview",
+        desc: "Get a centralized overview of all customers within your studio, including their booking activity, payment history, lifetime value (LTV), and repeat bookings. Identify your most valuable customers and understand overall customer relationships and booking trends.",
       },
       {
-        title: "Anniversary and Customer Milestone Reminders",
-        desc: "Use previous event dates to remind studios about upcoming anniversaries and important customer milestones, creating opportunities to reconnect and offer relevant photography services.",
+        title: "Automated Follow-ups & Anniversary Reminders",
+        desc: "Track customer anniversaries and important event milestones, send automated reminders to studios and customers, and support personalized follow-ups through email and WhatsApp when available to encourage repeat bookings and generate new leads.",
       },
     ],
   },
@@ -70,20 +70,20 @@ const MODULES: ModuleData[] = [
     tagColor: "bg-brand-purple-background text-brand-purple-primary border-brand-purple-light/50",
     cards: [
       {
-        title: "Team Directory and Roles",
-        desc: "Add photographers, videographers, drone pilots, and editors with their roles, skills, and contact details so your studio team is organized in one place.",
+        title: "Team Directory & Roles",
+        desc: "Manage studio crew members, their roles, skills, contact details, and invitations in one centralized directory. Maintain an organized team database with easy access to member profiles and responsibilities.",
       },
       {
-        title: "Shoot and Task Assignment",
-        desc: "Assign team members to confirmed shoots and production tasks, and keep track of the work assigned to each crew member across active projects.",
+        title: "Crew Workload & Availability Overview",
+        desc: "Get a studio-wide overview of crew workloads, assigned shoots, pending tasks, and availability. Monitor workload distribution, identify overloaded members, and find available crew for upcoming projects.",
       },
       {
-        title: "Crew Availability",
-        desc: "Check crew availability before assigning shoots and tasks, and view the current availability of team members when planning upcoming studio work.",
+        title: "Automated Workflow & Task Assignment",
+        desc: "Configure studio workflows to automatically assign crew members and initiate production tasks when a new order is confirmed, including Marketplace bookings. Assignments follow predefined workflow rules, with manual assignment available when automation is not configured.",
       },
       {
-        title: "Expenses and Crew Payments",
-        desc: "Record shoot day-rates, travel expenses, and crew payments to keep track of production costs and understand the expenses related to each studio project.",
+        title: "Invoices & Receipts Management",
+        desc: "Generate and manage studio invoices and customer payment receipts linked to confirmed orders. Keep transaction documents organized for easy access, sharing, and reference.",
       },
     ],
   },
@@ -96,18 +96,18 @@ const MODULES: ModuleData[] = [
     cards: [
       {
         title: "Automated WhatsApp Notifications",
-        desc: "Send booking confirmations, event reminders, production updates, gallery links, and delivery updates to clients and crew through WhatsApp.",
+        desc: "Send booking confirmations, event reminders, production updates, gallery links, and delivery notifications to customers through configurable WhatsApp triggers.",
       },
       {
-        title: "WhatsApp Status Updates",
-        desc: "Allow studio owners and crew members to update supported event and production statuses directly through WhatsApp without opening the Focoman dashboard.",
+        title: "Interactive Studio Operations Bot",
+        desc: "Access upcoming shoots, active orders, crew information, and production statuses directly through WhatsApp using simple commands, without opening the studio dashboard.",
       },
       {
-        title: "Focoman Operations Bot",
-        desc: "Use the Focoman WhatsApp Bot to check active orders, upcoming events, pending tasks, and other supported studio operations directly from WhatsApp.",
+        title: "WhatsApp-Based Workflow Actions",
+        desc: "Allow authorized studio members to update supported task and order statuses through WhatsApp, with permission checks and automatic synchronization to FocoMan workflows.",
       },
       {
-        title: "Crew Reminders and Call Times",
+        title: "Crew Reminders & Call Times",
         desc: "Send scheduled reminders to assigned crew members with event date, call time, venue location, and required shoot information.",
       },
     ],
@@ -120,20 +120,20 @@ const MODULES: ModuleData[] = [
     tagColor: "bg-emerald-50 text-emerald-800 border-emerald-200",
     cards: [
       {
-        title: "Public Studio Profile and Direct Inquiries",
-        desc: "Showcase your studio profile with bio, city, services, and verified operational delivery metrics on a unique URL, allowing prospective clients to submit direct booking requests with event dates, locations, and service requirements.",
+        title: "Public Studio Profile & Direct Inquiries",
+        desc: "Showcase your studio profile with business information, location, services, and approved public details through a unique profile URL. Allow prospective customers to discover your studio and submit booking inquiries with their event requirements.",
       },
       {
         title: "Configurable Service Packages",
-        desc: "Publish your customized package options, transparent pricing, deliverables specifications, and negotiable status.",
+        desc: "Create and publish customized photography and videography packages with pricing, service details, and deliverables. Configure optional price negotiation for individual packages based on studio preferences.",
       },
       {
-        title: "Optional In-App Negotiation",
-        desc: "When enabled on a package, discuss and record an agreed final amount before issuing the advance payment request.",
+        title: "Booking Requests & Confirmation",
+        desc: "Allow customers to submit booking requests with event details and selected packages. Review inquiries, confirm the agreed booking amount, request advance payments, and convert verified bookings into studio orders.",
       },
       {
         title: "Privacy Protected Operations",
-        desc: "Public visitors see only your approved public showcase. Internal customer CRM, finances, orders, and crew tasks are strictly private.",
+        desc: "Public visitors can view only the studio’s approved profile information, services, and packages, while internal customer records, financial details, orders, and crew operations remain private and protected.",
       },
     ],
   },
@@ -145,20 +145,20 @@ const MODULES: ModuleData[] = [
     tagColor: "bg-amber-50 text-amber-800 border-amber-200",
     cards: [
       {
-        title: "Monthly and Yearly Revenue Reports",
-        desc: "See your total studio earnings by month and year. Track growth over time and compare peak wedding season vs off-season revenue.",
+        title: "Monthly & Yearly Revenue Reports",
+        desc: "Track monthly and yearly studio revenue, monitor booking trends, compare business performance across different time periods, and understand how your studio is growing over time.",
       },
       {
-        title: "Pending Balances and Cash Flow",
-        desc: "Get an instant list of all pending client dues, advance deposits received, and balance payments to collect before album delivery.",
+        title: "Exportable Business Reports",
+        desc: "Generate and export detailed business reports, including order summaries, revenue trends, payment records, and shoot category performance, in Excel format for accounting, financial reviews, and business planning.",
       },
       {
-        title: "Most Profitable Shoot Categories",
-        desc: "Know exactly which photoshoot packages earn you the most profit—Weddings, Engagements, Receptions, Baby Shoots, or Corporate Events.",
+        title: "Shoot Category Performance",
+        desc: "Analyze booking volume and revenue across different shoot categories, identify your highest-performing services, and understand which types of photography projects contribute most to studio revenue.",
       },
       {
-        title: "On-Time Delivery and Speed",
-        desc: "Review your average turnaround time from shoot day to final album hand-off to maintain high client satisfaction and earn 5-star reviews.",
+        title: "On-Time Delivery & Production Performance",
+        desc: "Monitor production progress, completed and delayed orders, delivery turnaround times, and on-time completion performance to identify bottlenecks and improve studio efficiency.",
       },
     ],
   },

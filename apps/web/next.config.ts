@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  distDir: ".next",
+  distDir: process.env.NODE_ENV === "production" ? ".next" : ".next-dev",
   serverExternalPackages: ["firebase-admin"],
   transpilePackages: [
     "@focoman/db",

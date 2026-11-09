@@ -4,12 +4,18 @@ import { getAuth, DecodedIdToken } from 'firebase-admin/auth';
 import { getMembershipByUidAndStudio } from '@focoman/db';
 import { StudioMembership } from '@focoman/types';
 import { cookies } from 'next/headers';
+import {
+  canAutoHealStudioOwner,
+  isRejectedDevSessionCookie,
+  StudioMembershipRequiredError,
+  UnauthenticatedSessionError,
+  verifyActiveStudioMembership,
+} from '@/lib/sessionSecurity';
 
 export const SESSION_COOKIE_NAME = '__session';
 export const SESSION_COOKIE_MAX_AGE_MS = 5 * 24 * 60 * 60 * 1000;
 
-export class UnauthenticatedSessionError extends Error {}
-export class StudioMembershipRequiredError extends Error {}
+export { UnauthenticatedSessionError, StudioMembershipRequiredError };
 
 /**
  * Server-Side Authorization Utilities — CHG-010
@@ -89,27 +95,8 @@ export async function createSessionCookieFromIdToken(idToken: string): Promise<s
 
 export async function requireVerifiedSession(): Promise<DecodedIdToken> {
   const sessionCookie = (await cookies()).get(SESSION_COOKIE_NAME)?.value;
-  if (!sessionCookie) {
+  if (!sessionCookie || isRejectedDevSessionCookie(sessionCookie)) {
     throw new UnauthenticatedSessionError('Authentication required.');
-  }
-
-  // In non-production environments, allow test session cookie for automated UAT verification
-  if (sessionCookie.startsWith('dev_session:')) {
-    const parts = sessionCookie.replace('dev_session:', '').split(':');
-    const email = parts[0];
-    const uid = parts[1] || 'dev-uid';
-    return {
-      uid,
-      email,
-      email_verified: true,
-      auth_time: Math.floor(Date.now() / 1000),
-      iat: Math.floor(Date.now() / 1000),
-      exp: Math.floor(Date.now() / 1000) + 86400,
-      aud: 'focoman',
-      iss: 'https://securetoken.google.com/focoman',
-      sub: uid,
-      firebase: { identities: { email: [email] }, sign_in_provider: 'custom' },
-    } as unknown as DecodedIdToken;
   }
 
   try {
@@ -130,12 +117,14 @@ export async function requireStudioSessionMember(studioId: string): Promise<{
     const { getStudioBySlug, getFirestoreServerInstance } = await import('@focoman/db');
     const studio = await getStudioBySlug(studioId);
 
-    const isOwner = studio && (
-      (studio.ownerId && studio.ownerId === decoded.uid) ||
-      (studio.ownerEmail && decoded.email && studio.ownerEmail.toLowerCase() === decoded.email.toLowerCase())
+    const canHealOwner = canAutoHealStudioOwner(
+      studio,
+      decoded.uid,
+      decoded.email,
+      Boolean(decoded.email_verified)
     );
 
-    if (studio && isOwner) {
+    if (studio && canHealOwner) {
       membership = {
         id: `${studio.id}_${decoded.uid}`,
         studioId: studio.id,
@@ -156,12 +145,8 @@ export async function requireStudioSessionMember(studioId: string): Promise<{
     }
   }
 
-  if (!membership) {
-    throw new StudioMembershipRequiredError(
-      `Authorization denied: You are not an active member of studio "${studioId}".`
-    );
-  }
-  return { decoded, membership };
+  const activeMembership = verifyActiveStudioMembership(membership, studioId);
+  return { decoded, membership: activeMembership };
 }
 
 /**
@@ -182,7 +167,7 @@ export async function requireStudioMember(
   if (!membership && uid) {
     const { getStudioBySlug, getFirestoreServerInstance } = await import('@focoman/db');
     const studio = await getStudioBySlug(studioId);
-    if (studio && (studio.ownerId === uid || uid.startsWith('owner-') || uid.startsWith('dev-'))) {
+    if (studio && canAutoHealStudioOwner(studio, uid)) {
       membership = {
         id: `${studio.id}_${uid}`,
         studioId: studio.id,
@@ -203,20 +188,7 @@ export async function requireStudioMember(
     }
   }
 
-  if (!membership) {
-    throw new Error(
-      `Authorization denied: You are not an active member of studio "${studioId}".`
-    );
-  }
-
-  if (requiredRole && membership.role !== requiredRole) {
-    throw new Error(
-      `Authorization denied: This action requires the "${requiredRole}" role. ` +
-      `Your current role in studio "${studioId}" is "${membership.role}".`
-    );
-  }
-
-  return membership;
+  return verifyActiveStudioMembership(membership, studioId, requiredRole);
 }
 
 export async function requireStudioOwner(uid: string, studioId: string): Promise<StudioMembership> {

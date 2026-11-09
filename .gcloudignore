@@ -4,7 +4,9 @@
 node_modules/
 **/node_modules/
 apps/web/.next/
+apps/web/.next-dev/
 **/.next/
+**/.next-dev/
 .cache/
 .agents/
 docs/

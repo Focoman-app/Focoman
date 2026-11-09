@@ -17,7 +17,7 @@ const FAQS: FaqItem[] = [
   {
     category: "Google Drive and Review",
     q: "Does Focoman store my raw photos and videos?",
-    a: "No. Your files remain safely stored in your own Google Drive. With OMS Advanced at ₹299/month, Focoman connects to your Google Drive folders so your clients can view in-app previews, mark photos as selected or rejected, and leave review comments directly inside their private tracking link.",
+    a: "No. Your files remain safely stored in your own Google Drive. With Advanced OMS in the ₹999/month plan, Focoman connects to your Google Drive folders so your clients can view in-app previews, mark photos as selected or rejected, and leave review comments directly inside their private tracking link.",
   },
   {
     category: "Team and Scheduling",

@@ -402,7 +402,9 @@ export async function getMembershipsByUid(uid: string, email?: string): Promise<
     .where('status', '==', 'ACTIVE')
     .get();
 
-  const memberships = snap.docs.map((d) => d.data() as StudioMembership);
+  const memberships = snap.docs
+    .map((d) => d.data() as StudioMembership)
+    .filter((m) => !m.isDeleted);
   const existingStudioIds = new Set(memberships.map((m) => m.studioId.toLowerCase()));
 
   try {
@@ -448,10 +450,12 @@ export async function getMembershipByUidAndStudio(
     .where('uid', '==', uid)
     .where('studioId', '==', studioId.toLowerCase())
     .where('status', '==', 'ACTIVE')
-    .limit(1)
     .get();
   if (snap.empty) return null;
-  return snap.docs[0].data() as StudioMembership;
+  const activeDoc = snap.docs
+    .map((d) => d.data() as StudioMembership)
+    .find((m) => !m.isDeleted);
+  return activeDoc || null;
 }
 
 export async function getMembershipsByStudio(
