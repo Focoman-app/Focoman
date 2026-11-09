@@ -1,3 +1,5 @@
+import type { BillingProfile } from './billing';
+export * from './billing';
 /**
  * Focoman Shared Domain Types
  * Primary Product Source of Truth: Focoman Product Discovery Document
@@ -411,6 +413,7 @@ export interface StudioLead extends SoftDeletable {
 }
 
 export interface Studio extends SoftDeletable {
+  issuedBillingProfile?: BillingProfile;
   id: string;
   name: string;
   logoUrl?: string;

@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createHmac, timingSafeEqual } from 'node:crypto';
 import {
   processWhatsAppBotMessage,
   sendWhatsAppMessageOrFallback,
   recordWhatsAppLog,
 } from '@/services/whatsappService';
-import { getFirestoreServerInstance, saveStudioLead } from '@focoman/db';
-import { prefixLetters, generateTimestampDigits } from '@/lib/invitationPasscode';
+import { getFirestoreServerInstance } from '@focoman/db';
 
 /**
  * Meta WhatsApp Business Cloud API Webhook
@@ -21,10 +21,9 @@ export async function GET(req: NextRequest) {
   const token = searchParams.get('hub.verify_token');
   const challenge = searchParams.get('hub.challenge');
 
-  const configuredVerifyToken =
-    process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN || 'focoman_whatsapp_verify_token_2026';
+  const configuredVerifyToken = process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN;
 
-  if (mode === 'subscribe' && token === configuredVerifyToken) {
+  if (configuredVerifyToken && mode === 'subscribe' && token === configuredVerifyToken) {
     return new NextResponse(challenge, { status: 200 });
   }
 
@@ -33,7 +32,19 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
+    const secret = process.env.WHATSAPP_APP_SECRET;
+    const signature = req.headers.get('x-hub-signature-256');
+    if (!secret || !signature?.startsWith('sha256=')) {
+      return NextResponse.json({ error: 'Webhook authentication is not configured.' }, { status: 403 });
+    }
+    const rawBody = await req.text();
+    const expected = `sha256=${createHmac('sha256', secret).update(rawBody).digest('hex')}`;
+    const received = Buffer.from(signature, 'utf8');
+    const expectedBuffer = Buffer.from(expected, 'utf8');
+    if (received.length !== expectedBuffer.length || !timingSafeEqual(received, expectedBuffer)) {
+      return NextResponse.json({ error: 'Invalid webhook signature.' }, { status: 403 });
+    }
+    const body = JSON.parse(rawBody);
 
     const entry = body.entry?.[0];
     const changes = entry?.changes?.[0];
@@ -142,58 +153,9 @@ export async function POST(req: NextRequest) {
     }
 
     if (!matchedStudioSlug || !callerRole) {
-      // Auto-capture incoming WhatsApp messages from prospective customers as a WHATSAPP Lead
-      const targetStudioDoc =
-        studiosSnap.docs.find((d) => !d.data().isDeleted && d.data().leadWebhookConfig?.autoCaptureWhatsAppUnknownSenders !== false) ||
-        studiosSnap.docs[0];
-
-      if (targetStudioDoc) {
-        const sData = targetStudioDoc.data();
-        const targetSlug = (sData.slug || sData.id || 'studio').toLowerCase();
-        const contactName =
-          value?.contacts?.[0]?.profile?.name ||
-          `WhatsApp Inquiry (${cleanPhoneSuffix || fromPhone})`;
-        const nowDate = new Date();
-        const now = nowDate.toISOString();
-        const { dateStamp, timeStamp } = generateTimestampDigits(nowDate);
-        const leadId = `LED-${prefixLetters(targetSlug)}-${dateStamp}-${timeStamp}`;
-
-        await saveStudioLead({
-          id: leadId,
-          studioId: targetSlug,
-          name: contactName,
-          phone: fromPhone,
-          channel: 'WHATSAPP',
-          stage: 'NEW',
-          eventType: 'WhatsApp Direct Inquiry',
-          message: textBody,
-          isDeleted: false,
-          createdAt: now,
-          updatedAt: now,
-        });
-
-        const welcomeReply =
-          `👋 *Thank you for contacting ${sData.name || targetSlug}!*\n\n` +
-          `Your inquiry (*#${leadId}*) has been logged in our Studio Desk. Our team will reach out shortly.\n\n` +
-          `Already have a confirmed booking? Check live status anytime by replying:\n` +
-          `\`TRACK <OrderID> <6-Digit-Passkey>\``;
-
-        await sendWhatsAppMessageOrFallback(fromPhone, welcomeReply);
-        return NextResponse.json(
-          { status: 'lead_captured_from_whatsapp', studio: targetSlug, leadId },
-          { status: 200 }
-        );
-      }
-
-      const unauthorizedMsg =
-        `🔒 *Focoman Operations Bot*\n\n` +
-        `This automated bot is restricted to verified Studio Owners and authorized Crew Members.\n` +
-        `Customers can check order status anytime by replying:\n` +
-        `\`TRACK <OrderID> <6-Digit-Passkey>\`\n` +
-        `or visiting: https://focoman.web.app/track`;
-
-      await sendWhatsAppMessageOrFallback(fromPhone, unauthorizedMsg);
-      return NextResponse.json({ status: 'unauthorized_sender' }, { status: 200 });
+      // A webhook has no trustworthy target studio for unknown senders. Do not attach
+      // private customer messages to an arbitrary studio or expose an operations reply.
+      return NextResponse.json({ status: 'ignored_unrecognized_sender' }, { status: 200 });
     }
 
     const botResponse = await processWhatsAppBotMessage(matchedStudioSlug, textBody, fromPhone, {

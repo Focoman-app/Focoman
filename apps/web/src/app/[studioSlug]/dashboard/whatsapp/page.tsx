@@ -7,7 +7,6 @@ import { getEffectiveStudioTier } from "@/lib/proEntitlements";
 import { updateStudioWhatsappConfigAction } from "@/actions/studioActions";
 import {
   simulateWhatsappBotQueryAction,
-  getWhatsappTemplatePreviewAction,
   getStudioWhatsappLogsAction,
 } from "@/actions/whatsappActions";
 import { WhatsAppTemplateId, WhatsAppDispatchLog } from "@/services/whatsappService";
@@ -136,11 +135,10 @@ export default function WhatsappPage({ params }: { params: Promise<{ studioSlug:
     async function loadTemplate() {
       setIsTemplateLoading(true);
       try {
-        const res = await getWhatsappTemplatePreviewAction(studioSlug, selectedTemplate);
-        if (res.success && res.text) {
-          setTemplatePreviewText(res.text);
-          setTemplateClickUrl(res.clickToChatUrl || "");
-        }
+        // Templates containing customer/order fields must be generated from an
+        // owner-authorized OMS order, never from sample data in this settings page.
+        setTemplatePreviewText("Select an order from OMS to generate an authorized preview.");
+        setTemplateClickUrl("");
       } catch (err) {
         console.error("Failed to load template preview:", err);
       } finally {
@@ -148,7 +146,7 @@ export default function WhatsappPage({ params }: { params: Promise<{ studioSlug:
       }
     }
     loadTemplate();
-  }, [selectedTemplate, studioSlug]);
+  }, [selectedTemplate]);
 
   const toggleItem = (id: string) => {
     setConfig((prev) => ({

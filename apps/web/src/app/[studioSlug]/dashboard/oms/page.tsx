@@ -40,7 +40,7 @@ import { DEFAULT_STUDIO_SERVICES } from "@/lib/studioServices";
 import { useStudioWorkspace } from "@/components/StudioWorkspaceProvider";
 import { AddCrewMemberModal } from "@/components/AddCrewMemberModal";
 import { OrderVerticalWorkflow } from "@/components/workflow/OrderVerticalWorkflow";
-import { MinimalBillingModal } from "@/components/billing/MinimalBillingModal";
+import { OrderBillingPanel } from "@/components/billing/OrderBillingPanel";
 import { GoogleDriveDeliverablesSection } from "@/components/deliverables/GoogleDriveDeliverablesSection";
 import {
   DEFAULT_ORDER_FORM,
@@ -1676,40 +1676,13 @@ export default function OmsPage({
         onSuccess={handleMemberCreated}
       />
 
-      {/* Minimal Plain-White Invoice & Payment Receipt Modal */}
-      {selected && (
-        <MinimalBillingModal
-          isOpen={billingModalState.isOpen}
-          onClose={() =>
-            setBillingModalState((prev) => ({ ...prev, isOpen: false }))
-          }
-          order={{
-            id: selected.id,
-            orderNumber: selected.orderNumber,
-            eventType: selected.eventType,
-            eventDate: selected.eventDate,
-            eventLocation: selected.eventLocation,
-            services: selected.services,
-            packages: selected.packages,
-            customerName: selected.customer.name,
-            customerPhone: selected.customer.phone,
-            customerEmail: selected.customer.email,
-            paymentStatus: selected.paymentStatus,
-            pricing: selected.pricing,
-            createdAt: selected.createdAt,
-          }}
-          studioId={studioSlug}
-          studioName={studio?.name || studioSlug}
-          studioLogoUrl={studio?.logoUrl}
-          studioCity={studio?.city}
-          studioPhone={studio?.ownerPhone}
-          studioEmail={studio?.ownerEmail}
-          initialProfile={studio?.billingProfile}
-          initialTab={billingModalState.tab}
-          initialReceiptId={billingModalState.receiptId}
-          canEditProfile={true}
-          onSaveBillingProfile={handleSaveStudioBillingProfile}
-        />
+      {selected && billingModalState.isOpen && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/40 p-4" role="dialog" aria-modal="true" aria-label="Billing documents">
+          <div className="mx-auto my-8 max-w-2xl rounded-xl bg-surface-base p-6 shadow-xl">
+            <div className="mb-4 flex items-center justify-between gap-4"><h2 className="text-xl font-semibold">Billing documents</h2><button type="button" className="rounded border border-border-divider px-3 py-1" onClick={() => setBillingModalState(prev => ({ ...prev, isOpen: false }))}>Close</button></div>
+            <OrderBillingPanel studioId={studioSlug} orderId={selected.id} />
+          </div>
+        </div>
       )}
     </div>
   );

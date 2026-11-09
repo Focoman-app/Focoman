@@ -78,4 +78,6 @@ When evaluating specifications and implementation guidelines:
 
 ## 9. Active Delivery Plans
 
+- [Rebase and completion guide](plan/analysis/rebase-completion-2026-11-09.md) — Approved rebase workflow, Gemini integration decisions and verification boundaries.
+
 - **[Minimal billing, Excel exports and Drive previews](plan/analysis/minimal-billing-exports-drive.md)** — Approved on 2026-11-05; plain invoice/receipt PDF and print, complete authorized business-data Excel exports, and Google-hosted preview feasibility. See [task map](plan/README.md).

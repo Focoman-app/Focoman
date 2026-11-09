@@ -26,24 +26,18 @@ export function parseGoogleDriveUrl(rawUrl: string): ParsedGoogleDriveLink {
     };
   }
 
-  let normalizedUrl = trimmed;
-  if (!/^https?:\/\//i.test(normalizedUrl)) {
-    normalizedUrl = `https://${normalizedUrl}`;
-  }
-
   try {
-    const urlObj = new URL(normalizedUrl);
+    const urlObj = new URL(trimmed);
     const host = urlObj.hostname.toLowerCase();
-    const isDriveHost =
-      host.includes('drive.google.com') || host.includes('docs.google.com');
+    const isDriveHost = host === 'drive.google.com' || host === 'docs.google.com';
 
-    if (!isDriveHost) {
+    if (urlObj.protocol !== 'https:' || !isDriveHost || urlObj.username || urlObj.password) {
       return {
         isValidDriveUrl: false,
         id: null,
         kind: 'EXTERNAL',
         previewEmbedUrl: null,
-        openUrl: normalizedUrl,
+        openUrl: '',
         canEmbedPreview: false,
       };
     }
@@ -56,8 +50,8 @@ export function parseGoogleDriveUrl(rawUrl: string): ParsedGoogleDriveLink {
         isValidDriveUrl: true,
         id: folderId,
         kind: 'FOLDER',
-        previewEmbedUrl: `https://drive.google.com/embeddedfolderview?id=${encodeURIComponent(folderId)}#grid`,
-        openUrl: `https://drive.google.com/drive/folders/${encodeURIComponent(folderId)}`,
+        previewEmbedUrl: `https://drive.google.com/embeddedfolderview?id=${encodeURIComponent(folderId)}${urlObj.searchParams.get('resourcekey') ? `&resourcekey=${encodeURIComponent(urlObj.searchParams.get('resourcekey')!)}` : ''}#grid`,
+        openUrl: urlObj.toString(),
         canEmbedPreview: true,
       };
     }
@@ -70,8 +64,8 @@ export function parseGoogleDriveUrl(rawUrl: string): ParsedGoogleDriveLink {
         isValidDriveUrl: true,
         id: fileId,
         kind: 'FILE',
-        previewEmbedUrl: `https://drive.google.com/file/d/${encodeURIComponent(fileId)}/preview`,
-        openUrl: `https://drive.google.com/file/d/${encodeURIComponent(fileId)}/view`,
+        previewEmbedUrl: `https://drive.google.com/file/d/${encodeURIComponent(fileId)}/preview${urlObj.searchParams.get('resourcekey') ? `?resourcekey=${encodeURIComponent(urlObj.searchParams.get('resourcekey')!)}` : ''}`,
+        openUrl: urlObj.toString(),
         canEmbedPreview: true,
       };
     }
@@ -85,8 +79,8 @@ export function parseGoogleDriveUrl(rawUrl: string): ParsedGoogleDriveLink {
           isValidDriveUrl: true,
           id: queryId,
           kind: 'FOLDER',
-          previewEmbedUrl: `https://drive.google.com/embeddedfolderview?id=${encodeURIComponent(queryId)}#grid`,
-          openUrl: `https://drive.google.com/drive/folders/${encodeURIComponent(queryId)}`,
+          previewEmbedUrl: `https://drive.google.com/embeddedfolderview?id=${encodeURIComponent(queryId)}${urlObj.searchParams.get('resourcekey') ? `&resourcekey=${encodeURIComponent(urlObj.searchParams.get('resourcekey')!)}` : ''}#grid`,
+          openUrl: urlObj.toString(),
           canEmbedPreview: true,
         };
       }
@@ -94,8 +88,8 @@ export function parseGoogleDriveUrl(rawUrl: string): ParsedGoogleDriveLink {
         isValidDriveUrl: true,
         id: queryId,
         kind: 'FILE',
-        previewEmbedUrl: `https://drive.google.com/file/d/${encodeURIComponent(queryId)}/preview`,
-        openUrl: `https://drive.google.com/file/d/${encodeURIComponent(queryId)}/view`,
+        previewEmbedUrl: `https://drive.google.com/file/d/${encodeURIComponent(queryId)}/preview${urlObj.searchParams.get('resourcekey') ? `?resourcekey=${encodeURIComponent(urlObj.searchParams.get('resourcekey')!)}` : ''}`,
+        openUrl: urlObj.toString(),
         canEmbedPreview: true,
       };
     }
@@ -105,7 +99,7 @@ export function parseGoogleDriveUrl(rawUrl: string): ParsedGoogleDriveLink {
       id: null,
       kind: 'EXTERNAL',
       previewEmbedUrl: null,
-      openUrl: normalizedUrl,
+      openUrl: '',
       canEmbedPreview: false,
     };
   } catch {
@@ -114,7 +108,7 @@ export function parseGoogleDriveUrl(rawUrl: string): ParsedGoogleDriveLink {
       id: null,
       kind: 'EXTERNAL',
       previewEmbedUrl: null,
-      openUrl: normalizedUrl,
+      openUrl: '',
       canEmbedPreview: false,
     };
   }

@@ -3,6 +3,7 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   distDir: process.env.NODE_ENV === "production" ? ".next" : ".next-dev",
   serverExternalPackages: ["firebase-admin"],
+  outputFileTracingIncludes: { '/api/billing/*/pdf': ['./src/lib/billing/fonts/**/*'] },
   transpilePackages: [
     "@focoman/db",
     "@focoman/auth",

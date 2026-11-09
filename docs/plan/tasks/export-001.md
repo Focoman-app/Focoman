@@ -1,7 +1,7 @@
 ---
 id: EXPORT-001
 scope: Excel exports for every real business table/report dataset
-status: pending
+status: in-progress
 depends-on: [BILL-001]
 ---
 
@@ -13,6 +13,10 @@ Implement shared typed XLSX downloads using the canonical financial calculations
 
 ## Path
 `apps/web/src/features/dashboard/*`, relevant studio dashboard pages and their data actions; a new shared export module to be named by the architect. Reuse BILL-001 amount normalization.
+
+## Current implementation state
+
+The repository contains a typed OpenXML workbook writer and several integrated exports. Complete coverage and artifact readback across every listed dashboard dataset remain under verification.
 
 ## Verification
 Read files back; compare full row counts/totals/types/order with requested filters; test literal formula-like input, secret-column exclusion, multi-page results and studio/role isolation. Empty/large exports must behave explicitly.

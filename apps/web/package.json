@@ -4,11 +4,12 @@
   "private": true,
   "scripts": {
     "dev": "next dev -p 3000 -H 0.0.0.0",
-    "build": "NODE_ENV=production next build",
+    "build": "next build",
     "start": "next start -H 0.0.0.0",
     "lint": "next lint"
   },
   "dependencies": {
+    "@react-pdf/renderer": "4.9.0",
     "@types/node": "^22.10.2",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",

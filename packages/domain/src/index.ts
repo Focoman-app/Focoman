@@ -1,3 +1,5 @@
+import { getOrderFinancials, getReceiptSources } from './billing.ts';
+export * from './billing.ts';
 import type {
   OrderStatus,
   Task,
@@ -191,83 +193,24 @@ export interface OrderPaymentBreakdown {
 export function calculateOrderPaymentBreakdown(
   order: Pick<Order, 'orderNumber' | 'pricing' | 'paymentStatus' | 'createdAt' | 'eventDate'>
 ): OrderPaymentBreakdown {
-  const confirmedPrice = Math.max(
-    0,
-    Number(order.pricing?.finalConfirmedPrice ?? order.pricing?.estimatedPrice ?? 0) || 0
-  );
-  const advanceAmount = Math.max(0, Number(order.pricing?.advanceAmount ?? 0) || 0);
-  const advanceDate =
-    order.pricing?.advanceDate ||
-    (order.createdAt ? order.createdAt.slice(0, 10) : order.eventDate || '');
-
-  const rawInstallments = Array.isArray(order.pricing?.installments)
-    ? order.pricing.installments
-    : [];
-  const installments = rawInstallments.filter((inst) => inst && Number(inst.amount) > 0);
-  const installmentsTotal = installments.reduce(
-    (sum, inst) => sum + (Math.max(0, Number(inst.amount) || 0)),
-    0
-  );
-
-  const rawPaid = advanceAmount + installmentsTotal;
-  let totalPaid = rawPaid;
-  if (order.paymentStatus === 'PAID') {
-    if (rawPaid === 0 && confirmedPrice > 0) {
-      totalPaid = confirmedPrice;
-    } else if (confirmedPrice > 0) {
-      totalPaid = Math.max(rawPaid, confirmedPrice);
-    }
-  }
-  if (confirmedPrice > 0 && totalPaid > confirmedPrice) {
-    totalPaid = confirmedPrice;
-  }
-
-  const remainingAmount =
-    order.paymentStatus === 'PAID'
-      ? 0
-      : Math.max(0, confirmedPrice - totalPaid);
-
-  const receipts: OrderReceiptEntry[] = [];
-  const cleanOrderNum = (order.orderNumber || 'ORD').replace(/\s+/g, '');
-
-  if (advanceAmount > 0) {
-    receipts.push({
-      id: 'ADVANCE',
-      receiptNumber: `RCP-${cleanOrderNum}-ADV`,
-      type: 'ADVANCE',
-      label: 'Advance Payment',
-      amount: advanceAmount,
-      date: advanceDate,
-      notes: 'Booking Advance Payment',
-    });
-  }
-
-  installments.forEach((inst, idx) => {
-    const seq = String(idx + 1).padStart(2, '0');
-    receipts.push({
-      id: inst.id || `INST_${idx + 1}`,
-      receiptNumber: `RCP-${cleanOrderNum}-${seq}`,
-      type: 'INSTALLMENT',
-      label: `Installment #${idx + 1}`,
-      amount: Math.max(0, Number(inst.amount) || 0),
-      date: inst.date || advanceDate,
-      notes: inst.notes,
-      recordedBy: inst.recordedBy,
-    });
-  });
-
-  // Fallback receipt if order was marked PAID directly with 0 advance & 0 installments
-  if (receipts.length === 0 && order.paymentStatus === 'PAID' && totalPaid > 0) {
-    receipts.push({
-      id: 'FULL_PAYMENT',
-      receiptNumber: `RCP-${cleanOrderNum}-01`,
-      type: 'INSTALLMENT',
-      label: 'Full Settlement',
-      amount: totalPaid,
-      date: advanceDate,
-      notes: 'Full Order Payment',
-    });
-  }
+  const amounts = getOrderFinancials(order);
+  const confirmedPrice = amounts.confirmed / 100;
+  const advanceAmount = amounts.advance / 100;
+  const advanceDate = order.pricing.advanceDate || '';
+  const installments = order.pricing.installments || [];
+  const installmentsTotal = amounts.installmentsTotal / 100;
+  const totalPaid = amounts.paid / 100;
+  const remainingAmount = amounts.remaining / 100;
+  const receipts: OrderReceiptEntry[] = getReceiptSources(order)
+    .filter(source => !source.requiresConfirmation)
+    .map(source => ({
+      id: source.source.kind === 'ADVANCE' ? 'ADVANCE' : source.source.id,
+      receiptNumber: '',
+      type: source.source.kind,
+      label: source.label,
+      amount: source.amountMinor / 100,
+      date: source.paymentDate!,
+    }));
 
   return {
     confirmedPrice,

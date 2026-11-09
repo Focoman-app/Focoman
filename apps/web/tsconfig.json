@@ -47,7 +47,8 @@
       "@focoman/entitlements": [
         "../../packages/entitlements/src/index.ts"
       ]
-    }
+    },
+    "allowImportingTsExtensions": true
   },
   "include": [
     "**/*.ts",

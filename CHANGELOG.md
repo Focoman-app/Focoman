@@ -2,6 +2,14 @@
 
 All meaningful changes to the Focoman codebase, documentation, architecture, or agent workflow instructions must be recorded in this file according to Section 20 of **[Agents.md](Agents.md)**.
 
+## CHG-079 — Rebased Billing Delivery and Security Hardening
+
+- **Date:** 2026-11-10
+- **Area:** billing snapshots/PDF delivery, OMS billing entry point, Drive URL validation, WhatsApp authorization/webhook boundary, package integration.
+- **Change:** Rebased the approved billing delivery work onto the latest remote CRM and studio-operation changes. Added owner-authorized immutable billing documents, transaction-backed issuing/voiding, server-rendered PDF download/print using bundled Noto fonts, and an OMS billing panel. Canonical financial calculations now only use recorded advance/installment entries; a status flag cannot invent a receipt, date, or collected amount. Tightened Drive links to HTTPS exact Google hosts and preserve Drive resource keys. WhatsApp template previews now require an authenticated studio owner and a matching real order. Webhook verification no longer has a default token, requires a Meta HMAC signature before parsing, and ignores unknown senders instead of assigning them to an arbitrary studio.
+- **Verification:** TypeScript typecheck passed; `npm test` passed 36/36. Production build was started after fixing the Windows-incompatible build script; manual billing PDF/print, Drive permission, and WhatsApp provider UAT remain pending.
+- **Limitations:** Drive embed behavior remains conditional on real permitted files and user UAT. No external WhatsApp messages, Drive permission changes, deployment, or provider setup was performed.
+
 ## CHG-078 — Plan Minimal Billing Documents, Excel Exports and Drive Previews
 
 - **Date:** 2026-11-05

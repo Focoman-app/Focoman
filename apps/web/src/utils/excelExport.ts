@@ -14,7 +14,7 @@ export interface ExcelColumnSpec<T = any> {
   type?: ExcelCellType;
   width?: number;
   /** Optional custom value extractor */
-  getValue?: (row: T, index: number) => string | number | null | undefined;
+  getValue?: (row: T, index: number) => string | number | Date | null | undefined;
   /** If true, numeric values in this column are summed in the bottom Totals row */
   sumInTotals?: boolean;
   /** Optional static text in the Totals row (e.g. 'TOTAL') */
@@ -117,16 +117,22 @@ function buildWorksheetXml<T>(sheet: ExcelSheetSpec<T>): string {
 
         const cellType = col.type || (typeof rawVal === 'number' ? 'number' : 'string');
 
+        if (rawVal === null || rawVal === undefined || rawVal === '') return `<c r="${ref}"/>`;
+        if (cellType === 'date') {
+          const date = rawVal instanceof Date ? rawVal : new Date(String(rawVal));
+          if (!Number.isFinite(date.getTime())) throw new Error(`Invalid date in ${sheet.name}: ${col.header}`);
+          if (typeof rawVal === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rawVal) && date.toISOString().slice(0, 10) !== rawVal) throw new Error(`Invalid calendar date in ${sheet.name}: ${col.header}`);
+          return `<c r="${ref}" t="d" s="8"><v>${date.toISOString()}</v></c>`;
+        }
+
         if (cellType === 'number' || cellType === 'currency') {
-          const numVal =
-            typeof rawVal === 'number'
-              ? rawVal
-              : Number(String(rawVal ?? '0').replace(/[^0-9.-]/g, '')) || 0;
+          const numVal = typeof rawVal === 'number' ? rawVal : Number(rawVal);
+          if (!Number.isFinite(numVal)) throw new Error(`Invalid numeric value in ${sheet.name}: ${col.header}`);
           if (col.sumInTotals) {
             columnTotals[colIdx] += numVal;
           }
           const styleId = cellType === 'currency' ? 4 : 3;
-          return `<c r="${ref}" s="${styleId}"><v>${Number.isFinite(numVal) ? numVal : 0}</v></c>`;
+          return `<c r="${ref}" s="${styleId}"><v>${numVal}</v></c>`;
         }
 
         const strVal = rawVal === null || rawVal === undefined ? '' : String(rawVal);
@@ -166,6 +172,7 @@ function buildWorksheetXml<T>(sheet: ExcelSheetSpec<T>): string {
   <sheetFormatPr defaultRowHeight="18"/>
   ${colsXml}
   <sheetData>${sheetRowsXml.join('')}</sheetData>
+  ${columns.length ? `<autoFilter ref="A1:${colIndexToLetter(columns.length - 1)}${rows.length + 1}"/>` : ''}
 </worksheet>`;
 }
 
@@ -173,8 +180,8 @@ function buildStylesXml(): string {
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
   <numFmts count="2">
-    <numFmt numFmtId="164" formatCode="#,##0"/>
-    <numFmt numFmtId="165" formatCode="&quot;₹&quot;#,##0"/>
+    <numFmt numFmtId="164" formatCode="#,##0.##"/>
+    <numFmt numFmtId="165" formatCode="&quot;₹&quot;#,##0.00"/>
   </numFmts>
   <fonts count="3">
     <font><sz val="10"/><color rgb="FF0F172A"/><name val="Calibri"/></font>
@@ -207,7 +214,7 @@ function buildStylesXml(): string {
   <cellStyleXfs count="1">
     <xf numFmtId="0" fontId="0" fillId="0" borderId="0"/>
   </cellStyleXfs>
-  <cellXfs count="8">
+  <cellXfs count="9">
     <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
     <xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1">
       <alignment vertical="center" wrapText="0"/>
@@ -230,6 +237,7 @@ function buildStylesXml(): string {
     <xf numFmtId="165" fontId="2" fillId="3" borderId="2" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1">
       <alignment horizontal="right" vertical="center"/>
     </xf>
+    <xf numFmtId="14" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1"/>
   </cellXfs>
 </styleSheet>`;
 }
@@ -343,16 +351,16 @@ function buildZipArchive(files: Array<{ path: string; content: string }>): Uint8
 /**
  * Generates and downloads an OpenXML .xlsx workbook with one or more sheets.
  */
-export function exportWorkbookToExcel(
-  filenameBase: string,
-  sheets: ExcelSheetSpec<any>[]
-): void {
-  if (typeof window === 'undefined' || sheets.length === 0) return;
-
-  const validSheets = sheets.map((s, idx) => ({
-    ...s,
-    safeName: sanitizeSheetName(s.name, idx),
-  }));
+export function buildExcelWorkbook(sheets: ExcelSheetSpec<any>[]): Uint8Array {
+  if (!sheets.length || !sheets.some(sheet => sheet.rows.length)) throw new Error('No matching records to export.');
+  if (sheets.reduce((sum, sheet) => sum + sheet.rows.length, 0) > 10000) throw new Error('Export exceeds 10,000 rows. Narrow your filters.');
+  const scope: ExcelSheetSpec = { name: 'Export scope', includeTotalsRow: false, columns: [{ header: 'Dataset', key: 'dataset' }, { header: 'Rows', key: 'rows', type: 'number' }, { header: 'Exported at (UTC)', key: 'at' }], rows: sheets.map(sheet => ({ dataset: sheet.name, rows: sheet.rows.length, at: new Date().toISOString() })) };
+  const used = new Set<string>();
+  const validSheets = [...sheets, scope].map((s, idx) => {
+    const base = sanitizeSheetName(s.name, idx); let safeName = base; let suffix = 1;
+    while (used.has(safeName.toLowerCase())) { const tail = ` (${suffix++})`; safeName = base.slice(0, 31-tail.length) + tail; }
+    used.add(safeName.toLowerCase()); return { ...s, safeName };
+  });
 
   const contentTypesXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
@@ -411,7 +419,14 @@ export function exportWorkbookToExcel(
     });
   });
 
-  const zipBytes = buildZipArchive(archiveEntries);
+  return buildZipArchive(archiveEntries);
+}
+
+export function exportWorkbookToExcel(filenameBase: string, sheets: ExcelSheetSpec<any>[]): void {
+  if (typeof window === 'undefined') throw new Error('Downloads require a browser.');
+  let zipBytes: Uint8Array;
+  try { zipBytes = buildExcelWorkbook(sheets); }
+  catch (error) { window.alert(error instanceof Error ? error.message : 'Export failed.'); return; }
   const blob = new Blob([zipBytes.buffer as ArrayBuffer], {
     type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   });

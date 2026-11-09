@@ -59,6 +59,7 @@ export async function simulateWhatsappBotQueryAction(
 export async function getWhatsappTemplatePreviewAction(
   studioSlug: string,
   templateId: WhatsAppTemplateId,
+  idToken: string,
   orderId?: string
 ): Promise<{
   success: boolean;
@@ -67,6 +68,8 @@ export async function getWhatsappTemplatePreviewAction(
   error?: string;
 }> {
   try {
+    const actor = await requireVerifiedUser(idToken);
+    await requireStudioMember(actor.uid, studioSlug, 'STUDIO_OWNER');
     const templateDef = WHATSAPP_TEMPLATES[templateId];
     if (!templateDef) {
       return { success: false, error: `Template [${templateId}] does not exist.` };
@@ -77,29 +80,29 @@ export async function getWhatsappTemplatePreviewAction(
       return { success: false, error: 'Studio not found.' };
     }
 
-    let order = null;
-    if (orderId) {
-      order = await getOrderById(orderId);
-    }
+    if (!orderId) return { success: false, error: 'Select a real order to preview this message.' };
+    const order = await getOrderById(orderId);
+    if (!order || order.studioId !== studio.id || order.isDeleted) return { success: false, error: 'Order unavailable.' };
 
-    const canonicalOrderId = order?.orderNumber || 'ORD-DEMO-261106-143025';
+    const canonicalOrderId = order.orderNumber;
     const text = templateDef.generateText({
       studioName: studio.name,
-      customerName: order?.customer?.name || 'Karthik & Ananya',
+      customerName: order.customer.name,
       orderNumber: canonicalOrderId,
-      eventType: order?.eventType || 'Wedding & Reception',
-      eventDate: order?.eventDate || '2026-11-15',
-      callTime: order?.callTime || '08:00 AM',
-      venue: order?.eventLocation || 'Grand Palace Hall, Chennai',
-      balanceDue: order?.pricing?.remainingAmount ?? 35000,
+      eventType: order.eventType,
+      eventDate: order.eventDate,
+      callTime: order.callTime || 'Not recorded',
+      venue: order.eventLocation || 'Not recorded',
+      balanceDue: order.pricing.remainingAmount,
       trackingPasskey: canonicalOrderId,
-      passkeyPin: order?.passkeyPin || '482916',
-      trackingUrl: `https://focoman.web.app/track/${canonicalOrderId}`,
-      crewName: 'Suresh Kumar',
-      taskTitle: 'Traditional Photography & 4K Cinematography',
+      passkeyPin: order.passkeyPin || '',
+      trackingUrl: `https://focoman.com/track/${order.trackingPasskey}`,
+      crewName: 'Not assigned',
+      taskTitle: 'Not assigned',
     });
 
-    const targetPhone = order?.customer?.phone || studio.ownerPhone || '9876543210';
+    if (!order.customer.phone) return { success: false, error: 'This order has no customer phone number.' };
+    const targetPhone = order.customer.phone;
     const clickToChatUrl = generateWhatsAppClickToChatUrl(targetPhone, text);
 
     return {

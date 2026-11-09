@@ -1,7 +1,7 @@
 ---
 id: DELIVERY-001
 scope: integrated output verification and completion records
-status: pending
+status: in-progress
 depends-on: [BILL-001, EXPORT-001, DRIVE-001]
 ---
 
