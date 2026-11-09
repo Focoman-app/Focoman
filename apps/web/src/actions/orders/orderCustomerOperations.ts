@@ -253,12 +253,24 @@ export async function updateOrderDriveDeliverablesCore(input: {
     const decoded = await requireVerifiedUser(input.idToken);
     const membership = await requireStudioMember(decoded.uid, input.studioId);
 
-    const existingOrder = await getOrderById(input.orderId);
+    const [existingOrder, studio] = await Promise.all([
+      getOrderById(input.orderId),
+      getStudioBySlug(input.studioId),
+    ]);
     if (
       !existingOrder ||
       existingOrder.studioId.toLowerCase() !== input.studioId.toLowerCase()
     ) {
       return { success: false, error: "Order not found in authorized studio." };
+    }
+
+    const { getEffectiveStudioTier } = await import("@/lib/proEntitlements");
+    const tier = getEffectiveStudioTier(studio?.ownerEmail || decoded.email, studio?.planInfo);
+    if (tier === "FREE" && input.deliverables.length > (existingOrder.driveDeliverables?.length || 0)) {
+      return {
+        success: false,
+        error: "Google Drive Photo Preview & Selection is included in the ₹999/month and ₹1,999/month plans. Please upgrade your studio plan to add Drive deliverables.",
+      };
     }
 
     const actorName = decoded.name || decoded.email || "Studio Staff";
@@ -300,6 +312,7 @@ export async function submitCustomerDeliverableReviewCore(input: {
   deliverableId: string;
   approved: boolean;
   feedback?: string;
+  selectedPhotos?: string[];
   idToken: string;
 }): Promise<{
   success: boolean;
@@ -354,12 +367,19 @@ export async function submitCustomerDeliverableReviewCore(input: {
       };
     }
 
+    const cleanSelectedPhotos = Array.isArray(input.selectedPhotos)
+      ? input.selectedPhotos.map((p) => p.trim()).filter(Boolean)
+      : targetDeliverable.selectedPhotos;
+
     const updatedDeliverables = currentDeliverables.map((d) =>
       d.id === input.deliverableId
         ? {
             ...d,
             clientApproved: input.approved,
             clientFeedback: input.feedback?.trim() || undefined,
+            ...(cleanSelectedPhotos && cleanSelectedPhotos.length > 0
+              ? { selectedPhotos: cleanSelectedPhotos }
+              : {}),
             clientReviewedAt: nowIso,
           }
         : d
@@ -367,6 +387,12 @@ export async function submitCustomerDeliverableReviewCore(input: {
 
     const actorName =
       decoded.name || decoded.email || order.customer.name || "Customer";
+    const selectionSummary =
+      cleanSelectedPhotos && cleanSelectedPhotos.length > 0
+        ? ` · Selected ${cleanSelectedPhotos.length} photo(s): ${cleanSelectedPhotos.slice(0, 8).join(", ")}${
+            cleanSelectedPhotos.length > 8 ? "..." : ""
+          }`
+        : "";
     const reviewAudit: OrderAuditEntry = {
       id: `audit_${Date.now()}_deliv_review`,
       timestamp: getStudioTimestampIST(new Date()),
@@ -377,7 +403,9 @@ export async function submitCustomerDeliverableReviewCore(input: {
         : "Deliverable Revision Requested",
       details: `${input.approved ? "Approved" : "Requested changes on"} "${
         targetDeliverable.title
-      }"${input.feedback?.trim() ? ` — Note: "${input.feedback.trim()}"` : ""}`,
+      }"${selectionSummary}${
+        input.feedback?.trim() ? ` — Note: "${input.feedback.trim()}"` : ""
+      }`,
     };
 
     const updated = await updateOrder(order.id, {

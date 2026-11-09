@@ -26,6 +26,7 @@ interface DashboardHomeViewProps {
   initialOrders: Order[];
   hasMarketplace: boolean;
   userId?: string;
+  planTier?: "FREE" | "PROFESSIONAL" | "COMPLETE";
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -262,6 +263,7 @@ export function DashboardHomeView({
   initialOrders,
   hasMarketplace,
   userId,
+  planTier = "COMPLETE",
 }: DashboardHomeViewProps) {
   // ── Orders state ──
   const [orders, setOrders] = useState<Order[]>(initialOrders);
@@ -620,10 +622,28 @@ export function DashboardHomeView({
           <section className="rounded-2xl border border-border-default bg-white shadow-xs overflow-hidden">
         <div className="px-4 sm:px-5 py-3 sm:py-4 border-b border-border-divider">
           <PanelHeader
-            title="Business Reports"
+            title={planTier === "PROFESSIONAL" ? "Basic Business Dashboard" : "Business Overview & Reports"}
             collapsed={collapsed.businessReports}
             onToggle={() => togglePanel("businessReports")}
-          ></PanelHeader>
+          >
+            <div className="flex items-center gap-2">
+              {planTier === "PROFESSIONAL" ? (
+                <Link
+                  href={`/checkout?studio=${studioSlug}&upgrade=reports`}
+                  className="text-[10px] font-bold text-brand-orange-primary bg-brand-orange-background border border-brand-orange-soft px-2.5 py-1 rounded-lg hover:bg-orange-100/70 transition"
+                >
+                  Unlock Advanced Reports &amp; Excel Export (₹1,999/mo) →
+                </Link>
+              ) : (
+                <Link
+                  href={`/${studioSlug}/dashboard/reports`}
+                  className="text-[11px] font-semibold text-brand-blue-primary hover:underline"
+                >
+                  Advanced Reports &amp; Excel Export →
+                </Link>
+              )}
+            </div>
+          </PanelHeader>
         </div>
 
         {!collapsed.businessReports && (

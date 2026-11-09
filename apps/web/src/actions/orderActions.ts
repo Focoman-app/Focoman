@@ -35,6 +35,7 @@ import {
   assignTaskCrewCore,
   checkIsStudioStaffCore,
   confirmResourceAvailabilityCore,
+  updateAssignmentCallTimeCore,
 } from "./orders/orderCrewOperations";
 import {
   getMySyncedOrdersCore,
@@ -298,6 +299,7 @@ export async function submitCustomerDeliverableReviewAction(input: {
   deliverableId: string;
   approved: boolean;
   feedback?: string;
+  selectedPhotos?: string[];
   idToken: string;
 }): Promise<{
   success: boolean;
@@ -306,3 +308,15 @@ export async function submitCustomerDeliverableReviewAction(input: {
 }> {
   return submitCustomerDeliverableReviewCore(input);
 }
+
+export async function updateAssignmentCallTimeAction(input: {
+  orderId: string;
+  studioId: string;
+  memberId: string;
+  callTime?: string;
+  venueNotes?: string;
+  idToken: string;
+}): Promise<{ success: boolean; order?: Order; error?: string }> {
+  return updateAssignmentCallTimeCore(input);
+}
+

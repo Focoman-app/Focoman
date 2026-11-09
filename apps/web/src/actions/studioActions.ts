@@ -147,6 +147,7 @@ export async function updateStudioAction(input: {
     configuredServices?: StudioServiceConfig[];
     features?: Partial<Studio['features']>;
     billingProfile?: Studio['billingProfile'];
+    temporaryCrew?: Studio['temporaryCrew'];
   };
   idToken: string;
 }): Promise<{ success: boolean; studio?: Studio; error?: string }> {
@@ -163,6 +164,7 @@ export async function updateStudioAction(input: {
       ...(input.updates.configuredServices ? { configuredServices: input.updates.configuredServices } : {}),
       ...(input.updates.features ? { features: input.updates.features as any } : {}),
       ...(input.updates.billingProfile ? { billingProfile: input.updates.billingProfile } : {}),
+      ...(input.updates.temporaryCrew !== undefined ? { temporaryCrew: input.updates.temporaryCrew } : {}),
     });
 
     return { success: true, studio: updated || undefined };

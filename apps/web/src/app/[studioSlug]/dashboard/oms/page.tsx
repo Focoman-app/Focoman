@@ -16,6 +16,8 @@ import {
   StudioPackage,
   OrderDriveDeliverable,
   StudioBillingProfile,
+  StudioLead,
+  StudioLeadWebhookConfig,
 } from "@focoman/types";
 import {
   getStudioOrdersAction,
@@ -33,6 +35,7 @@ import {
 import { getStudioMembersAction } from "@/actions/memberActions";
 import { getStudioCustomersAction } from "@/actions/customerActions";
 import { getStudioServicesAction, updateStudioAction } from "@/actions/studioActions";
+import { getStudioLeadsAction } from "@/actions/leadActions";
 import { DEFAULT_STUDIO_SERVICES } from "@/lib/studioServices";
 import { useStudioWorkspace } from "@/components/StudioWorkspaceProvider";
 import { AddCrewMemberModal } from "@/components/AddCrewMemberModal";
@@ -44,6 +47,7 @@ import {
   exportOmsOrdersToExcel,
 } from "@/components/oms/omsConstants";
 import { OmsOrdersListPanel } from "@/components/oms/OmsOrdersListPanel";
+import { OmsLeadsPanel } from "@/components/oms/OmsLeadsPanel";
 import {
   OmsCustomerAccessCard,
   OmsPreflightCheckSection,
@@ -70,6 +74,10 @@ export default function OmsPage({
     getIdToken,
   } = useStudioWorkspace();
   const [orders, setOrders] = useState<Order[]>([]);
+  const [omsSection, setOmsSection] = useState<"ORDERS" | "LEADS">("ORDERS");
+  const [leads, setLeads] = useState<StudioLead[]>([]);
+  const [webhookConfig, setWebhookConfig] =
+    useState<StudioLeadWebhookConfig | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = useMemo(
     () => orders.find((o) => o.id === selectedId) || null,
@@ -470,16 +478,21 @@ export default function OmsPage({
           setLoading(false);
           return;
         }
-        const [data, customersData, membersData, servicesRes] =
+        const [data, customersData, membersData, servicesRes, leadsRes] =
           await Promise.all([
             getStudioOrdersAction(studioSlug, token),
             getStudioCustomersAction(studioSlug, token),
             getStudioMembersAction(studioSlug, token).catch(() => []),
             getStudioServicesAction(studioSlug, token).catch(() => null),
+            getStudioLeadsAction(studioSlug, token).catch(() => null),
           ]);
         setOrders(data);
         setStudioCustomers(customersData);
         setStudioMembers(membersData || []);
+        if (leadsRes) {
+          setLeads(leadsRes.leads || []);
+          setWebhookConfig(leadsRes.webhookConfig || null);
+        }
         if (servicesRes && servicesRes.success) {
           if (Array.isArray(servicesRes.services)) {
             setStudioServicesList(servicesRes.services);
@@ -518,13 +531,19 @@ export default function OmsPage({
   useEffect(() => {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
+    const urlSection = params.get("section") || params.get("tab");
+    if (urlSection && urlSection.toLowerCase() === "leads") {
+      setOmsSection("LEADS");
+    }
     const urlOrderId = params.get("orderId");
     if (urlOrderId) {
+      setOmsSection("ORDERS");
       setSelectedId(urlOrderId);
     }
     const action = params.get("action");
     const newOrder = params.get("newOrder");
     if (action === "new-order" || newOrder === "true" || newOrder === "1") {
+      setOmsSection("ORDERS");
       handleOpenCreateModal();
     }
   }, [handleOpenCreateModal]);
@@ -1370,26 +1389,45 @@ export default function OmsPage({
 
   return (
     <div className="flex h-full bg-surface-app">
-      <OmsOrdersListPanel
-        studioSlug={studioSlug}
-        orders={orders}
-        filtered={filtered}
-        selected={selected}
-        selectedId={selectedId}
-        onSelectOrder={setSelectedId}
-        loading={loading}
-        query={query}
-        onChangeQuery={setQuery}
-        statusFilter={statusFilter}
-        onChangeStatusFilter={setStatusFilter}
-        sortBy={sortBy}
-        onChangeSortBy={setSortBy}
-        onExportExcel={handleExportOmsExcel}
-        onOpenCreateModal={handleOpenCreateModal}
-      />
+      {omsSection === "LEADS" ? (
+        <OmsLeadsPanel
+          studioSlug={studioSlug}
+          ordersCount={orders.length}
+          leads={leads}
+          webhookConfig={webhookConfig}
+          onSwitchToOrders={(orderId) => {
+            setOmsSection("ORDERS");
+            if (orderId) {
+              setSelectedId(orderId);
+            }
+          }}
+          getIdToken={getIdToken}
+          onRefreshAll={() => loadOrders(workspaceToken)}
+        />
+      ) : (
+        <>
+          <OmsOrdersListPanel
+            studioSlug={studioSlug}
+            orders={orders}
+            filtered={filtered}
+            selected={selected}
+            selectedId={selectedId}
+            onSelectOrder={setSelectedId}
+            loading={loading}
+            query={query}
+            onChangeQuery={setQuery}
+            statusFilter={statusFilter}
+            onChangeStatusFilter={setStatusFilter}
+            sortBy={sortBy}
+            onChangeSortBy={setSortBy}
+            onExportExcel={handleExportOmsExcel}
+            onOpenCreateModal={handleOpenCreateModal}
+            leadsCount={leads.length}
+            onSwitchToLeads={() => setOmsSection("LEADS")}
+          />
 
-      {/* Selected Order Detail Drawer */}
-      {selected && (
+          {/* Selected Order Detail Drawer */}
+          {selected && (
         <aside className="h-full w-full lg:w-1/2 overflow-y-auto bg-white p-6 border-l border-border-default space-y-6">
           <div className="flex justify-between items-center pb-4 border-b border-border-default">
             <div className="flex items-center gap-2 min-w-0">
@@ -1579,6 +1617,8 @@ export default function OmsPage({
             />
           )}
         </aside>
+      )}
+        </>
       )}
 
       {/* New Order Modal */}

@@ -1,9 +1,11 @@
+import { redirect } from "next/navigation";
 import { Order } from "@focoman/types";
 import { toMemberWorkView } from "@focoman/domain";
 import { getMembersByStudio, getOrdersByStudio, getTasksByMember, getStudioBySlug } from "@focoman/db";
 import { DashboardHomeView } from "@/features/dashboard/DashboardHomeView";
 import { MemberWorkDashboardView } from "@/features/dashboard/MemberWorkDashboardView";
 import { requireDashboardStudioAccess } from "@/lib/dashboardAccess";
+import { getEffectiveStudioTier } from "@/lib/proEntitlements";
 
 export default async function DashboardPage({ params }: { params: Promise<{ studioSlug: string }> }) {
   const { studioSlug } = await params;
@@ -41,6 +43,13 @@ export default async function DashboardPage({ params }: { params: Promise<{ stud
     getStudioBySlug(studioSlug),
   ]);
 
+  const effectiveTier = getEffectiveStudioTier(studio?.ownerEmail || access.decoded.email, studio?.planInfo);
+
+  // Free Plan (₹0) does NOT include the Business Dashboard — direct Free users to OMS
+  if (effectiveTier === "FREE") {
+    redirect(`/${studioSlug}/dashboard/oms`);
+  }
+
   const hasMarketplace = true;
 
   return (
@@ -48,6 +57,7 @@ export default async function DashboardPage({ params }: { params: Promise<{ stud
       studioSlug={studioSlug}
       initialOrders={orders}
       hasMarketplace={hasMarketplace}
+      planTier={effectiveTier}
     />
   );
 }

@@ -6,7 +6,7 @@ import { getStudioBySlug, getMembershipsByUid } from "@focoman/db";
 import { Studio } from "@focoman/types";
 import { requireDashboardStudioAccess } from "@/lib/dashboardAccess";
 
-import { isStudioProEntitled, getEffectiveStudioFeatures, isLifetimeProEmail } from "@/lib/proEntitlements";
+import { getEffectiveStudioTier, getEffectiveStudioFeatures } from "@/lib/proEntitlements";
 
 const APP_ENV = process.env.NEXT_PUBLIC_APP_ENV || "local";
 
@@ -39,8 +39,14 @@ export default async function DashboardLayout({
       role: m.role,
     }));
 
-  const isProPlan = isStudioProEntitled(studio.ownerEmail, studio.planInfo);
+  const effectiveTier = getEffectiveStudioTier(studio.ownerEmail, studio.planInfo);
   const effectiveFeatures = getEffectiveStudioFeatures(studio.ownerEmail, studio.features, studio.planInfo);
+  const sidebarPlan =
+    effectiveTier === "COMPLETE"
+      ? "complete"
+      : effectiveTier === "PROFESSIONAL"
+      ? "professional"
+      : "basic";
 
   const serializedStudio: Studio = {
     id: studio.id,
@@ -51,6 +57,7 @@ export default async function DashboardLayout({
     ownerName: access?.membership.role === "STUDIO_OWNER" ? studio.ownerName : "Studio Owner",
     ownerEmail: access?.membership.role === "STUDIO_OWNER" ? studio.ownerEmail : "",
     features: effectiveFeatures,
+    planInfo: studio.planInfo,
     configuredServices: studio.configuredServices || undefined,
     createdAt: studio.createdAt || new Date().toISOString(),
     updatedAt: studio.updatedAt || new Date().toISOString(),
@@ -62,7 +69,7 @@ export default async function DashboardLayout({
         <DashboardSidebar
           studioSlug={studioSlug}
           role={access?.membership.role || "STUDIO_OWNER"}
-          plan={isProPlan ? "complete" : "basic"}
+          plan={sidebarPlan}
           studioName={serializedStudio.name}
           studioLogoUrl={serializedStudio.logoUrl}
           ownerName={serializedStudio.ownerName}

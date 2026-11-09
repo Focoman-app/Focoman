@@ -1,7 +1,7 @@
-# FocoMan — Three-Tier Pricing & Subscription Entitlement Audit
+# FocoMan — Three-Tier Pricing, Value-Added Services & Subscription Entitlement Audit
 
-**Audit Date:** 2026-11-06  
-**Scope:** Three-Tier Subscription Model (`Free — ₹0`, `₹999/month`, `₹1,999/month`) — Routing & Entitlement Enforcement Analysis  
+**Last Updated:** 2026-11-09  
+**Scope:** Three-Tier Subscription Model (`Free — ₹0`, `₹999/month`, `₹1,999/month`) + Value-Added Services (`8072333075`) — Routing & Entitlement Enforcement Status  
 
 ---
 
@@ -9,19 +9,28 @@
 
 | Plan Tier | Monthly Price | Included Capabilities |
 | :--- | :--- | :--- |
-| **Free Plan** | `₹0` | • Basic OMS (Order Management System)<br>• Studio Marketplace<br>*(Note: Business Dashboard is NOT included in the Free plan; Free users should land directly on OMS.)* |
-| **Professional Plan** | `₹999/month` | **Everything in Free Plan, plus:**<br>• Advanced OMS — Google Drive Photo Preview & Selection (including supported customer review functionality)<br>• CRM (Customer Relationship Management)<br>• ERP (Studio Operations)<br>• Basic Business Dashboard (Order counts, Revenue overview, Pending payment overview) |
+| **Free Plan** | `₹0` | • Basic OMS (Order Management System)<br>• Studio Marketplace<br>*(Note: Business Dashboard is NOT included in the Free plan; Free users are automatically directed to OMS.)* |
+| **Professional Plan** | `₹999/month` | **Everything in Free Plan, plus:**<br>• Advanced OMS (Google Drive Photo Preview & Selection, including supported customer review functionality)<br>• CRM (Customer Relationship Management)<br>• ERP (Studio Operations)<br>• Basic Business Dashboard (Order counts, Revenue overview, Pending payment overview) |
 | **Complete Plan** | `₹1,999/month` | **Everything in ₹999/month Plan, plus:**<br>• WhatsApp Operations & Interactive Bot<br>• Advanced Business Reports & Analytics<br>• Excel Report Exports |
 
 ---
 
-## 2. Verification of Current Entitlement & Routing Enforcement in Repository
+## 2. Value-Added Services (Custom-Quoted Onboarding & Creative Add-ons)
 
-| # | Requirement | Current Enforcement Status | Actual Code Behavior & Evidence | Required Future Changes |
-| :--- | :--- | :--- | :--- | :--- |
-| 1 | **Free users landing directly on OMS instead of the Business Dashboard** | `NOT ENFORCED` | • `apps/web/src/app/workspaces/page.tsx:388` links `"Launch Workspace →"` to `/${m.studioId}/dashboard` for all studios.<br>• `apps/web/src/app/[studioSlug]/dashboard/page.tsx:38-53` renders `<DashboardHomeView />` for all `STUDIO_OWNER` users without checking `studio.planInfo` or redirecting Free-plan users to `/${studioSlug}/dashboard/oms`. | In `apps/web/src/app/[studioSlug]/dashboard/page.tsx`, check whether the studio has an active paid plan (`PROFESSIONAL` / `COMPLETE`), active 30-day trial, or lifetime Pro entitlement; if on the `FREE` plan, call `redirect(\`/\${studioSlug}/dashboard/oms\`)`. |
-| 2 | **Business Dashboard access restricted to paid plans (Basic Business Dashboard from ₹999)** | `NOT ENFORCED` | • `apps/web/src/components/DashboardSidebar.tsx:118-129,413-444` displays the `"Dashboard"` navigation item (`/${slug}/dashboard`) for all studio owners regardless of plan.<br>• `apps/web/src/features/dashboard/DashboardHomeView.tsx` renders full period comparisons, trend charts, and report snapshots rather than scoping the `₹999/month` plan to Basic Business Dashboard metrics (Order counts, Revenue overview, Pending payment overview). | 1. Hide or lock the `"Dashboard"` sidebar link in `DashboardSidebar.tsx` for Free-plan studios.<br>2. Scope `DashboardHomeView.tsx` on the `₹999/month` plan to Basic Business Dashboard metrics (Order counts, Revenue overview, Pending payment overview). |
-| 3 | **Google Drive photo preview and selection available from ₹999 (Advanced OMS)** | `NOT ENFORCED AT RUNTIME` | • `PLAN_CAPABILITIES.PROFESSIONAL` (`packages/config/src/index.ts:345`) includes `DRIVE_CLIENT_REVIEW` and `OMS_ADVANCED`.<br>• However, `GoogleDriveDeliverablesSection.tsx` and `updateOrderDriveDeliverablesCore` / `submitClientDeliverableReviewCore` (`apps/web/src/actions/orders/orderCustomerOperations.ts`) do not check studio plan entitlements or call `requireCapability(studioId, 'DRIVE_CLIENT_REVIEW')`. | Gate adding/editing Google Drive deliverables in `OmsOrderDetailDrawer.tsx` / `GoogleDriveDeliverablesSection.tsx` and `orderCustomerOperations.ts` behind `PROFESSIONAL` (`₹999/month`) or `COMPLETE` (`₹1,999/month`) plan entitlement. |
-| 4 | **CRM and ERP available from ₹999** | `PARTIALLY CONFIGURED / NOT ENFORCED AT RUNTIME` | • `PLAN_CAPABILITIES.PROFESSIONAL` (`packages/config/src/index.ts:347-352`) and `getEffectiveStudioFeatures` (`apps/web/src/lib/proEntitlements.ts:59-68`) enable `crm` and `erp` for `PROFESSIONAL` (`₹999`) and `COMPLETE` (`₹1,999`).<br>• `apps/web/src/app/[studioSlug]/dashboard/crm/page.tsx:177-194` renders a `"PRO CAPABILITY"` upgrade banner for Free-plan studios, but does not block viewing/creating customers in `customerActions.ts`.<br>• `apps/web/src/app/[studioSlug]/dashboard/erp/page.tsx` and `memberActions.ts` do not restrict Free-plan access at runtime. | Enforce `requireCapability(studioId, 'CUSTOMER_CRM')` and `requireCapability(studioId, 'STUDIO_ERP')` in server actions and gate `/dashboard/crm` and `/dashboard/erp` routes for Free-plan studios while preserving read-only historical data. |
-| 5 | **WhatsApp and Advanced Business Reports (+ Excel Exports) available only from ₹1,999** | `NOT ENFORCED AT RUNTIME` | • `PLAN_CAPABILITIES.COMPLETE` (`packages/config/src/index.ts:369-373`) restricts `WHATSAPP_NOTIFICATIONS`, `WHATSAPP_OPERATIONS`, `WHATSAPP_BOT`, `BUSINESS_REPORTS`, and `ANALYTICS_ADVANCED` to `COMPLETE` (`₹1,999`).<br>• However, `getEffectiveStudioFeatures` (`apps/web/src/lib/proEntitlements.ts:59-68`) currently returns `whatsapp: true` and `reports: true` for **both** `PROFESSIONAL` (`₹999`) and `COMPLETE` (`₹1,999`).<br>• Neither `/[studioSlug]/dashboard/whatsapp/page.tsx` (`whatsappActions.ts`), nor `/[studioSlug]/dashboard/reports/page.tsx` (`BusinessReportsView.tsx`), nor Excel export buttons enforce a `COMPLETE` (`₹1,999`) plan check at runtime. | 1. Update `getEffectiveStudioFeatures` in `apps/web/src/lib/proEntitlements.ts` so `PROFESSIONAL` (`₹999`) enables `oms`, `crm`, and `erp` (plus Basic Business Dashboard), while `whatsapp` and `reports` require `COMPLETE` (`₹1,999`).<br>2. Gate `/dashboard/whatsapp`, `/dashboard/reports`, and Excel report exports behind the `COMPLETE` (`₹1,999/month`) plan. |
-| 6 | **Checkout Page (`/checkout`) Module Builder** | `NEEDS ALIGNMENT` | • `apps/web/src/components/public/CheckoutBuilder.tsx` still displays the legacy à-la-carte per-module checkbox selector (`₹299`/`₹499`/`₹999` per individual capability) rather than selecting between the three subscription tiers (`Free — ₹0`, `Professional — ₹999/month`, `Complete — ₹1,999/month`). | Update `CheckoutBuilder.tsx` in a dedicated billing/checkout task to select and activate one of the three subscription tiers (`FREE`, `PROFESSIONAL`, `COMPLETE`). |
+| # | Service Title | Scope | Inquiry Channel & Logging |
+| :--- | :--- | :--- | :--- |
+| **01** | **Branding and Website** | • Logo creation<br>• Website / portfolio creation | Common WhatsApp Inquiry Button (`+91 8072333075`) on `/` and `/pricing`. Every click logs to Firestore `vas_inquiries` via `POST /api/vas-inquiry` and is surfaced in `/dev-portal` (Overview & WhatsApp tabs). |
+| **02** | **Data Migration** | • Migrate existing studio data into Focoman | Common WhatsApp Inquiry Button (`+91 8072333075`) on `/` and `/pricing`. Logged in `/dev-portal`. |
+
+---
+
+## 3. Entitlement & Routing Enforcement Status (All Resolved)
+
+| # | Requirement | Enforcement Status | Implementation Evidence |
+| :--- | :--- | :--- | :--- |
+| 1 | **Free users landing directly on OMS instead of the Business Dashboard** | `IMPLEMENTED` | `apps/web/src/app/[studioSlug]/dashboard/page.tsx` checks `getEffectiveStudioTier(studio)` and calls `redirect(\`/\${studioSlug}/dashboard/oms\`)` when the studio is on the `FREE` plan. |
+| 2 | **Business Dashboard access restricted to paid plans (Basic Business Dashboard from ₹999)** | `IMPLEMENTED` | • `DashboardSidebar.tsx` hides the `"Dashboard"` link for `FREE` tier studios.<br>• `DashboardHomeView.tsx` scopes `PROFESSIONAL` (`₹999/month`) studios to Basic Business Dashboard metrics (Order counts, Revenue overview, Pending payment overview) and unlocks advanced trend/comparison panels for `COMPLETE` (`₹1,999/month`). |
+| 3 | **Google Drive photo preview and selection available from ₹999 (Advanced OMS)** | `IMPLEMENTED` | • `GoogleDriveDeliverablesSection.tsx` supports structured photo selection (`selectedPhotos`) and client review.<br>• `updateOrderDriveDeliverablesCore` and `submitCustomerDeliverableReviewCore` enforce `PROFESSIONAL` (`₹999/month`) or `COMPLETE` (`₹1,999/month`) entitlement. |
+| 4 | **CRM and ERP available from ₹999** | `IMPLEMENTED` | `getEffectiveStudioFeatures` in `apps/web/src/lib/proEntitlements.ts` and `PLAN_CAPABILITIES` in `@focoman/config` enable `crm`, `erp`, `driveReview`, and `basicDashboard` from `PROFESSIONAL` (`₹999/month`) upward. |
+| 5 | **WhatsApp and Advanced Business Reports (+ Excel Exports) available only from ₹1,999** | `IMPLEMENTED` | • `getEffectiveStudioFeatures` restricts `whatsapp`, `reports`, and `excelExport` to `COMPLETE` (`₹1,999/month`).<br>• `/[studioSlug]/dashboard/reports` (`BusinessReportsView.tsx`), `/[studioSlug]/dashboard/crm`, and `/[studioSlug]/dashboard/erp` gate Excel Report Exports and Advanced Analytics behind `COMPLETE` (`₹1,999/month`). |
+| 6 | **Checkout Page (`/checkout`) Three-Tier Selector** | `IMPLEMENTED` | `apps/web/src/components/public/CheckoutBuilder.tsx` provides quick 3-tier plan selection (`Free — ₹0`, `₹999/month`, `₹1,999/month`) mapped to canonical capabilities. |

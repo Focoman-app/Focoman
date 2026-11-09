@@ -14,6 +14,17 @@ type Metrics = {
   ordersThisMonth: number | null;
   verifiedPaymentRecords: number | null;
   pendingPaymentRecords: number | null;
+  vasInquiriesCount?: number | null;
+};
+
+type VasInquiryLog = {
+  id: string;
+  targetPhone?: string;
+  phone?: string;
+  services: string[];
+  sourcePage?: string;
+  sourcePath?: string;
+  createdAt: string;
 };
 type BrevoAccount = {
   configured: boolean;
@@ -90,6 +101,7 @@ type EmailProviders = {
 type MetricsResponse = {
   generatedAt: string;
   metrics: Metrics;
+  vasInquiryLogs?: VasInquiryLog[];
   emailProviders?: EmailProviders;
   domainExpiration?: DomainExpirationInfo;
 };
@@ -223,6 +235,62 @@ function Placeholder({ title, text }: { title: string; text: string }) {
   return <section className={styles.panel}><div className={styles.panelTitle}><span>{title}</span><span className={styles.badge}>UNAVAILABLE</span></div><p className={styles.empty}>{text}</p></section>;
 }
 
+function VasInquiryLogsPanel({ logs }: { logs?: VasInquiryLog[] }) {
+  const entries = logs ?? [];
+  return (
+    <section className={styles.panel} style={{ marginTop: "16px" }}>
+      <div className={styles.panelTitle}>
+        <span style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <MessageSquare size={16} /> Value-Added Services (VAS) WhatsApp Inquiry Logs (8072333075)
+        </span>
+        <span className={styles.badge} style={{ color: "#16a34a", borderColor: "#bbf7d0", background: "#f0fdf4" }}>
+          {entries.length} RECENT LOG{entries.length === 1 ? "" : "S"}
+        </span>
+      </div>
+      {entries.length === 0 ? (
+        <p className={styles.empty}>
+          No Value-Added Services WhatsApp inquiries logged yet. Inquiries triggered from the common WhatsApp button (8072333075) on the landing or pricing pages appear here automatically.
+        </p>
+      ) : (
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
+            <thead>
+              <tr style={{ background: "#faf7f2", borderBottom: "1px solid #e6e0d4", textAlign: "left" }}>
+                <th style={{ padding: "10px 16px", fontSize: "10px", fontWeight: 700, color: "#78716c", textTransform: "uppercase" }}>Timestamp</th>
+                <th style={{ padding: "10px 16px", fontSize: "10px", fontWeight: 700, color: "#78716c", textTransform: "uppercase" }}>Inquiry ID</th>
+                <th style={{ padding: "10px 16px", fontSize: "10px", fontWeight: 700, color: "#78716c", textTransform: "uppercase" }}>Services Included</th>
+                <th style={{ padding: "10px 16px", fontSize: "10px", fontWeight: 700, color: "#78716c", textTransform: "uppercase" }}>Source Page</th>
+                <th style={{ padding: "10px 16px", fontSize: "10px", fontWeight: 700, color: "#78716c", textTransform: "uppercase" }}>Target WhatsApp</th>
+              </tr>
+            </thead>
+            <tbody>
+              {entries.map((log) => (
+                <tr key={log.id} style={{ borderBottom: "1px solid #f0ece1" }}>
+                  <td style={{ padding: "10px 16px", fontFamily: "monospace", color: "#57534e", whiteSpace: "nowrap" }}>
+                    {log.createdAt ? new Date(log.createdAt).toLocaleString("en-IN") : "—"}
+                  </td>
+                  <td style={{ padding: "10px 16px", fontFamily: "monospace", fontWeight: 700, color: "#1c1917" }}>
+                    {log.id}
+                  </td>
+                  <td style={{ padding: "10px 16px", color: "#1c1917" }}>
+                    {(log.services && log.services.length > 0 ? log.services : ["01 Branding & Website", "02 Data Migration"]).join(" • ")}
+                  </td>
+                  <td style={{ padding: "10px 16px", fontFamily: "monospace", color: "#57534e" }}>
+                    {log.sourcePath || log.sourcePage || "/"}
+                  </td>
+                  <td style={{ padding: "10px 16px", fontFamily: "monospace", fontWeight: 700, color: "#15803d" }}>
+                    +91 {log.phone || log.targetPhone || "8072333075"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}
+
 export function DevPortal({ authenticated, preview }: { authenticated: boolean; preview: boolean }) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("overview");
@@ -339,8 +407,13 @@ export function DevPortal({ authenticated, preview }: { authenticated: boolean; 
             <MetricCard label="Order records" value={m?.orderRecords} note="All stored records, including archived" />
             <MetricCard label="New orders this month" value={m?.ordersThisMonth} note="Order creation date · UTC month" />
           </div>
-          <div className={styles.sectionLabel}><span>PAYMENT RECORDS</span><span>COUNTS ONLY</span></div>
-          <div className={styles.grid}><MetricCard label="Verified payments" value={m?.verifiedPaymentRecords} note="Recorded verification status" /><MetricCard label="Pending verification" value={m?.pendingPaymentRecords} note="Recorded verification status" /></div>
+          <div className={styles.sectionLabel}><span>PAYMENT & VALUE-ADDED INQUIRY RECORDS</span><span>COUNTS & LOGS</span></div>
+          <div className={styles.grid}>
+            <MetricCard label="Verified payments" value={m?.verifiedPaymentRecords} note="Recorded verification status" />
+            <MetricCard label="Pending verification" value={m?.pendingPaymentRecords} note="Recorded verification status" />
+            <MetricCard label="VAS WhatsApp Inquiries" value={m?.vasInquiriesCount ?? 0} note="Value-Added Services (8072333075)" />
+          </div>
+          <VasInquiryLogsPanel logs={data?.vasInquiryLogs} />
           <div className={styles.callout}><Activity size={18}/><div><b><span aria-hidden="true">🔒 </span>Thoughtful by design.</b><p>These are record counts, not active users or studio earnings. No customer identities are shown.</p></div></div>
         </>}
         {tab === "usage" && <><Placeholder title="Requests & activity" text="Usage metrics are not connected. Request volume, active studios, memory and per-studio usage need a reliable monitoring source."/><Placeholder title="Storage" text="Storage usage and limits are unavailable until a verified source is connected."/></>}
@@ -648,7 +721,15 @@ export function DevPortal({ authenticated, preview }: { authenticated: boolean; 
             </div>
           </section>
         </>}
-        {tab === "whatsapp" && <Placeholder title="Meta WhatsApp" text="Message counts, delivery status and limits are not connected to this dashboard."/>}
+        {tab === "whatsapp" && <>
+          <div className={styles.sectionLabel}><span>VALUE-ADDED SERVICES WHATSAPP INQUIRIES</span><span>NUMBER: +91 8072333075</span></div>
+          <div className={styles.grid}>
+            <MetricCard label="Total VAS WhatsApp Inquiries" value={m?.vasInquiriesCount ?? 0} note="Direct WhatsApp inquiries to 8072333075" />
+          </div>
+          <VasInquiryLogsPanel logs={data?.vasInquiryLogs} />
+          <div className={styles.sectionLabel} style={{ marginTop: "24px" }}><span>META WHATSAPP CLOUD API</span><span>SYSTEM STATUS</span></div>
+          <Placeholder title="Meta WhatsApp" text="Message counts, delivery status and limits are not connected to this dashboard."/>
+        </>}
         {tab === "deploy" && <Placeholder title="Repository & pipeline" text="Build, deployment and environment status are not connected to this dashboard."/>}
         {tab === "settings" && <><section className={styles.panel}><div className={styles.panelTitle}><span>Portal access</span><ShieldCheck size={16}/></div><p className={styles.empty}>This portal displays aggregate data only. Credentials and provider configuration are managed server-side and are not displayed here.</p></section><Placeholder title="Alerts & thresholds" text="Alert configuration is not connected. No settings can be changed from this portal."/></>}
       </div><div className={styles.footer}><span>FOCOMAN / DEV PORTAL</span><span>INTERNAL OPERATIONS</span></div>

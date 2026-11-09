@@ -336,7 +336,12 @@ export function TrackOrderClient({ view, rawIdentifier }: TrackOrderClientProps)
   };
 
   const handleSubmitDeliverableReview = useCallback(
-    async (input: { deliverableId: string; approved: boolean; feedback?: string }) => {
+    async (input: {
+      deliverableId: string;
+      approved: boolean;
+      feedback?: string;
+      selectedPhotos?: string[];
+    }) => {
       if (!currentUser) {
         return {
           success: false,
@@ -350,6 +355,7 @@ export function TrackOrderClient({ view, rawIdentifier }: TrackOrderClientProps)
           deliverableId: input.deliverableId,
           approved: input.approved,
           feedback: input.feedback,
+          selectedPhotos: input.selectedPhotos,
           idToken: token,
         });
         if (res.success && res.deliverables) {

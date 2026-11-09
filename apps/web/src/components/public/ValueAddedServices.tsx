@@ -1,6 +1,38 @@
+"use client";
+
 import React from "react";
 
+const VAS_WHATSAPP_NUMBER = "918072333075";
+const VAS_DISPLAY_NUMBER = "8072333075";
+const VAS_WHATSAPP_MESSAGE =
+  "Hi Focoman Team, I would like to inquire about Value-Added Services (Branding & Website / Data Migration) for my studio.";
+
 export function ValueAddedServices() {
+  const whatsappHref = `https://wa.me/${VAS_WHATSAPP_NUMBER}?text=${encodeURIComponent(VAS_WHATSAPP_MESSAGE)}`;
+
+  const handleInquiryClick = () => {
+    try {
+      const payload = JSON.stringify({
+        targetPhone: VAS_DISPLAY_NUMBER,
+        services: ["Branding and Website", "Data Migration"],
+        sourcePage: typeof window !== "undefined" ? window.location.pathname : "/",
+      });
+      if (typeof navigator !== "undefined" && typeof navigator.sendBeacon === "function") {
+        const blob = new Blob([payload], { type: "application/json" });
+        navigator.sendBeacon("/api/vas-inquiry", blob);
+      } else {
+        void fetch("/api/vas-inquiry", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: payload,
+          keepalive: true,
+        });
+      }
+    } catch {
+      // Non-blocking telemetry log
+    }
+  };
+
   return (
     <section
       id="value-added-services"
@@ -144,6 +176,21 @@ export function ValueAddedServices() {
             </ul>
           </div>
         </div>
+      </div>
+
+      {/* Common WhatsApp Inquiry Action */}
+      <div className="mt-8 sm:mt-10 flex flex-col items-center justify-center text-center">
+        <a
+          id="vas-whatsapp-inquiry-btn"
+          href={whatsappHref}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={handleInquiryClick}
+          className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#1C1917] px-6 py-3.5 text-xs sm:text-sm font-bold text-white shadow-[0_3px_0_#0F172A] active:translate-y-[2px] active:shadow-none transition hover:bg-[#2C2825]"
+        >
+          <span>Send Inquiry on WhatsApp ({VAS_DISPLAY_NUMBER})</span>
+          <span>→</span>
+        </a>
       </div>
     </section>
   );

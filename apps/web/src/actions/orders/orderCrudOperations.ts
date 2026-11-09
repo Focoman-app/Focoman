@@ -1,19 +1,23 @@
 import "server-only";
 import {
   generateOrderIdentifiers,
+  generateSixDigitPasskeyPin,
   generateTimestampDigits,
   prefixLetters,
 } from "@/lib/invitationPasscode";
 import { CreateOrderSchema } from "@focoman/validation";
 import {
+  generateResourceSuggestions,
   generateWorkflowTasks,
   getStudioCalendarDate,
   getStudioTimestampIST,
   isContactMatch,
+  performPreflightCheck,
 } from "@focoman/domain";
 import {
   getCustomersByStudio,
   getDeletedOrdersByStudio,
+  getMembersByStudio,
   getOrderById,
   getOrderByIdIncludeDeleted,
   getOrdersByStudio,
@@ -32,6 +36,7 @@ import type {
   OrderAuditEntry,
   OrderStatus,
   PaymentStatus,
+  ResourceAssignment,
   Task,
 } from "@focoman/types";
 import {
@@ -68,7 +73,7 @@ export async function createOrderCore(rawInput: unknown): Promise<{
 
     const customerPhone = validated.customerPhone?.trim() || undefined;
     const customerEmail = validated.customerEmail?.trim() || undefined;
-    const passkeyPin = validated.passkeyPin?.trim() || undefined;
+    const passkeyPin = validated.passkeyPin?.trim() || generateSixDigitPasskeyPin();
 
     const studioPrefix = prefixLetters(validated.studioId);
     const finalPasskey = orderId;
@@ -77,7 +82,12 @@ export async function createOrderCore(rawInput: unknown): Promise<{
     const initialOrderStatus: OrderStatus =
       validated.eventDate < todayStr ? "POST_EVENT_IN_PROGRESS" : "AWAITING_EVENT";
 
-    const existingCustomers = await getCustomersByStudio(validated.studioId);
+    const [existingCustomers, studioOrders, studioMembers, studio] = await Promise.all([
+      getCustomersByStudio(validated.studioId),
+      getOrdersByStudio(validated.studioId),
+      getMembersByStudio(validated.studioId),
+      getStudioBySlug(validated.studioId),
+    ]);
     const matchedCustomer = existingCustomers.find((c) =>
       isContactMatch(
         { phone: customerPhone, email: customerEmail },
@@ -85,6 +95,37 @@ export async function createOrderCore(rawInput: unknown): Promise<{
       )
     );
     const effectiveCustomerId = matchedCustomer ? matchedCustomer.id : customerId;
+
+    const preflight = performPreflightCheck(
+      validated.eventDate,
+      validated.eventLocation || "",
+      validated.services,
+      studioOrders,
+      studioMembers
+    );
+    const suggestions = generateResourceSuggestions(
+      validated.eventDate,
+      ["PHOTOGRAPHY", "VIDEOGRAPHY", "ALBUM_DESIGN", "PHOTO_EDITING"],
+      studioMembers,
+      []
+    );
+
+    const autoAssignEnabled = studio?.features?.autoAssignCrew !== false;
+    const assignedResources: ResourceAssignment[] = [];
+    if (autoAssignEnabled) {
+      const usedMembers = new Set<string>();
+      for (const s of suggestions) {
+        if (s.availableOnDate && !usedMembers.has(s.memberId) && assignedResources.length < 2) {
+          usedMembers.add(s.memberId);
+          assignedResources.push({
+            memberId: s.memberId,
+            memberName: s.memberName,
+            skill: s.skill,
+            availabilityConfirmed: null,
+          });
+        }
+      }
+    }
 
     const newOrder: Order = {
       id: orderId,
@@ -111,9 +152,11 @@ export async function createOrderCore(rawInput: unknown): Promise<{
       },
       paymentStatus: initialPaymentStatus,
       orderStatus: initialOrderStatus,
-      assignedResources: [],
+      assignedResources,
+      resourceSuggestions: suggestions,
+      preflightReport: preflight,
       trackingPasskey: finalPasskey,
-      ...(passkeyPin ? { passkeyPin } : {}),
+      passkeyPin,
       ...(validated.notifyWhatsApp !== undefined ? { notifyWhatsApp: validated.notifyWhatsApp } : {}),
       ...(validated.notifySms !== undefined ? { notifySms: validated.notifySms } : {}),
       ...(validated.notifyEmail !== undefined ? { notifyEmail: validated.notifyEmail } : {}),
@@ -141,6 +184,20 @@ export async function createOrderCore(rawInput: unknown): Promise<{
               },
             ]
           : []),
+        ...(assignedResources.length > 0
+          ? [
+              {
+                id: `audit_${Date.now() + 2000}_auto_crew`,
+                timestamp: getStudioTimestampIST(new Date(now.getTime() + 2000)),
+                actorName: "Studio Automation",
+                actorRole: "System" as const,
+                action: "Crew Auto-Assigned",
+                details: `Auto-assigned available crew based on skill match: ${assignedResources
+                  .map((r) => `${r.memberName} (${r.skill})`)
+                  .join(", ")}`,
+              },
+            ]
+          : []),
       ],
       createdAt: nowIso,
       updatedAt: nowIso,
@@ -150,12 +207,16 @@ export async function createOrderCore(rawInput: unknown): Promise<{
       (t, idx) => {
         const { dateStamp, timeStamp } = generateTimestampDigits(now);
         const seqSuffix = String(idx + 1).padStart(2, "0");
+        const matchedCrew =
+          autoAssignEnabled && assignedResources.length > 0
+            ? assignedResources.find((r) => r.skill.includes(t.serviceCategory)) || assignedResources[0]
+            : undefined;
 
         return {
           ...t,
           id: `TSK-${studioPrefix}-${dateStamp}-${timeStamp}-${seqSuffix}`,
-          assignedMemberId: t.assignedMemberId || "",
-          assignedMemberName: t.assignedMemberName || "Unassigned",
+          assignedMemberId: matchedCrew?.memberId || t.assignedMemberId || "",
+          assignedMemberName: matchedCrew?.memberName || t.assignedMemberName || "Unassigned",
           createdAt: nowIso,
           updatedAt: nowIso,
           isDeleted: false,

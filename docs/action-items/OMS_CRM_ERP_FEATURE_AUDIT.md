@@ -41,7 +41,7 @@
   - `apps/web/src/lib/invitationPasscode.ts`
 - **Dependencies:** None
 - **Priority:** `HIGH`
-- **Status:** `TODO`
+- **Status:** `COMPLETED (2026-11-09)`
 
 ---
 
@@ -59,7 +59,7 @@
   - `packages/types/src/index.ts` (`OrderDriveDeliverable`)
 - **Dependencies:** Optional Google Drive API key / OAuth read scope if listing individual files inside shared folders automatically, or structured selection list UI for zero-API-key mode.
 - **Priority:** `MEDIUM`
-- **Status:** `TODO`
+- **Status:** `COMPLETED (2026-11-09)`
 
 ---
 
@@ -75,7 +75,7 @@
   - `apps/web/src/actions/customerActions.ts` (lines 122–235)
 - **Dependencies:** None
 - **Priority:** `MEDIUM`
-- **Status:** `TODO`
+- **Status:** `COMPLETED (2026-11-09)`
 
 ---
 
@@ -92,7 +92,7 @@
   - `apps/web/src/actions/marketplaceActions.ts` (`getStudioBookingRequestsAction`)
 - **Dependencies:** None
 - **Priority:** `MEDIUM`
-- **Status:** `TODO`
+- **Status:** `COMPLETED (2026-11-09)`
 
 ---
 
@@ -108,7 +108,7 @@
   - `packages/domain/src/index.ts` (`calculateCustomerLTV`, lines 685–727)
 - **Dependencies:** None
 - **Priority:** `MEDIUM`
-- **Status:** `TODO`
+- **Status:** `COMPLETED (2026-11-09)`
 
 ---
 
@@ -127,7 +127,7 @@
   - `apps/web/src/services/whatsappService.ts`
 - **Dependencies:** `CRM-003` (shared CRM overview layout)
 - **Priority:** `HIGH`
-- **Status:** `TODO`
+- **Status:** `COMPLETED (2026-11-09)`
 
 ---
 
@@ -143,7 +143,7 @@
   - `apps/web/src/actions/memberActions.ts` (lines 392–474)
 - **Dependencies:** None
 - **Priority:** `MEDIUM`
-- **Status:** `TODO`
+- **Status:** `COMPLETED (2026-11-09)`
 
 ---
 
@@ -161,7 +161,7 @@
   - `packages/db/src/index.ts`
 - **Dependencies:** None
 - **Priority:** `HIGH`
-- **Status:** `TODO`
+- **Status:** `COMPLETED (2026-11-09)`
 
 ---
 
@@ -180,7 +180,7 @@
   - `packages/types/src/index.ts` (`Studio`)
 - **Dependencies:** `OMS-001`, `ERP-002`
 - **Priority:** `HIGH`
-- **Status:** `TODO`
+- **Status:** `COMPLETED (2026-11-09)`
 
 ---
 
@@ -198,7 +198,7 @@
   - `packages/domain/src/index.ts` (`calculateOrderPaymentBreakdown`, lines 191–282)
 - **Dependencies:** None
 - **Priority:** `MEDIUM`
-- **Status:** `TODO`
+- **Status:** `COMPLETED (2026-11-09)`
 
 ---
 

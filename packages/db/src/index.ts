@@ -13,6 +13,7 @@ import type {
   StudioPackage,
   BookingRequest,
   PaymentRecord,
+  StudioLead,
 } from '@focoman/types';
 import { RECOVERY_WINDOW_DAYS } from '@focoman/config';
 
@@ -894,6 +895,17 @@ export async function getTasksByOrder(orderId: string): Promise<Task[]> {
   return tasks.sort((a, b) => (a.sequenceOrder || 0) - (b.sequenceOrder || 0));
 }
 
+export async function getTasksByStudio(studioId: string): Promise<Task[]> {
+  const firestore = getFirestoreServerInstance();
+  const snap = await firestore
+    .collection('tasks')
+    .where('studioId', '==', studioId.toLowerCase())
+    .get();
+  return snap.docs
+    .map((d) => d.data() as Task)
+    .filter((t) => !t.isDeleted);
+}
+
 export async function getTasksByMember(studioId: string, memberId: string): Promise<Task[]> {
   const firestore = getFirestoreServerInstance();
   const snap = await firestore
@@ -1677,5 +1689,59 @@ export async function getPlatformPublicStats(): Promise<PlatformPublicStats> {
     };
   }
 }
+
+// ============================================================================
+// 14. OMNICHANNEL STUDIO LEADS (INSTAGRAM, WHATSAPP, WEBSITE, MARKETPLACE)
+// ============================================================================
+
+export async function saveStudioLead(lead: StudioLead): Promise<StudioLead> {
+  const db = getFirestoreServerInstance();
+  const normalized: StudioLead = {
+    ...lead,
+    studioId: lead.studioId.toLowerCase(),
+    isDeleted: Boolean(lead.isDeleted),
+  };
+  await db.collection('leads').doc(normalized.id).set(normalized, { merge: true });
+  return normalized;
+}
+
+export async function getLeadsByStudio(studioId: string): Promise<StudioLead[]> {
+  const db = getFirestoreServerInstance();
+  const snap = await db
+    .collection('leads')
+    .where('studioId', '==', studioId.toLowerCase())
+    .get();
+  return snap.docs
+    .map((d) => d.data() as StudioLead)
+    .filter((l) => !l.isDeleted)
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+}
+
+export async function getLeadById(leadId: string): Promise<StudioLead | null> {
+  const db = getFirestoreServerInstance();
+  const doc = await db.collection('leads').doc(leadId).get();
+  if (!doc.exists) return null;
+  const lead = doc.data() as StudioLead;
+  return lead.isDeleted ? null : lead;
+}
+
+export async function updateStudioLead(
+  leadId: string,
+  updates: Partial<StudioLead>
+): Promise<StudioLead | null> {
+  const db = getFirestoreServerInstance();
+  const ref = db.collection('leads').doc(leadId);
+  const snap = await ref.get();
+  if (!snap.exists) return null;
+  const existing = snap.data() as StudioLead;
+  const updated: StudioLead = {
+    ...existing,
+    ...updates,
+    updatedAt: new Date().toISOString(),
+  };
+  await ref.set(updated, { merge: true });
+  return updated;
+}
+
 
 

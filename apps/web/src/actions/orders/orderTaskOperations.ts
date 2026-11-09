@@ -30,6 +30,7 @@ import {
   sendPaymentReminderCustomerEmail,
   sendPipelineStatusUpdateEmail,
 } from "@/services/emailService";
+import { dispatchOrderStageWhatsAppNotification } from "@/services/whatsappService";
 import { findActiveMemberRecord } from "./orderAccessHelpers";
 
 export async function createTaskCore(input: {
@@ -321,6 +322,13 @@ export async function updateTaskStatusCore(rawInput: unknown): Promise<{
               details: validated.reworkNotes,
             });
           }
+
+          await dispatchOrderStageWhatsAppNotification({
+            studioId,
+            order,
+            taskTitle: existingTask.title,
+            newStatus: validated.status,
+          });
         } catch (mailErr) {
           console.warn(
             "[updateTaskStatusAction] Status change email notification error:",

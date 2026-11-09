@@ -97,17 +97,45 @@ export async function initializeStudioPlan(studioId: string, nowIso: string = ne
 }
 
 /**
- * Save selected capabilities for a studio.
+ * Save selected capabilities for a studio and resolve the matching 3-tier plan (FREE, PROFESSIONAL, COMPLETE).
  */
 export async function updateStudioCapabilities(
   studioId: string,
   selectedCapabilities: CapabilityId[],
-  nowIso: string = new Date().toISOString()
+  nowIso: string = new Date().toISOString(),
+  explicitPlan?: PlanType
 ): Promise<void> {
   const existing = await getStudioPlanFromDb(studioId);
+  const completeTierCaps: CapabilityId[] = [
+    'WHATSAPP_BOT',
+    'WHATSAPP_OPERATIONS',
+    'WHATSAPP_ALERTS',
+    'WHATSAPP_NOTIFICATIONS',
+    'BUSINESS_REPORTS',
+    'ANALYTICS_ADVANCED',
+  ];
+  const proTierCaps: CapabilityId[] = [
+    'OMS_ADVANCED',
+    'DRIVE_CLIENT_REVIEW',
+    'CUSTOMER_CRM',
+    'STUDIO_ERP',
+    'ANALYTICS_BASIC',
+  ];
+
+  let resolvedPlan: PlanType = explicitPlan || 'FREE';
+  if (!explicitPlan) {
+    if (selectedCapabilities.some((cap) => completeTierCaps.includes(cap))) {
+      resolvedPlan = 'COMPLETE';
+    } else if (selectedCapabilities.some((cap) => proTierCaps.includes(cap))) {
+      resolvedPlan = 'PROFESSIONAL';
+    } else {
+      resolvedPlan = 'FREE';
+    }
+  }
+
   const plan: StudioPlan = {
     selectedCapabilities,
-    plan: 'CUSTOM',
+    plan: resolvedPlan,
     isTrial: false,
     updatedAt: nowIso,
   };
@@ -123,8 +151,9 @@ export async function updateStudioCapabilities(
  */
 export async function updateStudioPlan(studioId: string, newPlan: PlanType, nowIso: string = new Date().toISOString()): Promise<void> {
   const existing = await getStudioPlanFromDb(studioId);
+  const defaultCapsForPlan = PLAN_CAPABILITIES[newPlan] || existing?.selectedCapabilities || ['OMS_BASIC'];
   const plan: StudioPlan = {
-    selectedCapabilities: existing?.selectedCapabilities || ['OMS_BASIC'],
+    selectedCapabilities: defaultCapsForPlan,
     plan: newPlan,
     isTrial: false,
     updatedAt: nowIso,

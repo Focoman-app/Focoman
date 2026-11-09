@@ -1,6 +1,10 @@
-import { createHash, randomBytes, scryptSync, timingSafeEqual } from "crypto";
+import { createHash, randomBytes, randomInt, scryptSync, timingSafeEqual } from "crypto";
 
 const HASH_BYTES = 64;
+
+export function generateSixDigitPasskeyPin(): string {
+  return String(randomInt(0, 1000000)).padStart(6, "0");
+}
 
 export function hashInvitationPasscode(passcode: string): { salt: string; hash: string } {
   const salt = randomBytes(16).toString("hex");

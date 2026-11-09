@@ -233,6 +233,8 @@ export function DashboardSidebar({ studioSlug, role, plan, studioName, studioLog
           .map((item) => ({ ...item, label: "My Orders", sublabel: "Assigned Work" })),
         ...navItems.filter((item) => item.key === "settings"),
       ]
+    : plan === "basic"
+    ? navItems.filter((item) => item.key !== "dashboard")
     : navItems;
 
   const handleSignOut = async () => {

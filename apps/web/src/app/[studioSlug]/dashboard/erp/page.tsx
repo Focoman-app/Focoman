@@ -1,17 +1,27 @@
 "use client";
 
 import { useState, useEffect, useCallback, use, useMemo } from "react";
-import { StudioMember, Order, OrderStatus } from "@focoman/types";
+import Link from "next/link";
+import { StudioMember, Order, StudioInvitationSummary } from "@focoman/types";
 import {
   getStudioMembersAction,
+  getDeletedStudioMembersAction,
   getStudioInvitationsAction,
   createMemberAction,
+  updateMemberAction,
+  deleteMemberAction,
+  restoreMemberAction,
   revokeInvitationAction,
 } from "@/actions/memberActions";
-import { getStudioOrdersAction, confirmResourceAvailabilityAction } from "@/actions/orderActions";
+import {
+  getStudioOrdersAction,
+  confirmResourceAvailabilityAction,
+  updateAssignmentCallTimeAction,
+} from "@/actions/orderActions";
+import { updateStudioAction } from "@/actions/studioActions";
 import { useStudioWorkspace } from "@/components/StudioWorkspaceProvider";
-import { StudioInvitationSummary } from "@focoman/types";
-import { FileSpreadsheet } from "lucide-react";
+import { getEffectiveStudioTier, isLifetimeProEmail } from "@/lib/proEntitlements";
+import { FileSpreadsheet, Pencil, Trash2, RotateCcw, Clock, Send } from "lucide-react";
 import { exportWorkbookToExcel } from "@/utils/excelExport";
 
 const SKILL_LABELS: Record<string, string> = {
@@ -34,15 +44,19 @@ export default function ErpPage({ params }: { params: Promise<{ studioSlug: stri
   const { studioSlug } = use(params);
   const { idToken: workspaceToken, authLoading, getIdToken, user: workspaceUser, studio } = useStudioWorkspace();
   const [crewList, setCrewList] = useState<StudioMember[]>([]);
+  const [deletedCrewList, setDeletedCrewList] = useState<StudioMember[]>([]);
   const [pendingInvitations, setPendingInvitations] = useState<StudioInvitationSummary[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [selected, setSelected] = useState<StudioMember | null>(null);
   const [skillFilter, setSkillFilter] = useState("ALL");
+  const [viewMode, setViewMode] = useState<"ACTIVE" | "DELETED">("ACTIVE");
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
+  const [statusBanner, setStatusBanner] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
-  // Modal State
+  // Add / Edit Member Modal State
   const [showModal, setShowModal] = useState(false);
+  const [editingMember, setEditingMember] = useState<StudioMember | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [modalError, setModalError] = useState<string | null>(null);
   const [form, setForm] = useState({
@@ -52,15 +66,42 @@ export default function ErpPage({ params }: { params: Promise<{ studioSlug: stri
     claimCode: "",
     skills: ["PHOTOGRAPHY"],
   });
+
+  // Temporary Crew Edit State
+  const [editingTempCrew, setEditingTempCrew] = useState<{ id: string; name: string } | null>(null);
+  const [tempCrewNameInput, setTempCrewNameInput] = useState("");
+
+  // Call-Time & Venue Notes draft state per orderId
+  const [callTimeDrafts, setCallTimeDrafts] = useState<Record<string, { callTime: string; venueNotes: string }>>({});
+  const [savingCallTimeOrderId, setSavingCallTimeOrderId] = useState<string | null>(null);
+
+  // Auto-Assign Crew workflow toggle state
+  const [autoAssignEnabled, setAutoAssignEnabled] = useState<boolean>(false);
+  const [togglingAutoAssign, setTogglingAutoAssign] = useState(false);
+
   const [createdInvite, setCreatedInvite] = useState<{ code: string; email?: string; name: string; claimCode?: string; linkToken?: string } | null>(null);
   const [copied, setCopied] = useState(false);
   const [copiedPinId, setCopiedPinId] = useState<string | null>(null);
   const [copiedLinkId, setCopiedLinkId] = useState<string | null>(null);
   const [origin, setOrigin] = useState("");
 
+  const effectiveTier = getEffectiveStudioTier(studio);
+  const canExportExcel = effectiveTier === "COMPLETE";
+
+  const showBannerMsg = (type: "success" | "error", text: string) => {
+    setStatusBanner({ type, text });
+    setTimeout(() => setStatusBanner(null), 4000);
+  };
+
   useEffect(() => {
     setOrigin(window.location.origin);
   }, []);
+
+  useEffect(() => {
+    if (studio?.features?.autoAssignCrew !== undefined) {
+      setAutoAssignEnabled(Boolean(studio.features.autoAssignCrew));
+    }
+  }, [studio?.features?.autoAssignCrew]);
 
   // Check URL query parameters (e.g. ?action=add-crew or ?addCrew=true)
   useEffect(() => {
@@ -69,6 +110,7 @@ export default function ErpPage({ params }: { params: Promise<{ studioSlug: stri
     const action = params.get("action");
     const addCrew = params.get("addCrew");
     if (action === "add-crew" || addCrew === "true" || addCrew === "1") {
+      setEditingMember(null);
       setShowModal(true);
       setModalError(null);
       setForm((prev) => ({
@@ -106,12 +148,14 @@ export default function ErpPage({ params }: { params: Promise<{ studioSlug: stri
         setLoading(false);
         return;
       }
-      const [membersData, ordersData, invitationData] = await Promise.all([
+      const [membersData, deletedMembersData, ordersData, invitationData] = await Promise.all([
         getStudioMembersAction(studioSlug, token),
+        getDeletedStudioMembersAction(studioSlug, token).catch(() => [] as StudioMember[]),
         getStudioOrdersAction(studioSlug, token),
         getStudioInvitationsAction(studioSlug, token),
       ]);
       setCrewList(membersData);
+      setDeletedCrewList(deletedMembersData);
       setOrders(ordersData);
       setPendingInvitations(invitationData.filter((invitation) => invitation.status === "PENDING"));
     } catch (err) {
@@ -136,11 +180,42 @@ export default function ErpPage({ params }: { params: Promise<{ studioSlug: stri
     }));
   };
 
-  /**
-   * Real-time UI validation — computed on every keystroke.
-   * Backend retains checks as a safety net; UI shows friendly inline hints.
-   */
+  const handleToggleAutoAssignCrew = async () => {
+    setTogglingAutoAssign(true);
+    try {
+      const token = await getIdToken(true);
+      if (!token) return;
+      const nextVal = !autoAssignEnabled;
+      const res = await updateStudioAction({
+        studioSlug,
+        updates: {
+          features: {
+            ...(studio?.features || { oms: true, crm: true, erp: true, whatsapp: true, marketplace: true }),
+            autoAssignCrew: nextVal,
+          },
+        },
+        idToken: token,
+      });
+      if (res.success) {
+        setAutoAssignEnabled(nextVal);
+        showBannerMsg(
+          "success",
+          nextVal
+            ? "Auto-Assign Crew enabled: New orders will automatically assign available skill-matched crew."
+            : "Auto-Assign Crew disabled: Crew assignments remain manual."
+        );
+      } else {
+        showBannerMsg("error", res.error || "Failed to update workflow automation.");
+      }
+    } finally {
+      setTogglingAutoAssign(false);
+    }
+  };
+
   const fieldHints = useMemo(() => {
+    if (editingMember) {
+      return { nameHint: null, emailHint: null, hasBlockingError: false };
+    }
     const trimmedName = form.name.trim().toLowerCase();
     const trimmedEmail = form.email.trim().toLowerCase();
     const ownerEmail = (workspaceUser?.email ?? studio?.ownerEmail ?? "").trim().toLowerCase();
@@ -149,7 +224,6 @@ export default function ErpPage({ params }: { params: Promise<{ studioSlug: stri
     let nameHint: { type: "error" | "warn"; text: string } | null = null;
     let emailHint: { type: "error" | "warn" | "info"; text: string } | null = null;
 
-    // ── Name duplicate check ──────────────────────────────────────────────
     if (trimmedName.length > 0) {
       if (ownerName && trimmedName === ownerName) {
         nameHint = { type: "error", text: `"${studio?.ownerName}" is the studio owner and already active in the crew.` };
@@ -170,7 +244,6 @@ export default function ErpPage({ params }: { params: Promise<{ studioSlug: stri
       }
     }
 
-    // ── Email duplicate & self-invite check ───────────────────────────────
     if (trimmedEmail.length > 0) {
       const isSelf = ownerEmail && trimmedEmail === ownerEmail;
 
@@ -198,9 +271,9 @@ export default function ErpPage({ params }: { params: Promise<{ studioSlug: stri
       (emailHint?.type === "warn");
 
     return { nameHint, emailHint, hasBlockingError };
-  }, [form.name, form.email, crewList, pendingInvitations, workspaceUser, studio]);
+  }, [editingMember, form.name, form.email, crewList, pendingInvitations, workspaceUser, studio]);
 
-  const handleCreateMember = async (e: React.FormEvent) => {
+  const handleSaveMember = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
     setModalError(null);
@@ -209,6 +282,30 @@ export default function ErpPage({ params }: { params: Promise<{ studioSlug: stri
     if (!token) {
       setModalError("Authentication error. Please sign in again.");
       setIsSubmitting(false);
+      return;
+    }
+
+    if (editingMember) {
+      const res = await updateMemberAction({
+        memberId: editingMember.id,
+        studioId: studioSlug,
+        updates: {
+          name: form.name,
+          phone: form.phone,
+          skills: form.skills,
+        },
+        idToken: token,
+      });
+      setIsSubmitting(false);
+      if (res.success && res.member) {
+        setShowModal(false);
+        setEditingMember(null);
+        await loadData(token);
+        setSelected(res.member);
+        showBannerMsg("success", "Crew member profile updated.");
+      } else {
+        setModalError(res.error || "Failed to update crew member");
+      }
       return;
     }
 
@@ -229,7 +326,7 @@ export default function ErpPage({ params }: { params: Promise<{ studioSlug: stri
       const memberName = form.name;
       const memberEmail = form.email;
       setForm({ name: "", email: "", phone: "", claimCode: "", skills: ["PHOTOGRAPHY"] });
-      await loadData();
+      await loadData(token);
       if (res.invitationCode) {
         setCreatedInvite({
           code: res.invitationCode,
@@ -244,7 +341,111 @@ export default function ErpPage({ params }: { params: Promise<{ studioSlug: stri
     }
   };
 
-  // Studio owner will automatically be the first member of the erp or crew with owner status
+  const handleDeleteMember = async (member: StudioMember) => {
+    if (member.role === "STUDIO_OWNER") return;
+    const token = await getIdToken(true);
+    if (!token) return;
+    const res = await deleteMemberAction({
+      memberId: member.id,
+      studioId: studioSlug,
+      idToken: token,
+    });
+    if (res.success) {
+      setSelected(null);
+      await loadData(token);
+      showBannerMsg("success", `Archived crew member "${member.name}".`);
+    } else {
+      showBannerMsg("error", res.error || "Failed to archive crew member.");
+    }
+  };
+
+  const handleRestoreMember = async (member: StudioMember) => {
+    const token = await getIdToken(true);
+    if (!token) return;
+    const res = await restoreMemberAction({
+      memberId: member.id,
+      studioId: studioSlug,
+      idToken: token,
+    });
+    if (res.success) {
+      await loadData(token);
+      setViewMode("ACTIVE");
+      showBannerMsg("success", `Restored crew member "${member.name}".`);
+    } else {
+      showBannerMsg("error", res.error || "Failed to restore crew member.");
+    }
+  };
+
+  const handleUpdateTempCrew = async (tempId: string, oldName: string, newName: string) => {
+    if (!newName.trim()) return;
+    const token = await getIdToken(true);
+    if (!token) return;
+    const existingTemp = studio?.temporaryCrew || [];
+    const updatedTemp = existingTemp.map((t) =>
+      t.id === tempId || t.name.toLowerCase() === oldName.toLowerCase()
+        ? { ...t, name: newName.trim() }
+        : t
+    );
+    const res = await updateStudioAction({
+      studioSlug,
+      updates: { temporaryCrew: updatedTemp },
+      idToken: token,
+    });
+    if (res.success) {
+      setEditingTempCrew(null);
+      await loadData(token);
+      showBannerMsg("success", "Temporary crew name updated.");
+    } else {
+      showBannerMsg("error", res.error || "Failed to update temporary crew.");
+    }
+  };
+
+  const handleDeleteTempCrew = async (tempId: string, tempName: string) => {
+    const token = await getIdToken(true);
+    if (!token) return;
+    const existingTemp = studio?.temporaryCrew || [];
+    const updatedTemp = existingTemp.filter(
+      (t) => t.id !== tempId && t.name.toLowerCase() !== tempName.toLowerCase()
+    );
+    const res = await updateStudioAction({
+      studioSlug,
+      updates: { temporaryCrew: updatedTemp },
+      idToken: token,
+    });
+    if (res.success) {
+      await loadData(token);
+      showBannerMsg("success", `Removed temporary crew "${tempName}" from studio roster.`);
+    } else {
+      showBannerMsg("error", res.error || "Failed to remove temporary crew.");
+    }
+  };
+
+  const handleSaveCallTime = async (orderId: string, memberId: string) => {
+    const draft = callTimeDrafts[orderId];
+    if (!draft) return;
+    setSavingCallTimeOrderId(orderId);
+    try {
+      const token = await getIdToken(true);
+      if (!token) return;
+      const res = await updateAssignmentCallTimeAction({
+        orderId,
+        studioId: studioSlug,
+        memberId,
+        callTime: draft.callTime,
+        venueNotes: draft.venueNotes,
+        idToken: token,
+      });
+      if (res.success) {
+        await loadData(token);
+        showBannerMsg("success", "Call time and venue instructions saved.");
+      } else {
+        showBannerMsg("error", res.error || "Failed to save call time.");
+      }
+    } finally {
+      setSavingCallTimeOrderId(null);
+    }
+  };
+
   const ownerMember: StudioMember | null = useMemo(() => {
     if (!studio) return null;
     return {
@@ -254,7 +455,7 @@ export default function ErpPage({ params }: { params: Promise<{ studioSlug: stri
       email: studio.ownerEmail || "",
       phone: studio.ownerPhone || "",
       role: "STUDIO_OWNER",
-      skills: [], // empty by default
+      skills: [],
       status: "ACTIVE",
       createdAt: studio.createdAt || new Date().toISOString(),
       updatedAt: studio.updatedAt || new Date().toISOString(),
@@ -265,8 +466,10 @@ export default function ErpPage({ params }: { params: Promise<{ studioSlug: stri
     return ownerMember ? [ownerMember, ...crewList] : crewList;
   }, [ownerMember, crewList]);
 
+  const activeSourceList = viewMode === "ACTIVE" ? allCrew : deletedCrewList;
+
   const filtered = useMemo(() => {
-    return allCrew.filter((m) => {
+    return activeSourceList.filter((m) => {
       const matchSkill = skillFilter === "ALL" || m.skills.includes(skillFilter);
       const matchSearch =
         !search ||
@@ -276,7 +479,7 @@ export default function ErpPage({ params }: { params: Promise<{ studioSlug: stri
         (m.phone && m.phone.includes(search));
       return matchSkill && matchSearch;
     });
-  }, [allCrew, skillFilter, search]);
+  }, [activeSourceList, skillFilter, search]);
 
   const temporaryCrewList = useMemo(() => {
     const map = new Map<string, { id: string; name: string; services: string[]; orderCount: number }>();
@@ -343,7 +546,39 @@ export default function ErpPage({ params }: { params: Promise<{ studioSlug: stri
   }, [studio, orders, allCrew, workspaceUser]);
 
   return (
-    <div className="flex h-full bg-surface-app">
+    <div className="flex flex-col h-full bg-surface-app">
+      {/* Free Plan Upgrade Banner */}
+      {studio && !studio.features?.erp && studio.planInfo?.plan !== "PROFESSIONAL" && studio.planInfo?.plan !== "COMPLETE" && !isLifetimeProEmail(studio.ownerEmail) && (
+        <div className="bg-purple-50 border-b border-purple-200 px-4 py-2.5 flex items-center justify-between shadow-2xs z-10 shrink-0">
+          <div className="flex items-center gap-2">
+            <span className="px-2 py-0.5 text-[10px] font-black uppercase rounded-full bg-brand-purple-primary text-white">
+              ₹999/MO PLAN
+            </span>
+            <span className="text-xs text-text-secondary">
+              Studio Operations (ERP) is included in the ₹999/month and ₹1,999/month plans. Upgrade to manage crew assignments, call times, and availability.
+            </span>
+          </div>
+          <Link
+            href={`/checkout?studio=${studioSlug}&upgrade=erp`}
+            className="text-xs font-bold text-white bg-brand-purple-primary px-3 py-1 rounded-lg hover:bg-purple-700 transition shrink-0"
+          >
+            Upgrade &amp; Checkout →
+          </Link>
+        </div>
+      )}
+
+      {statusBanner && (
+        <div className={`px-5 py-2.5 text-xs font-bold flex items-center justify-between border-b ${
+          statusBanner.type === "success"
+            ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+            : "bg-red-50 text-red-700 border-red-200"
+        }`}>
+          <span>{statusBanner.text}</span>
+          <button type="button" onClick={() => setStatusBanner(null)} className="text-[11px] underline">Dismiss</button>
+        </div>
+      )}
+
+      <div className="flex flex-1 min-h-0">
       {/* Crew Members List Panel */}
       <div className={`flex flex-col ${selected ? "hidden lg:flex lg:w-1/2 border-r border-border-default" : "w-full"} h-full`}>
         {/* Header */}
@@ -367,101 +602,115 @@ export default function ErpPage({ params }: { params: Promise<{ studioSlug: stri
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                disabled={filtered.length === 0 && temporaryCrewList.length === 0}
-                onClick={() =>
-                  exportWorkbookToExcel(`${studioSlug}_Studio_ERP_Crew`, [
-                    {
-                      name: "Active Crew & Workload",
-                      rows: filtered,
-                      columns: [
-                        { header: "Crew ID", key: "id", width: 22 },
-                        { header: "Name", key: "name", width: 24 },
-                        {
-                          header: "Role",
-                          key: "role",
-                          width: 18,
-                          getValue: (m: StudioMember) =>
-                            m.role === "STUDIO_OWNER" ? "Studio Owner" : "Crew Member",
-                        },
-                        {
-                          header: "Email",
-                          key: "email",
-                          width: 26,
-                          getValue: (m: StudioMember) => m.email || "-",
-                        },
-                        {
-                          header: "Phone",
-                          key: "phone",
-                          width: 16,
-                          getValue: (m: StudioMember) => m.phone || "-",
-                        },
-                        {
-                          header: "Certified Skills",
-                          key: "skills",
-                          width: 30,
-                          getValue: (m: StudioMember) =>
-                            m.skills && m.skills.length > 0
-                              ? m.skills.map((s: string) => SKILL_LABELS[s] || s).join(", ")
-                              : "All / General",
-                        },
-                        {
-                          header: "Assigned Orders Count",
-                          key: "assignedOrders",
-                          type: "number",
-                          width: 20,
-                          sumInTotals: true,
-                          getValue: (m: StudioMember) =>
-                            orders.filter((o) =>
-                              (o.assignedResources || []).some(
-                                (r) =>
-                                  r.memberId === m.id ||
-                                  (r.memberName || "").toLowerCase() ===
-                                    (m.name || "").toLowerCase()
-                              )
-                            ).length,
-                        },
-                      ],
-                    },
-                    {
-                      name: "Temporary Crew Workload",
-                      rows: temporaryCrewList,
-                      columns: [
-                        { header: "Temp Crew ID", key: "id", width: 20 },
-                        { header: "Name", key: "name", width: 24 },
-                        {
-                          header: "Assigned Services",
-                          key: "services",
-                          width: 30,
-                          getValue: (t: { services: string[] }) =>
-                            (t.services || []).join(", ") || "-",
-                        },
-                        {
-                          header: "Assigned Orders Count",
-                          key: "orderCount",
-                          type: "number",
-                          width: 20,
-                          sumInTotals: true,
-                        },
-                      ],
-                    },
-                  ])
-                }
-                className="rounded-xl border border-border-default bg-white px-3.5 py-2 text-xs font-bold text-text-primary hover:bg-surface-app hover:border-brand-purple-primary transition inline-flex items-center gap-1.5 shadow-2xs disabled:opacity-50 cursor-pointer"
-                title="Export filtered Crew Members and Workload to Excel (.xlsx)"
-              >
-                <FileSpreadsheet className="h-3.5 w-3.5 text-brand-purple-primary" />
-                <span>Export Excel</span>
-              </button>
+              {canExportExcel ? (
+                <button
+                  type="button"
+                  disabled={filtered.length === 0 && temporaryCrewList.length === 0}
+                  onClick={() =>
+                    exportWorkbookToExcel(`${studioSlug}_Studio_ERP_Crew`, [
+                      {
+                        name: "Active Crew & Workload",
+                        rows: filtered,
+                        columns: [
+                          { header: "Crew ID", key: "id", width: 22 },
+                          { header: "Name", key: "name", width: 24 },
+                          {
+                            header: "Role",
+                            key: "role",
+                            width: 18,
+                            getValue: (m: StudioMember) =>
+                              m.role === "STUDIO_OWNER" ? "Studio Owner" : "Crew Member",
+                          },
+                          {
+                            header: "Email",
+                            key: "email",
+                            width: 26,
+                            getValue: (m: StudioMember) => m.email || "-",
+                          },
+                          {
+                            header: "Phone",
+                            key: "phone",
+                            width: 16,
+                            getValue: (m: StudioMember) => m.phone || "-",
+                          },
+                          {
+                            header: "Certified Skills",
+                            key: "skills",
+                            width: 30,
+                            getValue: (m: StudioMember) =>
+                              m.skills && m.skills.length > 0
+                                ? m.skills.map((s: string) => SKILL_LABELS[s] || s).join(", ")
+                                : "All / General",
+                          },
+                          {
+                            header: "Assigned Orders Count",
+                            key: "assignedOrders",
+                            type: "number",
+                            width: 20,
+                            sumInTotals: true,
+                            getValue: (m: StudioMember) =>
+                              orders.filter((o) =>
+                                (o.assignedResources || []).some(
+                                  (r) =>
+                                    r.memberId === m.id ||
+                                    (r.memberName || "").toLowerCase() ===
+                                      (m.name || "").toLowerCase()
+                                )
+                              ).length,
+                          },
+                        ],
+                      },
+                      {
+                        name: "Temporary Crew Workload",
+                        rows: temporaryCrewList,
+                        columns: [
+                          { header: "Temp Crew ID", key: "id", width: 20 },
+                          { header: "Name", key: "name", width: 24 },
+                          {
+                            header: "Assigned Services",
+                            key: "services",
+                            width: 30,
+                            getValue: (t: { services: string[] }) =>
+                              (t.services || []).join(", ") || "-",
+                          },
+                          {
+                            header: "Assigned Orders Count",
+                            key: "orderCount",
+                            type: "number",
+                            width: 20,
+                            sumInTotals: true,
+                          },
+                        ],
+                      },
+                    ])
+                  }
+                  className="rounded-xl border border-border-default bg-white px-3.5 py-2 text-xs font-bold text-text-primary hover:bg-surface-app hover:border-brand-purple-primary transition inline-flex items-center gap-1.5 shadow-2xs disabled:opacity-50 cursor-pointer"
+                  title="Export filtered Crew Members and Workload to Excel (.xlsx)"
+                >
+                  <FileSpreadsheet className="h-3.5 w-3.5 text-brand-purple-primary" />
+                  <span>Export Excel</span>
+                </button>
+              ) : (
+                <Link
+                  href={`/checkout?studio=${studioSlug}&plan=COMPLETE`}
+                  className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-[11px] font-bold text-amber-900 hover:bg-amber-100 transition inline-flex items-center gap-1.5"
+                >
+                  <FileSpreadsheet className="h-3.5 w-3.5 text-amber-700" />
+                  <span>Export Excel (₹1,999 Plan)</span>
+                </Link>
+              )}
               <button
                 onClick={() => {
+                  setEditingMember(null);
                   setShowModal(true);
                   setModalError(null);
-                  setForm((prev) => ({
-                    ...prev,
-                    claimCode: prev.claimCode || Math.floor(100000 + Math.random() * 900000).toString(),
-                  }));
+                  setForm({
+                    name: "",
+                    email: "",
+                    phone: "",
+                    claimCode: Math.floor(100000 + Math.random() * 900000).toString(),
+                    skills: ["PHOTOGRAPHY"],
+                  });
                 }}
                 className="btn-brand-purple"
               >
@@ -470,7 +719,31 @@ export default function ErpPage({ params }: { params: Promise<{ studioSlug: stri
             </div>
           </div>
 
-          <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+          {/* Workflow Automation Bar (ERP-003) */}
+          <div className="mt-3 rounded-xl border border-brand-purple-soft/80 bg-brand-purple-background/40 px-3.5 py-2.5 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <span className="text-xs font-bold text-text-primary">
+                Automated Crew Assignment on Order Confirmation
+              </span>
+              <p className="text-[11px] text-text-secondary">
+                Automatically assign available skill-matched crew members on order creation (falls back to manual assignment if busy).
+              </p>
+            </div>
+            <button
+              type="button"
+              disabled={togglingAutoAssign}
+              onClick={handleToggleAutoAssignCrew}
+              className={`rounded-full px-3 py-1 text-[11px] font-bold transition cursor-pointer ${
+                autoAssignEnabled
+                  ? "bg-brand-purple-primary text-white"
+                  : "border border-border-default bg-white text-text-secondary hover:text-text-primary"
+              }`}
+            >
+              {togglingAutoAssign ? "Updating..." : autoAssignEnabled ? "Auto-Assign: ON" : "Auto-Assign: OFF"}
+            </button>
+          </div>
+
+          <div className="mt-3 flex flex-col gap-3 sm:flex-row">
             <input
               suppressHydrationWarning
               autoComplete="off"
@@ -482,27 +755,59 @@ export default function ErpPage({ params }: { params: Promise<{ studioSlug: stri
             />
           </div>
 
-          {/* Skill Filter Buttons */}
-          <div className="mt-3 flex flex-wrap gap-1.5">
-            {["ALL", ...ALL_SKILLS].map((s) => (
+          {/* Active vs Archived Toggle + Skill Filter Buttons */}
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap gap-1.5">
+              {["ALL", ...ALL_SKILLS].map((s) => (
+                <button
+                  key={s}
+                  onClick={() => setSkillFilter(s)}
+                  className={`rounded-full px-3 py-1 text-[11px] font-bold transition ${
+                    skillFilter === s
+                      ? "bg-brand-purple-primary text-white shadow-2xs"
+                      : "border border-border-default bg-white text-text-secondary hover:bg-surface-app hover:text-text-primary"
+                  }`}
+                >
+                  {s === "ALL" ? "All Skills" : SKILL_LABELS[s] || s}
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center gap-1.5">
               <button
-                key={s}
-                onClick={() => setSkillFilter(s)}
+                type="button"
+                onClick={() => {
+                  setViewMode("ACTIVE");
+                  setSelected(null);
+                }}
                 className={`rounded-full px-3 py-1 text-[11px] font-bold transition ${
-                  skillFilter === s
-                    ? "bg-brand-purple-primary text-white shadow-2xs"
-                    : "border border-border-default bg-white text-text-secondary hover:bg-surface-app hover:text-text-primary"
+                  viewMode === "ACTIVE"
+                    ? "bg-slate-900 text-white"
+                    : "border border-border-default bg-white text-text-secondary"
                 }`}
               >
-                {s === "ALL" ? "All Skills" : SKILL_LABELS[s] || s}
+                Active ({allCrew.length})
               </button>
-            ))}
+              <button
+                type="button"
+                onClick={() => {
+                  setViewMode("DELETED");
+                  setSelected(null);
+                }}
+                className={`rounded-full px-3 py-1 text-[11px] font-bold transition ${
+                  viewMode === "DELETED"
+                    ? "bg-red-600 text-white"
+                    : "border border-border-default bg-white text-text-secondary"
+                }`}
+              >
+                Archived ({deletedCrewList.length})
+              </button>
+            </div>
           </div>
         </header>
 
         {/* Crew Member List */}
         <div className="flex-1 overflow-y-auto p-5 space-y-2.5">
-          {pendingInvitations.length > 0 && (
+          {viewMode === "ACTIVE" && pendingInvitations.length > 0 && (
             <section className="rounded-2xl border border-amber-200 bg-amber-50/70 p-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
@@ -583,19 +888,16 @@ export default function ErpPage({ params }: { params: Promise<{ studioSlug: stri
                         className="rounded-lg border border-border-default bg-white px-2.5 py-2 text-[11px] font-semibold text-text-primary hover:bg-surface-app flex items-center gap-1.5"
                         title="Share invitation"
                       >
-                        <svg className="w-3.5 h-3.5 text-text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
-                        </svg>
                         Share
                       </button>
                       <button
                         type="button"
                         onClick={async () => {
-                          if (!window.confirm("Revoke this invitation? The recipient will no longer be able to claim it.")) return;
                           const token = await getIdToken(true);
                           if (token) {
                             await revokeInvitationAction({ inviteCode: invitation.id, studioId: studioSlug, idToken: token });
                             await loadData(token);
+                            showBannerMsg("success", "Invitation revoked.");
                           }
                         }}
                         className="rounded-lg border border-red-200 bg-white px-3 py-2 text-[11px] font-semibold text-red-700 hover:bg-red-50"
@@ -609,8 +911,8 @@ export default function ErpPage({ params }: { params: Promise<{ studioSlug: stri
             </section>
           )}
 
-          {/* Temporary Crew Section (Assigned in OMS) */}
-          {temporaryCrewList.length > 0 && (
+          {/* Temporary Crew Section (Assigned in OMS) — ERP-002 */}
+          {viewMode === "ACTIVE" && temporaryCrewList.length > 0 && (
             <section className="mb-6 space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -630,47 +932,97 @@ export default function ErpPage({ params }: { params: Promise<{ studioSlug: stri
                 {temporaryCrewList.map((temp) => (
                   <div
                     key={temp.id}
-                    className="flex items-center justify-between p-3.5 bg-amber-50/50 rounded-2xl border border-amber-200/80 hover:bg-amber-50/80 transition"
+                    className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 p-3.5 bg-amber-50/50 rounded-2xl border border-amber-200/80 hover:bg-amber-50/80 transition"
                   >
-                    <div className="min-w-0 pr-3">
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-sm text-text-primary truncate">{temp.name}</span>
-                        <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200">
-                          Temporary
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-text-secondary mt-0.5 truncate">
-                        {temp.services.length > 0 ? `Services: ${temp.services.join(", ")}` : "Assigned in shoot planning"}
-                        {temp.orderCount > 0 ? ` · In ${temp.orderCount} order(s)` : ""}
-                      </p>
+                    <div className="min-w-0 pr-3 flex-1">
+                      {editingTempCrew?.id === temp.id ? (
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            value={tempCrewNameInput}
+                            onChange={(e) => setTempCrewNameInput(e.target.value)}
+                            className="rounded-lg border border-amber-300 bg-white px-2.5 py-1 text-xs font-semibold text-text-primary outline-none"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => void handleUpdateTempCrew(temp.id, temp.name, tempCrewNameInput)}
+                            className="rounded-lg bg-brand-purple-primary px-2.5 py-1 text-[11px] font-bold text-white"
+                          >
+                            Save
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditingTempCrew(null)}
+                            className="rounded-lg border border-border-default bg-white px-2 py-1 text-[11px] font-semibold text-text-secondary"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-sm text-text-primary truncate">{temp.name}</span>
+                            <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200">
+                              Temporary
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-text-secondary mt-0.5 truncate">
+                            {temp.services.length > 0 ? `Services: ${temp.services.join(", ")}` : "Assigned in shoot planning"}
+                            {temp.orderCount > 0 ? ` · In ${temp.orderCount} order(s)` : ""}
+                          </p>
+                        </>
+                      )}
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setForm({
-                          name: temp.name,
-                          email: "",
-                          phone: "",
-                          claimCode: Math.floor(100000 + Math.random() * 900000).toString(),
-                          skills: temp.services.some((s) => s.toLowerCase().includes("video"))
-                            ? ["VIDEOGRAPHY"]
-                            : ["PHOTOGRAPHY"],
-                        });
-                        setModalError(null);
-                        setShowModal(true);
-                      }}
-                      className="rounded-xl bg-brand-purple-primary text-white font-bold text-xs px-3.5 py-2 hover:bg-brand-purple-hover transition shrink-0 shadow-xs cursor-pointer"
-                    >
-                      Convert to ERP
-                    </button>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingTempCrew({ id: temp.id, name: temp.name });
+                          setTempCrewNameInput(temp.name);
+                        }}
+                        className="rounded-xl border border-amber-300 bg-white px-2.5 py-1.5 text-[11px] font-bold text-amber-900 hover:bg-amber-100 inline-flex items-center gap-1 transition"
+                        title="Rename temporary crew"
+                      >
+                        <Pencil className="h-3 w-3" />
+                        <span>Edit</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleDeleteTempCrew(temp.id, temp.name)}
+                        className="rounded-xl border border-red-200 bg-white px-2.5 py-1.5 text-[11px] font-bold text-red-700 hover:bg-red-50 inline-flex items-center gap-1 transition"
+                        title="Remove from studio temporary crew list"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingMember(null);
+                          setForm({
+                            name: temp.name,
+                            email: "",
+                            phone: "",
+                            claimCode: Math.floor(100000 + Math.random() * 900000).toString(),
+                            skills: temp.services.some((s) => s.toLowerCase().includes("video"))
+                              ? ["VIDEOGRAPHY"]
+                              : ["PHOTOGRAPHY"],
+                          });
+                          setModalError(null);
+                          setShowModal(true);
+                        }}
+                        className="rounded-xl bg-brand-purple-primary text-white font-bold text-xs px-3 py-1.5 hover:bg-brand-purple-hover transition shrink-0 shadow-xs cursor-pointer"
+                      >
+                        Convert to ERP
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
             </section>
           )}
 
-          {loading && allCrew.length === 0 ? (
+          {loading && activeSourceList.length === 0 ? (
             <div className="py-16 text-center text-xs text-text-tertiary">Loading crew members...</div>
           ) : (
             <>
@@ -678,6 +1030,8 @@ export default function ErpPage({ params }: { params: Promise<{ studioSlug: stri
                 <div className="rounded-2xl border border-dashed border-border-default bg-white p-8 text-center text-xs text-text-tertiary">
                   {search || skillFilter !== "ALL"
                     ? "No crew members match the selected filters."
+                    : viewMode === "DELETED"
+                    ? "No archived crew members."
                     : "No crew members added yet. Add photographers, videographers, and editors to assign them to orders."}
                 </div>
               )}
@@ -720,6 +1074,11 @@ export default function ErpPage({ params }: { params: Promise<{ studioSlug: stri
                               Owner
                             </span>
                           )}
+                          {emp.isDeleted && (
+                            <span className="rounded bg-red-100 px-1.5 py-0.5 text-[9px] font-bold uppercase text-red-700">
+                              Archived
+                            </span>
+                          )}
                         </div>
                         <p className="text-xs text-text-secondary">
                           {emp.email} {emp.phone ? `· ${emp.phone}` : ""}
@@ -740,6 +1099,19 @@ export default function ErpPage({ params }: { params: Promise<{ studioSlug: stri
                         </div>
                       </div>
                     </div>
+                    {emp.isDeleted && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void handleRestoreMember(emp);
+                        }}
+                        className="inline-flex items-center gap-1 rounded-lg bg-emerald-100 px-2.5 py-1 text-[10px] font-bold text-emerald-800 hover:bg-emerald-200 transition"
+                      >
+                        <RotateCcw className="h-3 w-3" />
+                        Restore
+                      </button>
+                    )}
                   </div>
                 );
               })}
@@ -751,18 +1123,61 @@ export default function ErpPage({ params }: { params: Promise<{ studioSlug: stri
       {/* Selected Crew Detail Drawer */}
       {selected && (
         <div className="w-full lg:w-1/2 flex flex-col h-full bg-white overflow-y-auto border-l border-border-default">
-          <div className="sticky top-0 z-10 border-b border-border-default bg-white px-4 sm:px-6 py-3.5 sm:py-4 flex items-center justify-between">
+          <div className="sticky top-0 z-10 border-b border-border-default bg-white px-4 sm:px-6 py-3.5 sm:py-4 flex items-center justify-between gap-2">
             <div>
               <span className="text-[10px] font-bold uppercase tracking-wider text-brand-purple-primary">Crew Profile</span>
               <h2 className="text-sm font-bold text-text-primary">Member Overview</h2>
             </div>
-            <button
-              onClick={() => setSelected(null)}
-              className="btn-brand-outline py-1.5 px-3 text-xs flex items-center gap-1"
-            >
-              <span>←</span>
-              <span>Back</span>
-            </button>
+            <div className="flex items-center gap-2">
+              {selected.role !== "STUDIO_OWNER" && !selected.isDeleted && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingMember(selected);
+                      setForm({
+                        name: selected.name || "",
+                        email: selected.email || "",
+                        phone: selected.phone || "",
+                        claimCode: "",
+                        skills: selected.skills && selected.skills.length > 0 ? selected.skills : ["PHOTOGRAPHY"],
+                      });
+                      setModalError(null);
+                      setShowModal(true);
+                    }}
+                    className="rounded-xl border border-border-default bg-surface-app px-3 py-1.5 text-xs font-bold text-text-primary hover:border-brand-purple-primary inline-flex items-center gap-1.5 transition"
+                  >
+                    <Pencil className="h-3.5 w-3.5 text-brand-purple-primary" />
+                    <span>Edit</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleDeleteMember(selected)}
+                    className="rounded-xl border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-bold text-red-700 hover:bg-red-100 inline-flex items-center gap-1.5 transition"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    <span>Archive</span>
+                  </button>
+                </>
+              )}
+              {selected.isDeleted && (
+                <button
+                  type="button"
+                  onClick={() => void handleRestoreMember(selected)}
+                  className="rounded-xl bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 inline-flex items-center gap-1.5 transition"
+                >
+                  <RotateCcw className="h-3.5 w-3.5" />
+                  <span>Restore Member</span>
+                </button>
+              )}
+              <button
+                onClick={() => setSelected(null)}
+                className="btn-brand-outline py-1.5 px-3 text-xs flex items-center gap-1"
+              >
+                <span>←</span>
+                <span>Back</span>
+              </button>
+            </div>
           </div>
 
           <div className="p-6 space-y-6">
@@ -798,7 +1213,7 @@ export default function ErpPage({ params }: { params: Promise<{ studioSlug: stri
 
             {selected.role === "STUDIO_OWNER" && (
               <div className="rounded-2xl border border-brand-purple-soft bg-brand-purple-background/30 p-4">
-                <p className="text-xs font-semibold text-brand-purple-primary">Studio Administrator & Owner</p>
+                <p className="text-xs font-semibold text-brand-purple-primary">Studio Administrator &amp; Owner</p>
                 <p className="mt-0.5 text-xs text-text-secondary">
                   The studio owner is automatically the primary crew member with owner status.
                 </p>
@@ -832,7 +1247,9 @@ export default function ErpPage({ params }: { params: Promise<{ studioSlug: stri
             </div>
 
             <div className="rounded-2xl border border-border-default p-4">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-text-tertiary mb-3">Upcoming Assignments</h3>
+              <h3 className="text-xs font-bold uppercase tracking-wider text-text-tertiary mb-3">
+                Upcoming Assignments &amp; Call Times
+              </h3>
               <div className="space-y-3">
                 {orders.filter(o => 
                   o.assignedResources?.some(r => r.memberId === selected.id) && 
@@ -842,8 +1259,24 @@ export default function ErpPage({ params }: { params: Promise<{ studioSlug: stri
                     .filter(o => o.assignedResources?.some(r => r.memberId === selected.id) && o.orderStatus !== "COMPLETED")
                     .map(order => {
                       const assignment = order.assignedResources.find(r => r.memberId === selected.id)!;
+                      const draft = callTimeDrafts[order.id] ?? {
+                        callTime: assignment.callTime || order.callTime || "08:30 AM",
+                        venueNotes: assignment.venueNotes || order.eventLocation || "",
+                      };
+                      const cleanPhone = (selected.phone || "").replace(/\D/g, "");
+                      const formattedPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
+                      const reminderText =
+                        `📋 *${studio?.name || studioSlug} — Crew Call-Time Reminder*\n\n` +
+                        `Hi ${selected.name},\n` +
+                        `You are scheduled for *${order.eventType}* (Order #${order.orderNumber}).\n` +
+                        `📅 *Event Date:* ${order.eventDate}\n` +
+                        `⏰ *Call Time:* ${draft.callTime || "TBD"}\n` +
+                        `📍 *Venue / Notes:* ${draft.venueNotes || order.eventLocation || "Studio Venue"}\n` +
+                        `📌 *Assigned Role:* ${SKILL_LABELS[assignment.skill] || assignment.skill}\n\n` +
+                        `Please arrive on time and confirm equipment readiness.`;
+
                       return (
-                        <div key={order.id} className="flex flex-col gap-2 p-3.5 rounded-xl border border-border-default bg-surface-app/50">
+                        <div key={order.id} className="flex flex-col gap-2.5 p-3.5 rounded-xl border border-border-default bg-surface-app/50">
                           <div className="flex justify-between items-start">
                             <div>
                               <p className="text-sm font-bold text-text-primary">{order.eventType}</p>
@@ -855,8 +1288,69 @@ export default function ErpPage({ params }: { params: Promise<{ studioSlug: stri
                               {SKILL_LABELS[assignment.skill] || assignment.skill}
                             </span>
                           </div>
+
+                          {/* Call Time & Venue Notes (WA-004) */}
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 border-t border-border-default text-xs">
+                            <div>
+                              <label className="text-[10px] font-bold uppercase text-text-tertiary flex items-center gap-1">
+                                <Clock className="h-3 w-3 text-brand-purple-primary" />
+                                Call Time
+                              </label>
+                              <input
+                                type="text"
+                                placeholder="e.g. 07:30 AM"
+                                value={draft.callTime}
+                                onChange={(e) =>
+                                  setCallTimeDrafts((prev) => ({
+                                    ...prev,
+                                    [order.id]: { ...draft, callTime: e.target.value },
+                                  }))
+                                }
+                                className="mt-1 w-full rounded-lg border border-border-default bg-white px-2.5 py-1.5 text-xs text-text-primary outline-none focus:border-brand-purple-primary"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[10px] font-bold uppercase text-text-tertiary">
+                                Venue / Shoot Notes
+                              </label>
+                              <input
+                                type="text"
+                                placeholder="Venue & gear instructions"
+                                value={draft.venueNotes}
+                                onChange={(e) =>
+                                  setCallTimeDrafts((prev) => ({
+                                    ...prev,
+                                    [order.id]: { ...draft, venueNotes: e.target.value },
+                                  }))
+                                }
+                                className="mt-1 w-full rounded-lg border border-border-default bg-white px-2.5 py-1.5 text-xs text-text-primary outline-none focus:border-brand-purple-primary"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                            <button
+                              type="button"
+                              disabled={savingCallTimeOrderId === order.id}
+                              onClick={() => void handleSaveCallTime(order.id, selected.id)}
+                              className="rounded-lg border border-brand-purple-soft bg-white px-2.5 py-1 text-[11px] font-bold text-brand-purple-primary hover:bg-brand-purple-background transition disabled:opacity-50"
+                            >
+                              {savingCallTimeOrderId === order.id ? "Saving..." : "Save Call Time"}
+                            </button>
+                            {formattedPhone && (
+                              <a
+                                href={`https://wa.me/${formattedPhone}?text=${encodeURIComponent(reminderText)}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-emerald-700 transition"
+                              >
+                                <Send className="h-3 w-3" />
+                                Send Call-Time WhatsApp
+                              </a>
+                            )}
+                          </div>
                           
-                          <div className="flex items-center justify-between mt-2 pt-2 border-t border-border-default">
+                          <div className="flex items-center justify-between mt-1 pt-2 border-t border-border-default">
                             <span className="text-[10px] font-bold uppercase text-text-tertiary">Availability:</span>
                             {assignment.availabilityConfirmed === true ? (
                               <span className="badge-status-success">Confirmed</span>
@@ -869,7 +1363,7 @@ export default function ErpPage({ params }: { params: Promise<{ studioSlug: stri
                                     const token = await getIdToken(false);
                                     if (token) {
                                       await confirmResourceAvailabilityAction(order.id, selected.id, true, token);
-                                      await loadData();
+                                      await loadData(token);
                                     }
                                   }}
                                   className="btn-brand-purple py-1 px-2.5 text-[10px]"
@@ -881,7 +1375,7 @@ export default function ErpPage({ params }: { params: Promise<{ studioSlug: stri
                                     const token = await getIdToken(false);
                                     if (token) {
                                       await confirmResourceAvailabilityAction(order.id, selected.id, false, token);
-                                      await loadData();
+                                      await loadData(token);
                                     }
                                   }}
                                   className="btn-brand-outline py-1 px-2.5 text-[10px]"
@@ -902,8 +1396,9 @@ export default function ErpPage({ params }: { params: Promise<{ studioSlug: stri
           </div>
         </div>
       )}
+      </div>
 
-      {/* Add Member Modal */}
+      {/* Add / Edit Member Modal */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
           <div className="w-full max-w-md rounded-3xl bg-white p-6 sm:p-8 shadow-2xl border border-border-default animate-in fade-in duration-150">
@@ -913,14 +1408,24 @@ export default function ErpPage({ params }: { params: Promise<{ studioSlug: stri
                   <span className="h-1.5 w-1.5 rounded-full bg-brand-purple-primary" />
                   Crew Member
                 </div>
-                <h3 className="text-base font-bold text-text-primary">Add Crew Member</h3>
+                <h3 className="text-base font-bold text-text-primary">
+                  {editingMember ? "Edit Crew Member" : "Add Crew Member"}
+                </h3>
               </div>
-              <button onClick={() => setShowModal(false)} className="text-text-tertiary hover:text-text-primary font-bold">✕</button>
+              <button
+                onClick={() => {
+                  setShowModal(false);
+                  setEditingMember(null);
+                }}
+                className="text-text-tertiary hover:text-text-primary font-bold"
+              >
+                ✕
+              </button>
             </div>
             {modalError && (
               <div className="mt-3 rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-600 font-medium">{modalError}</div>
             )}
-            <form onSubmit={handleCreateMember} className="mt-4 space-y-3.5 text-xs">
+            <form onSubmit={handleSaveMember} className="mt-4 space-y-3.5 text-xs">
               <div>
                 <label className="block font-bold text-text-primary">Full Name *</label>
                 <input
@@ -945,90 +1450,94 @@ export default function ErpPage({ params }: { params: Promise<{ studioSlug: stri
                   </p>
                 )}
               </div>
-              <div>
-                <label className="block font-bold text-text-primary">Email</label>
-                <input
-                  type="email"
-                  placeholder="crew@studio.com"
-                  value={form.email}
-                  onChange={(e) =>
-                    setForm({
-                      ...form,
-                      email: e.target.value,
-                      claimCode: e.target.value
-                        ? ""
-                        : form.claimCode || Math.floor(100000 + Math.random() * 900000).toString(),
-                    })
-                  }
-                  className={`mt-1 w-full rounded-xl border px-3.5 py-2 text-xs outline-none focus:ring-1 ${
-                    fieldHints.emailHint?.type === "error"
-                      ? "border-red-400 focus:border-red-500 focus:ring-red-300"
-                      : fieldHints.emailHint?.type === "warn"
-                      ? "border-amber-400 focus:border-amber-500 focus:ring-amber-300"
-                      : "border-border-default focus:border-brand-purple-primary focus:ring-brand-purple-primary"
-                  }`}
-                />
-                {fieldHints.emailHint ? (
-                  <p className={`mt-1.5 text-[11px] font-medium leading-relaxed ${
-                    fieldHints.emailHint.type === "error" ? "text-red-600"
-                    : fieldHints.emailHint.type === "warn" ? "text-amber-700"
-                    : "text-brand-purple-primary"
-                  }`}>
-                    {fieldHints.emailHint.type === "error" ? "⊘ "
-                      : fieldHints.emailHint.type === "warn" ? "⚠ "
-                      : "ℹ "}{fieldHints.emailHint.text}
-                  </p>
-                ) : (
-                  <p className="mt-1.5 text-[11px] leading-relaxed text-text-secondary">
-                    {form.email.trim()
-                      ? "✓ Member will authenticate directly using this Google email address."
-                      : "Provide email for Google sign-in auth, or leave blank to use the auto-generated 6-digit access PIN below."}
-                  </p>
-                )}
-              </div>
-              {!form.email.trim() && (
-                <div className="rounded-xl border border-brand-purple-soft/60 bg-brand-purple-background/30 p-3 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-bold text-brand-purple-primary block">
-                      6-Digit Guest Access PIN *
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setForm((prev) => ({
-                          ...prev,
-                          claimCode: Math.floor(100000 + Math.random() * 900000).toString(),
-                        }))
+              {!editingMember && (
+                <>
+                  <div>
+                    <label className="block font-bold text-text-primary">Email</label>
+                    <input
+                      type="email"
+                      placeholder="crew@studio.com"
+                      value={form.email}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          email: e.target.value,
+                          claimCode: e.target.value
+                            ? ""
+                            : form.claimCode || Math.floor(100000 + Math.random() * 900000).toString(),
+                        })
                       }
-                      className="text-[10px] font-bold text-brand-purple-primary hover:underline"
-                    >
-                      Regenerate PIN
-                    </button>
+                      className={`mt-1 w-full rounded-xl border px-3.5 py-2 text-xs outline-none focus:ring-1 ${
+                        fieldHints.emailHint?.type === "error"
+                          ? "border-red-400 focus:border-red-500 focus:ring-red-300"
+                          : fieldHints.emailHint?.type === "warn"
+                          ? "border-amber-400 focus:border-amber-500 focus:ring-amber-300"
+                          : "border-border-default focus:border-brand-purple-primary focus:ring-brand-purple-primary"
+                      }`}
+                    />
+                    {fieldHints.emailHint ? (
+                      <p className={`mt-1.5 text-[11px] font-medium leading-relaxed ${
+                        fieldHints.emailHint.type === "error" ? "text-red-600"
+                        : fieldHints.emailHint.type === "warn" ? "text-amber-700"
+                        : "text-brand-purple-primary"
+                      }`}>
+                        {fieldHints.emailHint.type === "error" ? "⊘ "
+                          : fieldHints.emailHint.type === "warn" ? "⚠ "
+                          : "ℹ "}{fieldHints.emailHint.text}
+                      </p>
+                    ) : (
+                      <p className="mt-1.5 text-[11px] leading-relaxed text-text-secondary">
+                        {form.email.trim()
+                          ? "✓ Member will authenticate directly using this Google email address."
+                          : "Provide email for Google sign-in auth, or leave blank to use the auto-generated 6-digit access PIN below."}
+                      </p>
+                    )}
                   </div>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    autoComplete="off"
-                    required
-                    maxLength={6}
-                    placeholder="e.g. 492015"
-                    value={form.claimCode}
-                    onChange={(e) =>
-                      setForm({ ...form, claimCode: e.target.value.replace(/\D/g, "").slice(0, 6) })
-                    }
-                    className={`w-full rounded-xl bg-white px-3.5 py-2 font-mono text-sm font-extrabold tracking-widest text-text-primary outline-none transition ${
-                      form.claimCode.length !== 6
-                        ? "border border-rose-400 focus:border-rose-500 focus:ring-1 focus:ring-rose-500"
-                        : "border border-border-default focus:border-brand-purple-primary focus:ring-1 focus:ring-brand-purple-primary"
-                    }`}
-                  />
-                  {form.claimCode.length !== 6 && (
-                    <p className="mt-1 text-[11px] font-medium text-rose-600">PIN must be 6 digits.</p>
+                  {!form.email.trim() && (
+                    <div className="rounded-xl border border-brand-purple-soft/60 bg-brand-purple-background/30 p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-bold text-brand-purple-primary block">
+                          6-Digit Guest Access PIN *
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setForm((prev) => ({
+                              ...prev,
+                              claimCode: Math.floor(100000 + Math.random() * 900000).toString(),
+                            }))
+                          }
+                          className="text-[10px] font-bold text-brand-purple-primary hover:underline"
+                        >
+                          Regenerate PIN
+                        </button>
+                      </div>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        autoComplete="off"
+                        required
+                        maxLength={6}
+                        placeholder="e.g. 492015"
+                        value={form.claimCode}
+                        onChange={(e) =>
+                          setForm({ ...form, claimCode: e.target.value.replace(/\D/g, "").slice(0, 6) })
+                        }
+                        className={`w-full rounded-xl bg-white px-3.5 py-2 font-mono text-sm font-extrabold tracking-widest text-text-primary outline-none transition ${
+                          form.claimCode.length !== 6
+                            ? "border border-rose-400 focus:border-rose-500 focus:ring-1 focus:ring-rose-500"
+                            : "border border-border-default focus:border-brand-purple-primary focus:ring-1 focus:ring-brand-purple-primary"
+                        }`}
+                      />
+                      {form.claimCode.length !== 6 && (
+                        <p className="mt-1 text-[11px] font-medium text-rose-600">PIN must be 6 digits.</p>
+                      )}
+                      <p className="text-[11px] text-text-secondary">
+                        Share this 6-digit PIN alongside the invitation link with your crew member to join the studio without a Google email account.
+                      </p>
+                    </div>
                   )}
-                  <p className="text-[11px] text-text-secondary">
-                    Share this 6-digit PIN alongside the invitation link with your crew member to join the studio without a Google email account.
-                  </p>
-                </div>
+                </>
               )}
               <div>
                 <label className="block font-bold text-text-primary">Phone</label>
@@ -1066,7 +1575,10 @@ export default function ErpPage({ params }: { params: Promise<{ studioSlug: stri
               <div className="pt-2 flex justify-end gap-2.5">
                 <button
                   type="button"
-                  onClick={() => setShowModal(false)}
+                  onClick={() => {
+                    setShowModal(false);
+                    setEditingMember(null);
+                  }}
                   className="btn-brand-outline"
                 >
                   Cancel
@@ -1076,7 +1588,7 @@ export default function ErpPage({ params }: { params: Promise<{ studioSlug: stri
                   disabled={isSubmitting || fieldHints.hasBlockingError}
                   className="btn-brand-purple disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {isSubmitting ? "Saving..." : "Save Member"}
+                  {isSubmitting ? "Saving..." : editingMember ? "Update Member" : "Save Member"}
                 </button>
               </div>
             </form>
@@ -1159,9 +1671,6 @@ export default function ErpPage({ params }: { params: Promise<{ studioSlug: stri
                   className="rounded-xl border border-border-default bg-white px-3 py-2 text-xs font-semibold text-text-primary hover:bg-surface-app flex items-center gap-1.5 shrink-0"
                   title="Share invitation link"
                 >
-                  <svg className="w-3.5 h-3.5 text-text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
-                  </svg>
                   Share
                 </button>
               </div>

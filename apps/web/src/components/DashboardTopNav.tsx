@@ -107,16 +107,19 @@ export function DashboardTopNav({
     isLifetimePro ||
     selectedCaps.includes("WHATSAPP_NOTIFICATIONS") || selectedCaps.includes("WHATSAPP_OPERATIONS");
 
-  const isFullySelected =
-    isLifetimePro ||
-    (hasCRM && hasERP && hasReports && hasDrive && hasWhatsApp) ||
-    currentPlanInfo?.plan === "COMPLETE";
+  const effectiveTier = (() => {
+    if (isLifetimePro) return "COMPLETE";
+    if (!currentPlanInfo) return "FREE";
+    if (currentPlanInfo.isTrial && currentPlanInfo.trialExpiresAt && new Date() <= new Date(currentPlanInfo.trialExpiresAt)) {
+      return "COMPLETE";
+    }
+    if (currentPlanInfo.plan === "COMPLETE" || hasReports || hasWhatsApp) return "COMPLETE";
+    if (currentPlanInfo.plan === "PROFESSIONAL" || hasCRM || hasERP || hasDrive) return "PROFESSIONAL";
+    return "FREE";
+  })();
 
-  const hasAnySubscription =
-    isLifetimePro ||
-    isFullySelected ||
-    selectedCaps.length > 0 ||
-    currentPlanInfo?.plan === "PROFESSIONAL";
+  const isFullySelected = effectiveTier === "COMPLETE";
+  const hasAnySubscription = effectiveTier !== "FREE";
 
   return (
     <div className="h-14 border-b border-[#D8D2C4] bg-[#FAF7F2] flex items-center justify-between px-4 sm:px-6 sticky top-0 z-40 shadow-[0_1px_2px_rgba(40,30,20,0.04)]">
@@ -161,12 +164,18 @@ export function DashboardTopNav({
                       </span>
                       <span
                         className={`text-[9px] font-bold uppercase px-2 py-0.5 rounded ${
-                          hasAnySubscription
+                          effectiveTier === "COMPLETE"
+                            ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                            : effectiveTier === "PROFESSIONAL"
                             ? "bg-[#F0F9FF] text-[#0369A1] border border-[#7DD3FC]"
                             : "bg-[#ECE6DE] text-[#57534E] border border-[#D8D2C4]"
                         }`}
                       >
-                        {hasAnySubscription ? "PRO" : "FREE"}
+                        {effectiveTier === "COMPLETE"
+                          ? "₹1,999 COMPLETE"
+                          : effectiveTier === "PROFESSIONAL"
+                          ? "₹999 PRO"
+                          : "FREE · ₹0"}
                       </span>
                     </div>
 

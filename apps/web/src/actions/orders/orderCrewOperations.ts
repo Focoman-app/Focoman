@@ -348,3 +348,47 @@ export async function checkIsStudioStaffCore(input: {
     return { isStaff: false };
   }
 }
+
+export async function updateAssignmentCallTimeCore(input: {
+  orderId: string;
+  studioId: string;
+  memberId: string;
+  callTime?: string;
+  venueNotes?: string;
+  idToken: string;
+}): Promise<{ success: boolean; order?: Order; error?: string }> {
+  try {
+    const decoded = await requireVerifiedUser(input.idToken);
+    await requireStudioOwner(decoded.uid, input.studioId);
+
+    const existingOrder = await getOrderById(input.orderId);
+    if (!existingOrder || existingOrder.studioId.toLowerCase() !== input.studioId.toLowerCase()) {
+      return { success: false, error: "Order not found in authorized studio." };
+    }
+
+    const updatedAssignments = (existingOrder.assignedResources || []).map((r) => {
+      if (r.memberId === input.memberId) {
+        return {
+          ...r,
+          ...(input.callTime !== undefined ? { callTime: input.callTime.trim() } : {}),
+          ...(input.venueNotes !== undefined ? { venueNotes: input.venueNotes.trim() } : {}),
+        };
+      }
+      return r;
+    });
+
+    const updatedOrder = await updateOrder(input.orderId, {
+      assignedResources: updatedAssignments,
+      ...(input.callTime !== undefined ? { callTime: input.callTime.trim() } : {}),
+    });
+
+    return { success: true, order: updatedOrder || undefined };
+  } catch (err: unknown) {
+    console.error("[updateAssignmentCallTimeAction] Error:", err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Failed to update call time",
+    };
+  }
+}
+

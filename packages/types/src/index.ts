@@ -275,6 +275,7 @@ export interface OrderDriveDeliverable {
   notes?: string;
   clientApproved?: boolean;
   clientFeedback?: string;
+  selectedPhotos?: string[];
   clientReviewedAt?: string;
   addedAt: string;
   addedBy?: string;
@@ -303,6 +304,7 @@ export interface CustomerTrackingView {
     eventType: string;
     eventDate: string;
     eventLocation?: string;
+    callTime?: string;
     services: string[];
     packages?: string[];
     totalAmount: number;
@@ -334,6 +336,7 @@ export interface MemberOrderSummary {
   eventType: string;
   eventDate: string;
   eventLocation?: string;
+  callTime?: string;
   services: string[];
   orderStatus: OrderStatus;
 }
@@ -369,6 +372,44 @@ export interface StudioServiceConfig {
   priceDisabled?: boolean;
 }
 
+export type LeadChannel = 'INSTAGRAM' | 'WHATSAPP' | 'WEBSITE' | 'MARKETPLACE' | 'DIRECT';
+
+export type LeadStage = 'NEW' | 'CONTACTED' | 'QUOTED' | 'CONVERTED' | 'ARCHIVED';
+
+export interface StudioLeadWebhookConfig {
+  enabled?: boolean;
+  webhookKey: string;
+  instagramBusinessId?: string;
+  instagramHandle?: string;
+  whatsappBusinessPhone?: string;
+  websiteDomain?: string;
+  autoCaptureWhatsAppUnknownSenders?: boolean;
+  autoReplyEnabled?: boolean;
+  updatedAt?: string;
+}
+
+export interface StudioLead extends SoftDeletable {
+  id: string;
+  studioId: string;
+  bookingRequestId?: string;
+  name: string;
+  phone?: string;
+  email?: string;
+  instagramHandle?: string;
+  channel: LeadChannel;
+  stage: LeadStage;
+  eventType?: string;
+  eventDate?: string;
+  location?: string;
+  estimatedBudget?: number;
+  message?: string;
+  notes?: string;
+  convertedOrderId?: string;
+  convertedCustomerId?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Studio extends SoftDeletable {
   id: string;
   name: string;
@@ -385,6 +426,7 @@ export interface Studio extends SoftDeletable {
   ownerPhone?: string;
   temporaryCrew?: TemporaryCrewMember[];
   whatsappConfig?: Record<string, boolean>;
+  leadWebhookConfig?: StudioLeadWebhookConfig;
   configuredServices?: StudioServiceConfig[];
   features?: {
     oms: boolean;
@@ -393,6 +435,9 @@ export interface Studio extends SoftDeletable {
     whatsapp: boolean;
     marketplace: boolean;
     reports?: boolean;
+    driveReview?: boolean;
+    basicDashboard?: boolean;
+    autoAssignCrew?: boolean;
   };
   billingProfile?: StudioBillingProfile;
   createdAt: string;
@@ -516,6 +561,8 @@ export interface ResourceAssignment {
   memberId: string;
   memberName: string;
   skill: string;
+  callTime?: string;
+  venueNotes?: string;
   availabilityConfirmed: boolean | null; // null = pending, true = confirmed, false = rejected
 }
 
@@ -563,6 +610,7 @@ export interface Order extends SoftDeletable {
   eventType: string;
   eventDate: string; // YYYY-MM-DD
   eventLocation?: string;
+  callTime?: string;
   locationInfo?: EventLocationInfo;
   services: string[];
   packages: string[];

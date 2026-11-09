@@ -33,6 +33,7 @@ export interface GoogleDriveDeliverablesSectionProps {
     deliverableId: string;
     approved: boolean;
     feedback?: string;
+    selectedPhotos?: string[];
   }) => Promise<{ success: boolean; error?: string }>;
 }
 
@@ -86,6 +87,9 @@ export function GoogleDriveDeliverablesSection({
   const [feedbackDrafts, setFeedbackDrafts] = useState<Record<string, string>>(
     {}
   );
+  const [selectedPhotosDrafts, setSelectedPhotosDrafts] = useState<
+    Record<string, string>
+  >({});
 
   const handleAddDeliverable = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -162,10 +166,20 @@ export function GoogleDriveDeliverablesSection({
         feedbackDrafts[deliverable.id] !== undefined
           ? feedbackDrafts[deliverable.id]
           : deliverable.clientFeedback || "";
+      const rawPhotosStr =
+        selectedPhotosDrafts[deliverable.id] !== undefined
+          ? selectedPhotosDrafts[deliverable.id]
+          : (deliverable.selectedPhotos || []).join(", ");
+      const parsedPhotos = rawPhotosStr
+        .split(/[,;\n]+/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+
       const res = await onSubmitClientReview({
         deliverableId: deliverable.id,
         approved,
         feedback: note,
+        selectedPhotos: parsedPhotos,
       });
       if (!res.success) {
         setErrorMsg(res.error || "Failed to save review status.");
@@ -180,10 +194,10 @@ export function GoogleDriveDeliverablesSection({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-300">
-            Google Drive Deliverables & In-App Preview
+            Google Drive Deliverables &amp; In-App Preview
           </h4>
           <p className="mt-0.5 text-xs text-slate-400">
-            Preview photos, videos, album PDFs, or folders directly via Google Drive viewer or open in Google Drive.
+            Preview photos, videos, album PDFs, or folders directly via Google Drive viewer, shortlist photo filenames, and submit client review approvals.
           </p>
         </div>
 
@@ -322,6 +336,10 @@ export function GoogleDriveDeliverablesSection({
               feedbackDrafts[item.id] !== undefined
                 ? feedbackDrafts[item.id]
                 : item.clientFeedback || "";
+            const selectedPhotosVal =
+              selectedPhotosDrafts[item.id] !== undefined
+                ? selectedPhotosDrafts[item.id]
+                : (item.selectedPhotos || []).join(", ");
 
             return (
               <div
@@ -353,11 +371,31 @@ export function GoogleDriveDeliverablesSection({
                             Revision Requested
                           </span>
                         )}
+                        {item.selectedPhotos && item.selectedPhotos.length > 0 && (
+                          <span className="inline-flex items-center gap-1 rounded border border-indigo-500/30 bg-indigo-500/10 px-2 py-0.5 text-[10px] font-semibold text-indigo-300">
+                            {item.selectedPhotos.length} Photo{item.selectedPhotos.length === 1 ? "" : "s"} Selected
+                          </span>
+                        )}
                       </div>
                       {item.notes && (
                         <p className="mt-1 text-xs text-slate-400">
                           {item.notes}
                         </p>
+                      )}
+                      {item.selectedPhotos && item.selectedPhotos.length > 0 && !canSubmitClientReview && (
+                        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                            Shortlisted Photos:
+                          </span>
+                          {item.selectedPhotos.map((photo, idx) => (
+                            <span
+                              key={`${photo}-${idx}`}
+                              className="rounded bg-slate-900 border border-slate-700 px-2 py-0.5 font-mono text-[10px] text-indigo-200"
+                            >
+                              {photo}
+                            </span>
+                          ))}
+                        </div>
                       )}
                       {item.clientFeedback && !canSubmitClientReview && (
                         <p className="mt-1 text-xs text-indigo-300">
@@ -449,40 +487,61 @@ export function GoogleDriveDeliverablesSection({
                   </div>
                 )}
 
-                {/* Client Approval & Feedback Controls (on /track/[passkey]) */}
+                {/* Client Photo Selection, Approval & Feedback Controls (on /track/[passkey]) */}
                 {canSubmitClientReview && onSubmitClientReview && (
-                  <div className="border-t border-slate-800/80 pt-3 flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
-                    <input
-                      type="text"
-                      value={feedbackVal}
-                      onChange={(e) =>
-                        setFeedbackDrafts((prev) => ({
-                          ...prev,
-                          [item.id]: e.target.value,
-                        }))
-                      }
-                      placeholder="Optional selection note or revision feedback for studio..."
-                      className="w-full sm:max-w-md rounded-lg border border-slate-800 bg-slate-900 px-3 py-1.5 text-xs text-slate-200 focus:border-indigo-500 focus:outline-none"
-                    />
-                    <div className="flex flex-wrap items-center gap-2 shrink-0">
-                      <button
-                        type="button"
-                        disabled={reviewingId === item.id}
-                        onClick={() => handleReviewAction(item, true)}
-                        className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-500 disabled:opacity-50"
-                      >
-                        <CheckCircle2 className="h-3.5 w-3.5" />
-                        <span>Approve Deliverable</span>
-                      </button>
-                      <button
-                        type="button"
-                        disabled={reviewingId === item.id}
-                        onClick={() => handleReviewAction(item, false)}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-xs font-semibold text-amber-300 hover:bg-amber-500/20 disabled:opacity-50"
-                      >
-                        <RotateCcw className="h-3.5 w-3.5" />
-                        <span>Request Changes</span>
-                      </button>
+                  <div className="border-t border-slate-800/80 pt-3 space-y-2.5">
+                    {(item.category === "FOLDER" || item.category === "IMAGE") && (
+                      <div>
+                        <label className="mb-1 block text-[11px] font-medium text-slate-400">
+                          Selected Photo Numbers / Filenames (comma-separated)
+                        </label>
+                        <input
+                          type="text"
+                          value={selectedPhotosVal}
+                          onChange={(e) =>
+                            setSelectedPhotosDrafts((prev) => ({
+                              ...prev,
+                              [item.id]: e.target.value,
+                            }))
+                          }
+                          placeholder="e.g. IMG_0012, IMG_0045, IMG_0108, DSC_0291"
+                          className="w-full rounded-lg border border-slate-800 bg-slate-900 px-3 py-1.5 font-mono text-xs text-slate-200 focus:border-indigo-500 focus:outline-none"
+                        />
+                      </div>
+                    )}
+                    <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
+                      <input
+                        type="text"
+                        value={feedbackVal}
+                        onChange={(e) =>
+                          setFeedbackDrafts((prev) => ({
+                            ...prev,
+                            [item.id]: e.target.value,
+                          }))
+                        }
+                        placeholder="Optional selection note or revision feedback for studio..."
+                        className="w-full sm:max-w-md rounded-lg border border-slate-800 bg-slate-900 px-3 py-1.5 text-xs text-slate-200 focus:border-indigo-500 focus:outline-none"
+                      />
+                      <div className="flex flex-wrap items-center gap-2 shrink-0">
+                        <button
+                          type="button"
+                          disabled={reviewingId === item.id}
+                          onClick={() => handleReviewAction(item, true)}
+                          className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-500 disabled:opacity-50"
+                        >
+                          <CheckCircle2 className="h-3.5 w-3.5" />
+                          <span>Save Selection &amp; Approve</span>
+                        </button>
+                        <button
+                          type="button"
+                          disabled={reviewingId === item.id}
+                          onClick={() => handleReviewAction(item, false)}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-xs font-semibold text-amber-300 hover:bg-amber-500/20 disabled:opacity-50"
+                        >
+                          <RotateCcw className="h-3.5 w-3.5" />
+                          <span>Request Changes</span>
+                        </button>
+                      </div>
                     </div>
                   </div>
                 )}

@@ -28,6 +28,10 @@ import {
   saveTasks,
   getMembersByStudio,
   getOrdersByStudio,
+  getCustomersByStudio,
+  getStudioBySlug,
+  saveCustomer,
+  updateCustomer,
 } from "@focoman/db";
 import {
   MarketplaceProfile,
@@ -37,9 +41,21 @@ import {
   PaymentMethod,
   Order,
   Task,
+  ResourceAssignment,
 } from "@focoman/types";
-import { performPreflightCheck, generateResourceSuggestions, generateWorkflowTasks } from "@focoman/domain";
-import { generateTimestampDigits } from "@/lib/invitationPasscode";
+import {
+  performPreflightCheck,
+  generateResourceSuggestions,
+  generateWorkflowTasks,
+  getStudioTimestampIST,
+  isContactMatch,
+} from "@focoman/domain";
+import {
+  generateOrderIdentifiers,
+  generateSixDigitPasskeyPin,
+  generateTimestampDigits,
+  prefixLetters,
+} from "@/lib/invitationPasscode";
 import {
   CreatePackageSchema,
   UpdatePackageSchema,
@@ -431,6 +447,202 @@ export async function recordPaymentAction(input: unknown, idToken?: string) {
   }
 }
 
+async function convertBookingToCanonicalOrder(params: {
+  booking: BookingRequest;
+  studioId: string;
+  advanceAmount: number;
+  paymentMethodLabel: string;
+  actorName: string;
+}): Promise<{ order: Order; tasks: Task[] }> {
+  const { booking, studioId, advanceAmount, paymentMethodLabel, actorName } = params;
+  const nowDate = new Date();
+  const now = nowDate.toISOString();
+  const { orderId, customerId } = generateOrderIdentifiers(studioId, nowDate);
+  const passkeyPin = generateSixDigitPasskeyPin();
+  const studioPrefix = prefixLetters(studioId);
+
+  const [studioOrders, studioMembers, existingCustomers, studio] = await Promise.all([
+    getOrdersByStudio(studioId),
+    getMembersByStudio(studioId),
+    getCustomersByStudio(studioId),
+    getStudioBySlug(studioId),
+  ]);
+
+  const customerPhone = booking.customerPhone?.trim() || undefined;
+  const customerEmail = booking.customerEmail?.trim() || undefined;
+  const matchedCustomer = existingCustomers.find((c) =>
+    isContactMatch(
+      { phone: customerPhone, email: customerEmail },
+      { phone: c.phone, email: c.email }
+    )
+  );
+  const effectiveCustomerId = matchedCustomer ? matchedCustomer.id : customerId;
+
+  const servicesList = [booking.packageName || booking.eventType];
+  const preflight = performPreflightCheck(
+    booking.eventDate,
+    booking.location.address,
+    servicesList,
+    studioOrders,
+    studioMembers
+  );
+
+  const suggestions = generateResourceSuggestions(
+    booking.eventDate,
+    ["PHOTOGRAPHY", "VIDEOGRAPHY", "ALBUM_DESIGN", "PHOTO_EDITING"],
+    studioMembers,
+    []
+  );
+
+  const autoAssignEnabled = studio?.features?.autoAssignCrew !== false;
+  const assignedResources: ResourceAssignment[] = [];
+  if (autoAssignEnabled) {
+    const usedMembers = new Set<string>();
+    for (const s of suggestions) {
+      if (s.availableOnDate && !usedMembers.has(s.memberId) && assignedResources.length < 2) {
+        usedMembers.add(s.memberId);
+        assignedResources.push({
+          memberId: s.memberId,
+          memberName: s.memberName,
+          skill: s.skill,
+          availabilityConfirmed: null,
+        });
+      }
+    }
+  }
+
+  const istTime = getStudioTimestampIST(nowDate);
+  const newOrder: Order = {
+    id: orderId,
+    studioId: studioId.toLowerCase(),
+    orderNumber: orderId,
+    bookingRequestId: booking.id,
+    customer: {
+      id: effectiveCustomerId,
+      name: booking.customerName,
+      ...(customerEmail ? { email: customerEmail } : {}),
+      ...(customerPhone ? { phone: customerPhone } : {}),
+      ...(booking.customerId && booking.customerId !== "GUEST" ? { uid: booking.customerId } : {}),
+    },
+    eventType: booking.eventType,
+    eventDate: booking.eventDate,
+    eventLocation: booking.location.address,
+    locationInfo: booking.location,
+    services: servicesList,
+    packages: booking.packageName ? [booking.packageName] : [],
+    pricing: {
+      estimatedPrice: booking.originalPrice,
+      finalConfirmedPrice: booking.agreedPrice,
+      advanceAmount,
+      advanceDate: now.split("T")[0],
+      installments: [],
+      remainingAmount: Math.max(0, booking.agreedPrice - advanceAmount),
+    },
+    paymentStatus:
+      booking.agreedPrice <= advanceAmount && booking.agreedPrice > 0
+        ? "PAID"
+        : advanceAmount > 0
+        ? "ADVANCE_RECEIVED"
+        : "PENDING",
+    orderStatus: "AWAITING_EVENT",
+    bookingStatus: "BOOKING_CONFIRMED",
+    assignedResources,
+    resourceSuggestions: suggestions,
+    preflightReport: preflight,
+    trackingPasskey: orderId,
+    passkeyPin,
+    isDeleted: false,
+    createdBy: actorName,
+    createdByRole: "Owner",
+    auditLog: [
+      {
+        id: `audit_${Date.now()}_mkt`,
+        timestamp: istTime,
+        actorName,
+        actorRole: "Owner",
+        action: "Marketplace Order Confirmed",
+        details: `Confirmed booking from Marketplace inquiry (${booking.id}) for ${booking.packageName || booking.eventType} · Agreed Price: ₹${booking.agreedPrice.toLocaleString("en-IN")}`,
+      },
+      ...(advanceAmount > 0
+        ? [
+            {
+              id: `audit_${Date.now() + 1000}_adv`,
+              timestamp: istTime,
+              actorName,
+              actorRole: "Owner" as const,
+              action: "Advance Payment Verified",
+              details: `Verified advance payment of ₹${advanceAmount.toLocaleString("en-IN")} (${paymentMethodLabel})`,
+            },
+          ]
+        : []),
+      ...(assignedResources.length > 0
+        ? [
+            {
+              id: `audit_${Date.now() + 2000}_auto_crew`,
+              timestamp: istTime,
+              actorName: "Studio Automation",
+              actorRole: "System" as const,
+              action: "Crew Auto-Assigned",
+              details: `Auto-assigned available crew based on skill match: ${assignedResources.map((r) => `${r.memberName} (${r.skill})`).join(", ")}`,
+            },
+          ]
+        : []),
+    ],
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  const workflowTasks: Task[] = generateWorkflowTasks(orderId, studioId, newOrder.services).map((t, idx) => {
+    const { dateStamp, timeStamp } = generateTimestampDigits(nowDate);
+    const seqSuffix = String(idx + 1).padStart(2, "0");
+    const matchedCrew =
+      autoAssignEnabled && assignedResources.length > 0
+        ? assignedResources.find((r) => r.skill.includes(t.serviceCategory)) || assignedResources[0]
+        : undefined;
+    return {
+      ...t,
+      id: `TSK-${studioPrefix}-${dateStamp}-${timeStamp}-${seqSuffix}`,
+      assignedMemberId: matchedCrew?.memberId || t.assignedMemberId || "",
+      assignedMemberName: matchedCrew?.memberName || t.assignedMemberName || "Unassigned",
+      createdAt: now,
+      updatedAt: now,
+      isDeleted: false,
+    };
+  });
+
+  const customerPersistence = matchedCustomer
+    ? updateCustomer(matchedCustomer.id, {
+        ...(customerPhone && !matchedCustomer.phone ? { phone: customerPhone } : {}),
+        ...(customerEmail && !matchedCustomer.email ? { email: customerEmail } : {}),
+        ...(booking.location?.address && !matchedCustomer.address
+          ? { address: booking.location.address }
+          : {}),
+      })
+    : saveCustomer({
+        id: customerId,
+        studioId: studioId.toLowerCase(),
+        name: booking.customerName,
+        ...(customerPhone ? { phone: customerPhone } : {}),
+        ...(customerEmail ? { email: customerEmail } : {}),
+        ...(booking.location?.address ? { address: booking.location.address } : {}),
+        isDeleted: false,
+        createdAt: now,
+        updatedAt: now,
+      });
+
+  await Promise.all([
+    saveOrder(newOrder),
+    saveTasks(workflowTasks),
+    customerPersistence,
+    updateBookingRequest(booking.id, {
+      bookingStatus: "BOOKING_CONFIRMED",
+      orderId,
+    }),
+  ]);
+
+  return { order: newOrder, tasks: workflowTasks };
+}
+
 export async function verifyPaymentAction(input: unknown, idToken: string) {
   try {
     const parsed = VerifyPaymentSchema.parse(input);
@@ -455,113 +667,91 @@ export async function verifyPaymentAction(input: unknown, idToken: string) {
       parsed.rejectionReason
     );
 
-    if (updatedPayment?.bookingRequestId && parsed.verified) {
-      if (booking) {
-        // Convert Booking Request to Confirmed Order
-        const orderId = `ORD-${randomUUID().replace(/-/g, '').slice(0, 8).toUpperCase()}`;
-        const orderNumber = `ORD-${Math.floor(1000 + Math.random() * 9000)}`;
-        const trackingPasskey = `FOC-${randomBytes(16).toString('hex').toUpperCase()}`;
-        const now = new Date().toISOString();
-
-        const studioOrders = await getOrdersByStudio(parsed.studioId);
-        const studioMembers = await getMembersByStudio(parsed.studioId);
-
-        const preflight = performPreflightCheck(
-          booking.eventDate,
-          booking.location.address,
-          [booking.packageName || booking.eventType],
-          studioOrders,
-          studioMembers
-        );
-
-        const suggestions = generateResourceSuggestions(
-          booking.eventDate,
-          ['PHOTOGRAPHY', 'VIDEOGRAPHY'],
-          studioMembers,
-          []
-        );
-
-        const newOrder: Order = {
-          id: orderId,
-          studioId: parsed.studioId.toLowerCase(),
-          orderNumber,
-          bookingRequestId: booking.id,
-          customer: {
-            id: booking.customerId,
-            name: booking.customerName,
-            email: booking.customerEmail,
-            phone: booking.customerPhone,
-          },
-          eventType: booking.eventType,
-          eventDate: booking.eventDate,
-          eventLocation: booking.location.address,
-          locationInfo: booking.location,
-          services: [booking.packageName || booking.eventType],
-          packages: booking.packageName ? [booking.packageName] : [],
-          pricing: {
-            estimatedPrice: booking.originalPrice,
-            finalConfirmedPrice: booking.agreedPrice,
-            advanceAmount: updatedPayment.amount,
-            remainingAmount: Math.max(0, booking.agreedPrice - updatedPayment.amount),
-          },
-          paymentStatus: booking.agreedPrice <= updatedPayment.amount ? 'PAID' : 'PARTIAL',
-          orderStatus: 'AWAITING_EVENT',
-          bookingStatus: 'BOOKING_CONFIRMED',
-          assignedResources: [],
-          resourceSuggestions: suggestions,
-          preflightReport: preflight,
-          trackingPasskey,
-          auditLog: [
-            {
-              id: `audit_${Date.now()}_mkt`,
-              timestamp: now,
-              actorName: decoded.name || decoded.email || "Studio Owner",
-              actorRole: "Owner",
-              action: "Marketplace Order Confirmed",
-              details: `Confirmed booking from Marketplace inquiry for ${booking.packageName || booking.eventType} · Agreed Price: ₹${booking.agreedPrice.toLocaleString("en-IN")}`,
-            },
-            {
-              id: `audit_${Date.now() + 1000}_adv`,
-              timestamp: now,
-              actorName: decoded.name || decoded.email || "Studio Owner",
-              actorRole: "Owner",
-              action: "Advance Payment Verified",
-              details: `Verified advance payment of ₹${updatedPayment.amount.toLocaleString("en-IN")} (${updatedPayment.method})`,
-            },
-          ],
-          createdAt: now,
-          updatedAt: now,
-        };
-
-        const studioPrefix = parsed.studioId.slice(0, 4).toUpperCase();
-        const workflowTasks: Task[] = generateWorkflowTasks(orderId, parsed.studioId, newOrder.services).map((t, idx) => {
-          const { dateStamp, timeStamp } = generateTimestampDigits(new Date());
-          const seqSuffix = String(idx + 1).padStart(2, "0");
-          return {
-            ...t,
-            id: `TSK-${studioPrefix}-${dateStamp}-${timeStamp}-${seqSuffix}`,
-            assignedMemberId: t.assignedMemberId || "",
-            assignedMemberName: t.assignedMemberName || "Unassigned",
-            createdAt: now,
-            updatedAt: now,
-            isDeleted: false,
-          };
-        });
-
-        await Promise.all([
-          saveOrder(newOrder),
-          saveTasks(workflowTasks),
-          updateBookingRequest(booking.id, {
-            bookingStatus: 'BOOKING_CONFIRMED',
-            orderId,
-          }),
-        ]);
-      }
+    let createdOrder: Order | undefined;
+    if (updatedPayment?.bookingRequestId && parsed.verified && booking) {
+      const converted = await convertBookingToCanonicalOrder({
+        booking,
+        studioId: parsed.studioId,
+        advanceAmount: updatedPayment.amount,
+        paymentMethodLabel: updatedPayment.method,
+        actorName: decoded.name || decoded.email || "Studio Owner",
+      });
+      createdOrder = converted.order;
     }
 
-    return { success: true, payment: updatedPayment };
+    return { success: true, payment: updatedPayment, order: createdOrder };
   } catch (error: unknown) {
     return { success: false, error: error instanceof Error ? error.message : "Failed to verify payment" };
+  }
+}
+
+export async function confirmBookingAndConvertToOrderAction(
+  input: {
+    bookingRequestId: string;
+    studioId: string;
+    advanceAmount: number;
+    paymentMethod?: PaymentMethod;
+    referenceNumber?: string;
+  },
+  idToken: string
+) {
+  try {
+    const decoded = await requireVerifiedUser(idToken);
+    await requireStudioOwner(decoded.uid, input.studioId);
+
+    const booking = await getBookingRequestById(input.bookingRequestId);
+    if (!booking || booking.studioId !== input.studioId.toLowerCase()) {
+      throw new Error("Booking request not found in the authorized studio.");
+    }
+    if (booking.bookingStatus === "BOOKING_CONFIRMED" && booking.orderId) {
+      return { success: false, error: `Booking is already confirmed as Order ${booking.orderId}.` };
+    }
+
+    const advance = Math.max(0, Number(input.advanceAmount) || 0);
+    const method: PaymentMethod = input.paymentMethod || "UPI";
+    const now = new Date().toISOString();
+
+    if (advance > 0) {
+      const paymentId = `PAY-${randomUUID().replace(/-/g, "").slice(0, 8).toUpperCase()}`;
+      const payment: PaymentRecord = {
+        id: paymentId,
+        bookingRequestId: booking.id,
+        studioId: booking.studioId,
+        customerId: booking.customerId,
+        amount: advance,
+        method,
+        status: "ADVANCE_RECEIVED",
+        verificationStatus: "VERIFIED",
+        verifiedBy: decoded.uid,
+        verifiedAt: now,
+        ...(input.referenceNumber
+          ? {
+              proof: {
+                referenceNumber: input.referenceNumber,
+                uploadedAt: now,
+              },
+            }
+          : {}),
+        createdAt: now,
+        updatedAt: now,
+      };
+      await savePaymentRecord(payment);
+    }
+
+    const { order } = await convertBookingToCanonicalOrder({
+      booking,
+      studioId: input.studioId,
+      advanceAmount: advance,
+      paymentMethodLabel: method,
+      actorName: decoded.name || decoded.email || "Studio Owner",
+    });
+
+    return { success: true, order };
+  } catch (error: unknown) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to confirm booking and create order",
+    };
   }
 }
 

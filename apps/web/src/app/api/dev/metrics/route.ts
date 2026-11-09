@@ -29,6 +29,7 @@ export async function GET() {
     ordersThisMonth: null,
     verifiedPaymentRecords: null,
     pendingPaymentRecords: null,
+    vasInquiriesCount: null,
   };
 
   try {
@@ -40,9 +41,11 @@ export async function GET() {
       db.collection('orders').where('createdAt', '>=', start).where('createdAt', '<', end).count().get(),
       db.collection('payments').where('verificationStatus', '==', 'VERIFIED').count().get(),
       db.collection('payments').where('verificationStatus', '==', 'PENDING_VERIFICATION').count().get(),
+      db.collection('vas_inquiries').count().get(),
     ];
-    const [results, brevoAccount, brevoStats, resendStatus, resendAccount, domainExpiration] = await Promise.all([
+    const [results, vasLogsSnap, brevoAccount, brevoStats, resendStatus, resendAccount, domainExpiration] = await Promise.all([
       Promise.allSettled(queries),
+      db.collection('vas_inquiries').orderBy('createdAt', 'desc').limit(25).get().catch(() => null),
       getBrevoAccountStatus().catch(() => null),
       getBrevoDailyUsageStats().catch(() => null),
       Promise.resolve(getResendStatus()),
@@ -53,6 +56,19 @@ export async function GET() {
       const result = results[index];
       return result.status === 'fulfilled' ? result.value.data().count : null;
     };
+    const vasInquiryLogs = vasLogsSnap
+      ? vasLogsSnap.docs.map((doc) => {
+          const d = doc.data();
+          return {
+            id: d.id || doc.id,
+            targetPhone: d.targetPhone || '8072333075',
+            services: Array.isArray(d.services) ? d.services : ['Branding and Website', 'Data Migration'],
+            sourcePage: d.sourcePage || '/',
+            createdAt: d.createdAt || now.toISOString(),
+          };
+        })
+      : [];
+
     return NextResponse.json({
       generatedAt: now.toISOString(),
       metrics: {
@@ -62,7 +78,9 @@ export async function GET() {
         ordersThisMonth: count(3),
         verifiedPaymentRecords: count(4),
         pendingPaymentRecords: count(5),
+        vasInquiriesCount: count(6),
       },
+      vasInquiryLogs,
       emailProviders: {
         brevo: {
           account: brevoAccount,
@@ -76,7 +94,7 @@ export async function GET() {
       domainExpiration,
     }, { headers: { 'Cache-Control': 'private, no-store' } });
   } catch {
-    return NextResponse.json({ generatedAt: now.toISOString(), metrics: emptyMetrics }, {
+    return NextResponse.json({ generatedAt: now.toISOString(), metrics: emptyMetrics, vasInquiryLogs: [] }, {
       headers: { 'Cache-Control': 'private, no-store' },
     });
   }

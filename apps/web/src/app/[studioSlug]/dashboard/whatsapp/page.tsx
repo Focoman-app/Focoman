@@ -1,13 +1,16 @@
 "use client";
 
-import { useState, use, useEffect } from "react";
+import { useState, use, useEffect, useCallback } from "react";
+import Link from "next/link";
 import { useStudioWorkspace } from "@/components/StudioWorkspaceProvider";
+import { getEffectiveStudioTier } from "@/lib/proEntitlements";
 import { updateStudioWhatsappConfigAction } from "@/actions/studioActions";
 import {
   simulateWhatsappBotQueryAction,
   getWhatsappTemplatePreviewAction,
+  getStudioWhatsappLogsAction,
 } from "@/actions/whatsappActions";
-import { WhatsAppTemplateId } from "@/services/whatsappService";
+import { WhatsAppTemplateId, WhatsAppDispatchLog } from "@/services/whatsappService";
 
 /**
  * WhatsApp Premium Operational Layer & Interactive Bot Hub
@@ -34,14 +37,14 @@ const NOTIFICATION_GROUPS = [
   },
   {
     title: "Studio Member Operational Alerts (ERP)",
-    description: "Notifications for planned crew assignments and downstream production task assignments.",
+    description: "Notifications for planned crew assignments, call-time reminders, and downstream production task assignments.",
     badgeClass: "badge-brand-purple",
     badgeLabel: "ERP · Crew Operations",
     dotClass: "bg-brand-purple-primary",
     switchClass: "bg-brand-purple-primary",
     cardBorder: "border-border-default hover:border-brand-purple-light",
     items: [
-      { id: "assignment_confirm", label: "Planned Order Assignment & Availability Confirmation", enabled: true },
+      { id: "assignment_confirm", label: "Planned Order Assignment, Call Time & Availability Confirmation", enabled: true },
       { id: "task_assigned", label: "Downstream Production Task Assigned", enabled: true },
     ],
   },
@@ -62,13 +65,13 @@ const NOTIFICATION_GROUPS = [
 ];
 
 const TEMPLATES_LIST: { id: WhatsAppTemplateId; name: string; audience: string }[] = [
-  { id: "booking_confirmation", name: "Booking Confirmation & PIN", audience: "Client" },
+  { id: "booking_confirmation", name: "Booking Confirmation & 6-Digit Passkey", audience: "Client" },
   { id: "upcoming_3day_reminder", name: "Upcoming Shoot (3 Days Out)", audience: "Studio Owner" },
   { id: "raw_photos_ready", name: "RAW Proofing Gallery Ready", audience: "Client" },
   { id: "customer_selection_done", name: "Selection Finalized Alert", audience: "Studio Owner" },
   { id: "album_review_ready", name: "Photobook Draft Layout Ready", audience: "Client" },
   { id: "ready_for_delivery", name: "Ready for Delivery / Balance", audience: "Client" },
-  { id: "crew_assignment_alert", name: "Crew Call-Time Assignment", audience: "Team Crew" },
+  { id: "crew_assignment_alert", name: "Crew Call-Time Reminder", audience: "Team Crew" },
   { id: "crew_task_assigned", name: "Production Task Assigned", audience: "Editor" },
 ];
 
@@ -76,18 +79,23 @@ export default function WhatsappPage({ params }: { params: Promise<{ studioSlug:
   const { studioSlug } = use(params);
   const { studio, idToken, authLoading, getIdToken } = useStudioWorkspace();
 
-  const [activeTab, setActiveTab] = useState<"triggers" | "bot_simulator" | "templates">("triggers");
+  const [activeTab, setActiveTab] = useState<"triggers" | "bot_simulator" | "templates" | "logs">("triggers");
   const [masterEnabled, setMasterEnabled] = useState(true);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [copiedNotice, setCopiedNotice] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [config, setConfig] = useState<Record<string, boolean>>({});
+  const [dispatchLogs, setDispatchLogs] = useState<WhatsAppDispatchLog[]>([]);
+  const [logsLoading, setLogsLoading] = useState(false);
+
+  const effectiveTier = getEffectiveStudioTier(studio);
 
   // Bot Simulator State
   const [botQuery, setBotQuery] = useState("TODAY");
   const [botChatHistory, setBotChatHistory] = useState<Array<{ sender: "user" | "bot"; text: string; time: string }>>([
     {
       sender: "bot",
-      text: `👋 Hello! I am your Focoman Operations Bot for *${studio?.name || "your studio"}*.\n\nType *TODAY*, *SHOOTS*, *ORDERS*, *CREW*, or *STATUS <Order#>* to query live studio operations.`,
+      text: `👋 Hello! I am your Focoman Operations Bot for *${studio?.name || "your studio"}*.\n\nType *TODAY*, *SHOOTS*, *ORDERS*, *CREW*, *STATUS <OrderID>*, *DONE <OrderID>*, or *CONFIRM <OrderID>* to query or update live studio operations.`,
       time: "Just now",
     },
   ]);
@@ -100,11 +108,29 @@ export default function WhatsappPage({ params }: { params: Promise<{ studioSlug:
   const [isTemplateLoading, setIsTemplateLoading] = useState(false);
 
   useEffect(() => {
-    if (studio.whatsappConfig) {
+    if (studio?.whatsappConfig) {
       setConfig(studio.whatsappConfig);
       setMasterEnabled(studio.whatsappConfig.masterEnabled !== false);
     }
   }, [studio]);
+
+  const loadLogs = useCallback(async () => {
+    setLogsLoading(true);
+    try {
+      const token = idToken || (await getIdToken(false));
+      if (!token) return;
+      const logs = await getStudioWhatsappLogsAction(studioSlug, token);
+      setDispatchLogs(logs);
+    } finally {
+      setLogsLoading(false);
+    }
+  }, [studioSlug, idToken, getIdToken]);
+
+  useEffect(() => {
+    if (activeTab === "logs") {
+      void loadLogs();
+    }
+  }, [activeTab, loadLogs]);
 
   useEffect(() => {
     async function loadTemplate() {
@@ -196,8 +222,27 @@ export default function WhatsappPage({ params }: { params: Promise<{ studioSlug:
   }
 
   return (
-    <div className="h-full overflow-y-auto bg-surface-app p-6 lg:p-10">
-      <div className="max-w-4xl space-y-8">
+    <div className="h-full overflow-y-auto bg-surface-app">
+      {effectiveTier !== "COMPLETE" && (
+        <div className="bg-blue-50 border-b border-blue-200 px-6 py-2.5 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <span className="px-2 py-0.5 text-[10px] font-black uppercase rounded-full bg-brand-blue-primary text-white">
+              ₹1,999/MO PLAN
+            </span>
+            <span className="text-xs text-text-secondary">
+              WhatsApp Operations &amp; Interactive Bot is included in the ₹1,999/month Complete Studio Plan.
+            </span>
+          </div>
+          <Link
+            href={`/checkout?studio=${studioSlug}&plan=COMPLETE`}
+            className="text-xs font-bold text-white bg-brand-blue-primary px-3 py-1 rounded-lg hover:bg-sky-600 transition shrink-0"
+          >
+            Upgrade to ₹1,999/mo →
+          </Link>
+        </div>
+      )}
+
+      <div className="p-6 lg:p-10 max-w-4xl space-y-8">
         {/* Header */}
         <header className="header-brand-blue">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -215,10 +260,10 @@ export default function WhatsappPage({ params }: { params: Promise<{ studioSlug:
                 </span>
               </div>
               <h1 className="text-xl font-extrabold text-text-primary tracking-tight">
-                WhatsApp Operations & Bot Hub
+                WhatsApp Operations &amp; Bot Hub
               </h1>
               <p className="text-xs text-text-secondary mt-0.5">
-                Manage operational triggers, test the interactive Operations Bot, and preview one-click client templates.
+                Manage operational triggers, test the interactive Operations Bot, and preview one-click client &amp; crew templates.
               </p>
             </div>
             {activeTab === "triggers" && (
@@ -229,7 +274,7 @@ export default function WhatsappPage({ params }: { params: Promise<{ studioSlug:
           </div>
 
           {/* Navigation Tabs */}
-          <div className="flex items-center gap-2 mt-6 border-b border-border-default pb-2">
+          <div className="flex flex-wrap items-center gap-2 mt-6 border-b border-border-default pb-2">
             <button
               onClick={() => setActiveTab("triggers")}
               className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${
@@ -248,7 +293,7 @@ export default function WhatsappPage({ params }: { params: Promise<{ studioSlug:
                   : "text-text-secondary hover:text-text-primary hover:bg-white"
               }`}
             >
-              <span>🤖 Bot Simulator</span>
+              <span>Bot Simulator &amp; Workflow Actions</span>
               <span className="px-1.5 py-0.2 rounded text-[9.5px] bg-emerald-100 text-emerald-800 font-bold">Live</span>
             </button>
             <button
@@ -259,7 +304,17 @@ export default function WhatsappPage({ params }: { params: Promise<{ studioSlug:
                   : "text-text-secondary hover:text-text-primary hover:bg-white"
               }`}
             >
-              Templates & Click-to-Chat
+              Templates &amp; Click-to-Chat
+            </button>
+            <button
+              onClick={() => setActiveTab("logs")}
+              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${
+                activeTab === "logs"
+                  ? "bg-brand-blue-primary text-white shadow-xs"
+                  : "text-text-secondary hover:text-text-primary hover:bg-white"
+              }`}
+            >
+              Dispatch Logs
             </button>
           </div>
         </header>
@@ -379,11 +434,11 @@ export default function WhatsappPage({ params }: { params: Promise<{ studioSlug:
               <div className="flex items-center justify-between gap-4 mb-4">
                 <div>
                   <h3 className="text-sm font-extrabold text-text-primary flex items-center gap-2">
-                    <span>🤖 Studio Owner WhatsApp Operations Bot</span>
-                    <span className="badge-brand-blue text-[10px]">Owner Exclusive</span>
+                    <span>WhatsApp Operations &amp; Workflow Bot</span>
+                    <span className="badge-brand-blue text-[10px]">Owner &amp; Authorized Crew</span>
                   </h3>
                   <p className="text-xs text-text-secondary mt-0.5">
-                    Test live queries against your studio&apos;s real orders, shoots, and crew roster.
+                    Test live queries (`TODAY`, `SHOOTS`, `ORDERS`, `CREW`) and workflow actions (`DONE &lt;OrderID&gt;`, `PROGRESS &lt;OrderID&gt;`, `CONFIRM &lt;OrderID&gt;`).
                   </p>
                 </div>
                 <span className="text-[11px] font-mono text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-full">
@@ -455,7 +510,7 @@ export default function WhatsappPage({ params }: { params: Promise<{ studioSlug:
                     value={botQuery}
                     onChange={(e) => setBotQuery(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && handleRunBotQuery()}
-                    placeholder="Type command (e.g. TODAY, SHOOTS, STATUS 1001)..."
+                    placeholder="Type command (e.g. TODAY, SHOOTS, DONE ORD-...)..."
                     className="flex-1 rounded-xl bg-white border border-black/10 px-3 py-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   />
                   <button
@@ -472,7 +527,7 @@ export default function WhatsappPage({ params }: { params: Promise<{ studioSlug:
             {/* Production Webhook Integration Details */}
             <div className="rounded-2xl border border-border-default bg-white p-6 shadow-xs">
               <h3 className="text-sm font-extrabold text-text-primary mb-2">
-                Meta WhatsApp Business Cloud API Credentials & Webhook
+                Meta WhatsApp Business Cloud API Credentials &amp; Webhook
               </h3>
               <p className="text-xs text-text-secondary leading-relaxed mb-4">
                 To connect this operations bot to a live WhatsApp Business number, configure your Meta developer webhook with the details below:
@@ -481,7 +536,7 @@ export default function WhatsappPage({ params }: { params: Promise<{ studioSlug:
               <div className="space-y-3 font-mono text-xs">
                 <div className="p-3 bg-surface-app rounded-xl border border-border-default flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                   <span className="text-text-secondary">Callback URL:</span>
-                  <span className="font-bold text-text-primary select-all">https://focoman.web.app/api/whatsapp/webhook</span>
+                  <span className="font-bold text-text-primary select-all">https://focoman.web.app/api/webhooks/whatsapp</span>
                 </div>
                 <div className="p-3 bg-surface-app rounded-xl border border-border-default flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                   <span className="text-text-secondary">Verify Token:</span>
@@ -500,7 +555,7 @@ export default function WhatsappPage({ params }: { params: Promise<{ studioSlug:
                 Standard Studio WhatsApp Templates Library
               </h3>
               <p className="text-xs text-text-secondary mb-4">
-                Pre-formatted customer and crew notifications with zero-login tracking links and dynamic order fields.
+                Pre-formatted customer and crew notifications with canonical Order IDs, 6-digit passkeys, and crew call times.
               </p>
 
               <div className="grid gap-6 md:grid-cols-12">
@@ -550,11 +605,12 @@ export default function WhatsappPage({ params }: { params: Promise<{ studioSlug:
                     <button
                       onClick={() => {
                         navigator.clipboard.writeText(templatePreviewText);
-                        alert("Template copied to clipboard!");
+                        setCopiedNotice(true);
+                        setTimeout(() => setCopiedNotice(false), 2000);
                       }}
                       className="btn-brand-outline"
                     >
-                      📋 Copy Text
+                      {copiedNotice ? "✓ Copied Text" : "Copy Text"}
                     </button>
 
                     {templateClickUrl && (
@@ -572,6 +628,80 @@ export default function WhatsappPage({ params }: { params: Promise<{ studioSlug:
                 </div>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* TAB 4: DISPATCH LOGS (WA-001) */}
+        {activeTab === "logs" && (
+          <div className="rounded-2xl border border-border-default bg-white p-6 shadow-xs space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-extrabold text-text-primary">
+                  Automated WhatsApp Notification &amp; Bot Dispatch Logs
+                </h3>
+                <p className="text-xs text-text-secondary mt-0.5">
+                  Recent stage updates, crew call-time alerts, and interactive bot responses recorded for {studioSlug}.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => void loadLogs()}
+                className="btn-brand-outline py-1.5 px-3 text-xs"
+              >
+                Refresh
+              </button>
+            </div>
+
+            {logsLoading ? (
+              <div className="py-12 text-center text-xs text-text-tertiary">Loading dispatch logs...</div>
+            ) : dispatchLogs.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-border-default p-8 text-center text-xs text-text-secondary">
+                No WhatsApp dispatch logs recorded yet. Stage updates and bot commands will appear here automatically.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="border-b border-border-default bg-surface-app text-[10px] font-bold uppercase text-text-secondary">
+                    <tr>
+                      <th className="py-2.5 px-3">Timestamp</th>
+                      <th className="py-2.5 px-3">Template / Event</th>
+                      <th className="py-2.5 px-3">Audience</th>
+                      <th className="py-2.5 px-3">Order</th>
+                      <th className="py-2.5 px-3">Recipient</th>
+                      <th className="py-2.5 px-3">Mode</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border-default">
+                    {dispatchLogs.map((log) => (
+                      <tr key={log.id} className="hover:bg-surface-app/50">
+                        <td className="py-2.5 px-3 font-mono text-[11px] text-text-secondary">
+                          {new Date(log.createdAt).toLocaleString()}
+                        </td>
+                        <td className="py-2.5 px-3 font-semibold text-text-primary">
+                          {log.templateId}
+                        </td>
+                        <td className="py-2.5 px-3">
+                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-700">
+                            {log.audience}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3 font-mono text-brand-blue-primary font-bold">
+                          {log.orderNumber || "-"}
+                        </td>
+                        <td className="py-2.5 px-3 font-mono text-text-secondary">
+                          {log.recipientPhone}
+                        </td>
+                        <td className="py-2.5 px-3">
+                          <span className="rounded-full bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+                            {log.mode}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
       </div>

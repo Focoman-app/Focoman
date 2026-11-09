@@ -21,6 +21,8 @@ interface OmsOrdersListPanelProps {
   onChangeSortBy: (sort: "DATE_ASC" | "DATE_DESC" | "PRICE_ASC" | "PRICE_DESC") => void;
   onExportExcel: () => void;
   onOpenCreateModal: () => void;
+  leadsCount?: number;
+  onSwitchToLeads?: () => void;
 }
 
 export function OmsOrdersListPanel({
@@ -39,6 +41,8 @@ export function OmsOrdersListPanel({
   onChangeSortBy,
   onExportExcel,
   onOpenCreateModal,
+  leadsCount = 0,
+  onSwitchToLeads,
 }: OmsOrdersListPanelProps) {
   return (
     <div
@@ -85,7 +89,29 @@ export function OmsOrdersListPanel({
           </div>
         </div>
 
-        <div className="mt-4 flex flex-col sm:flex-row gap-2.5">
+        {/* 2-Section Switcher: Orders (Confirmed Orders) vs Leads */}
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border-default pt-3.5">
+          <div className="inline-flex rounded-xl border border-border-default bg-surface-app p-1">
+            <button
+              type="button"
+              className="rounded-lg bg-brand-blue-primary px-3.5 py-1.5 text-xs font-extrabold text-white shadow-2xs transition cursor-pointer"
+            >
+              Orders (Confirmed Orders) ({orders.length})
+            </button>
+            <button
+              type="button"
+              onClick={onSwitchToLeads}
+              className="rounded-lg px-3.5 py-1.5 text-xs font-bold text-text-secondary hover:text-text-primary transition cursor-pointer flex items-center gap-1.5"
+            >
+              <span>Leads ({leadsCount})</span>
+              <span className="rounded-full bg-brand-blue-soft px-1.5 py-0.5 text-[10px] font-extrabold text-brand-blue-primary">
+                Marketplace + Channels
+              </span>
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-3 flex flex-col sm:flex-row gap-2.5">
           <input
             suppressHydrationWarning
             autoComplete="off"

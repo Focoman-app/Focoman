@@ -42,7 +42,7 @@
   - `apps/web/src/actions/orders/orderPaymentOperations.ts`
 - **Dependencies:** `WHATSAPP_BUSINESS_API_TOKEN` and `WHATSAPP_PHONE_NUMBER_ID` environment variables for live Meta Cloud API delivery.
 - **Priority:** `HIGH`
-- **Status:** `TODO`
+- **Status:** `COMPLETED (2026-11-09)`
 
 ---
 
@@ -59,7 +59,7 @@
   - `apps/web/src/services/whatsappService.ts` (lines 211–429)
 - **Dependencies:** `WHATSAPP_APP_SECRET` environment variable.
 - **Priority:** `HIGH`
-- **Status:** `TODO`
+- **Status:** `COMPLETED (2026-11-09)`
 
 ---
 
@@ -77,7 +77,7 @@
   - `apps/web/src/actions/orders/orderTaskOperations.ts` (lines 84–260)
 - **Dependencies:** `WA-002` (sender identity & role resolution in webhook).
 - **Priority:** `HIGH`
-- **Status:** `TODO`
+- **Status:** `COMPLETED (2026-11-09)`
 
 ---
 
@@ -95,7 +95,7 @@
   - `apps/web/src/services/whatsappService.ts` (lines 149–175)
 - **Dependencies:** `WA-001`
 - **Priority:** `MEDIUM`
-- **Status:** `TODO`
+- **Status:** `COMPLETED (2026-11-09)`
 
 ---
 
@@ -113,7 +113,7 @@
   - `apps/web/src/features/marketplace/PublicStudioPackagesClient.tsx`
 - **Dependencies:** `OMS-001` (canonical Order ID & 6-digit passkey unification).
 - **Priority:** `HIGH`
-- **Status:** `TODO`
+- **Status:** `COMPLETED (2026-11-09)`
 
 ---
 
@@ -130,7 +130,7 @@
   - `apps/web/src/actions/marketplaceActions.ts` (lines 213–237)
 - **Dependencies:** None
 - **Priority:** `LOW`
-- **Status:** `TODO`
+- **Status:** `COMPLETED (2026-11-09)`
 
 ---
 
@@ -148,7 +148,7 @@
   - `apps/web/src/features/dashboard/BusinessReportsView.tsx` (lines 104–155, 266–313, 480–588)
 - **Dependencies:** None
 - **Priority:** `MEDIUM`
-- **Status:** `TODO`
+- **Status:** `COMPLETED (2026-11-09)`
 
 ---
 
@@ -168,7 +168,7 @@
   - `apps/web/src/utils/dateUtils.ts`
 - **Dependencies:** None
 - **Priority:** `MEDIUM`
-- **Status:** `TODO`
+- **Status:** `COMPLETED (2026-11-09)`
 
 ---
 

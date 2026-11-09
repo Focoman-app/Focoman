@@ -347,17 +347,24 @@ export function CheckoutBuilder() {
           </div>
         </div>
 
-        {/* Free Core Panels: OMS Basic & Studio Marketplace */}
-        <div className="grid gap-4 md:grid-cols-2">
-          {/* OMS - Basic */}
-          <div className="bg-slate-50 border border-slate-200 rounded-3xl p-6 shadow-2xs space-y-4 flex flex-col justify-between">
+        {/* Three-Tier Subscription Plan Selector */}
+        <div className="grid gap-4 md:grid-cols-3">
+          {/* Tier 1: Free Plan — ₹0 */}
+          <div
+            onClick={handleUnselectAll}
+            className={`rounded-3xl p-6 shadow-2xs space-y-4 flex flex-col justify-between cursor-pointer transition border ${
+              selectedCaps.length === 0
+                ? "bg-white border-brand-blue-primary ring-2 ring-brand-blue-primary/15"
+                : "bg-slate-50 border-slate-200 hover:border-slate-300"
+            }`}
+          >
             <div className="space-y-3">
               <div className="flex items-center justify-between gap-2 border-b border-slate-200/80 pb-3">
-                <div className="flex items-center gap-2">
-                  <h4 className="text-base font-extrabold text-text-primary">OMS Basic</h4>
+                <div>
                   <span className="rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider">
-                    Core · Free
+                    Free Plan
                   </span>
+                  <h4 className="text-base font-extrabold text-text-primary mt-1.5">Basic OMS &amp; Marketplace</h4>
                 </div>
                 <div className="text-right">
                   <span className="text-xl font-black text-text-primary">₹0</span>
@@ -365,56 +372,106 @@ export function CheckoutBuilder() {
                 </div>
               </div>
               <p className="text-xs text-text-secondary leading-relaxed">
-                Track and manage studio orders, workflows, deliverable milestones, event details, and payment balances with unlimited orders.
+                Core Order Management System (OMS) and Studio Marketplace profile. Directs straight to OMS workspace.
               </p>
             </div>
-            <div className="grid gap-2 text-[11px] text-text-secondary pt-1 border-t border-slate-200/50">
+            <div className="grid gap-1.5 text-[11px] text-text-secondary pt-2 border-t border-slate-200/50">
               <div className="flex items-center gap-2">
                 <span className="text-emerald-600 font-black">✓</span>
-                <span>Unlimited orders, shoots, and event records</span>
+                <span>Basic OMS (Order Management System)</span>
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-emerald-600 font-black">✓</span>
-                <span>Milestone workflows from lead to final album delivery</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-emerald-600 font-black">✓</span>
-                <span>Client passkey live status tracking portal</span>
+                <span>Studio Marketplace</span>
               </div>
             </div>
           </div>
 
-          {/* Studio Marketplace - 100% Free */}
-          <div className="bg-emerald-50/40 border border-emerald-200/80 rounded-3xl p-6 shadow-2xs space-y-4 flex flex-col justify-between">
+          {/* Tier 2: ₹999/month Plan */}
+          <div
+            onClick={() =>
+              setSelectedCaps(["OMS_ADVANCED", "CUSTOMER_CRM", "STUDIO_ERP"])
+            }
+            className={`rounded-3xl p-6 shadow-2xs space-y-4 flex flex-col justify-between cursor-pointer transition border ${
+              selectedCaps.includes("CUSTOMER_CRM") &&
+              selectedCaps.includes("STUDIO_ERP") &&
+              !selectedCaps.includes("WHATSAPP_BOT") &&
+              !selectedCaps.includes("BUSINESS_REPORTS")
+                ? "bg-white border-brand-blue-primary ring-2 ring-brand-blue-primary/15"
+                : "bg-white border-border-default hover:border-slate-300"
+            }`}
+          >
             <div className="space-y-3">
-              <div className="flex items-center justify-between gap-2 border-b border-emerald-200/70 pb-3">
-                <div className="flex items-center gap-2">
-                  <h4 className="text-base font-extrabold text-text-primary">Studio Marketplace</h4>
-                  <span className="rounded-full bg-emerald-600 text-white px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider shadow-2xs">
-                    100% Free For Everyone
+              <div className="flex items-center justify-between gap-2 border-b border-slate-200/80 pb-3">
+                <div>
+                  <span className="rounded-full bg-sky-100 text-sky-800 border border-sky-200 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider">
+                    ₹999/month Plan
                   </span>
+                  <h4 className="text-base font-extrabold text-text-primary mt-1.5">Studio Growth Suite</h4>
                 </div>
                 <div className="text-right">
-                  <span className="text-xl font-black text-emerald-700">₹0</span>
-                  <span className="text-[11px] text-emerald-800 font-bold"> / free</span>
+                  <span className="text-xl font-black text-brand-blue-primary">₹999</span>
+                  <span className="text-[11px] text-text-tertiary font-bold"> / month</span>
                 </div>
               </div>
               <p className="text-xs text-text-secondary leading-relaxed">
-                Publish your studio public profile, customizable service packages, and receive direct inquiries &amp; client booking requests.
+                Everything in Free, plus Google Drive photo preview &amp; selection, CRM, ERP, and Basic Business Dashboard.
               </p>
             </div>
-            <div className="grid gap-2 text-[11px] text-text-secondary pt-1 border-t border-emerald-200/50">
+            <div className="grid gap-1.5 text-[11px] text-text-secondary pt-2 border-t border-slate-200/50">
               <div className="flex items-center gap-2">
                 <span className="text-emerald-600 font-black">✓</span>
-                <span>Public studio profile &amp; verified portfolio showcase</span>
+                <span>Advanced OMS (Google Drive Preview &amp; Review)</span>
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-emerald-600 font-black">✓</span>
-                <span>Custom packages, pricing, &amp; in-app negotiations</span>
+                <span>CRM &amp; ERP (Studio Operations)</span>
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-emerald-600 font-black">✓</span>
-                <span>Direct client booking inquiries in your city</span>
+                <span>Basic Business Dashboard (Orders, Revenue, Pending)</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Tier 3: ₹1,999/month Plan */}
+          <div
+            onClick={handleSelectAll}
+            className={`rounded-3xl p-6 shadow-2xs space-y-4 flex flex-col justify-between cursor-pointer transition border ${
+              selectedCaps.includes("WHATSAPP_BOT") && selectedCaps.includes("BUSINESS_REPORTS")
+                ? "bg-emerald-50/40 border-emerald-500 ring-2 ring-emerald-500/20"
+                : "bg-emerald-50/20 border-emerald-200/80 hover:border-emerald-400"
+            }`}
+          >
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-2 border-b border-emerald-200/70 pb-3">
+                <div>
+                  <span className="rounded-full bg-emerald-600 text-white px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider shadow-2xs">
+                    ₹1,999/month Plan
+                  </span>
+                  <h4 className="text-base font-extrabold text-text-primary mt-1.5">Complete Studio OS</h4>
+                </div>
+                <div className="text-right">
+                  <span className="text-xl font-black text-emerald-700">₹1,999</span>
+                  <span className="text-[11px] text-emerald-800 font-bold"> / month</span>
+                </div>
+              </div>
+              <p className="text-xs text-text-secondary leading-relaxed">
+                Everything in the ₹999 plan, plus WhatsApp Operations &amp; Interactive Bot, Advanced Business Reports &amp; Excel Exports.
+              </p>
+            </div>
+            <div className="grid gap-1.5 text-[11px] text-text-secondary pt-2 border-t border-emerald-200/50">
+              <div className="flex items-center gap-2">
+                <span className="text-emerald-600 font-black">✓</span>
+                <span>WhatsApp Operations &amp; Interactive Bot</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-emerald-600 font-black">✓</span>
+                <span>Advanced Business Reports &amp; Analytics</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-emerald-600 font-black">✓</span>
+                <span>Excel Report Exports</span>
               </div>
             </div>
           </div>

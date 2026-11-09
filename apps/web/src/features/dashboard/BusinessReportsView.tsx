@@ -2,14 +2,18 @@
 
 import { useState, useMemo, useCallback } from "react";
 import Link from "next/link";
-import { Order } from "@focoman/types";
+import { Order, Task, StudioMember } from "@focoman/types";
 import { calculateOrderPaymentBreakdown } from "@focoman/domain";
-import { FileSpreadsheet } from "lucide-react";
+import { FileSpreadsheet, TrendingUp, Lock, Users } from "lucide-react";
 import { exportWorkbookToExcel } from "@/utils/excelExport";
+import type { StudioSubscriptionTier } from "@/lib/proEntitlements";
 
 interface BusinessReportsViewProps {
   studioSlug: string;
   initialOrders: Order[];
+  initialTasks?: Task[];
+  initialMembers?: StudioMember[];
+  studioTier?: StudioSubscriptionTier;
 }
 
 type Timeframe = "all" | "ytd" | "last6m" | "last30d";
@@ -17,9 +21,14 @@ type Timeframe = "all" | "ytd" | "last6m" | "last30d";
 export function BusinessReportsView({
   studioSlug,
   initialOrders,
+  initialTasks = [],
+  initialMembers = [],
+  studioTier = "COMPLETE",
 }: BusinessReportsViewProps) {
   const [orders] = useState<Order[]>(initialOrders);
   const [timeframe, setTimeframe] = useState<Timeframe>("all");
+
+  const isCompleteTier = studioTier === "COMPLETE";
 
   // Filter orders by timeframe
   const filteredOrders = useMemo(() => {
@@ -51,7 +60,6 @@ export function BusinessReportsView({
     });
   }, [orders, timeframe]);
 
-  // Financial Metrics (using canonical payment breakdown to include advances + installments without double counting)
   const activeFilteredOrders = useMemo(
     () => filteredOrders.filter((o) => o.orderStatus !== "CANCELLED"),
     [filteredOrders]
@@ -86,11 +94,57 @@ export function BusinessReportsView({
 
   const totalOrdersCount = filteredOrders.length;
   const completedOrdersCount = filteredOrders.filter((o) => o.orderStatus === "COMPLETED").length;
-  const inProgressOrdersCount = filteredOrders.filter((o) => o.orderStatus === "POST_EVENT_IN_PROGRESS" || o.orderStatus === "AWAITING_EVENT").length;
-  const avgOrderValue = activeFilteredOrders.length > 0 ? Math.round(totalRevenue / activeFilteredOrders.length) : 0;
+  const inProgressOrdersCount = filteredOrders.filter(
+    (o) => o.orderStatus === "POST_EVENT_IN_PROGRESS" || o.orderStatus === "AWAITING_EVENT"
+  ).length;
+  const avgOrderValue =
+    activeFilteredOrders.length > 0 ? Math.round(totalRevenue / activeFilteredOrders.length) : 0;
   const collectionRate = totalRevenue > 0 ? Math.round((collectedRevenue / totalRevenue) * 100) : 0;
 
-  // Pending balance orders (Actionable list for studio owner)
+  // Period-over-Period Growth Metrics (RPT-002: Last 30d vs Prior 30d)
+  const periodGrowth = useMemo(() => {
+    const now = Date.now();
+    const dayMs = 24 * 60 * 60 * 1000;
+    const last30Start = now - 30 * dayMs;
+    const prev30Start = now - 60 * dayMs;
+
+    let currentRev = 0;
+    let prevRev = 0;
+    let currentCount = 0;
+    let prevCount = 0;
+
+    orders
+      .filter((o) => o.orderStatus !== "CANCELLED")
+      .forEach((o) => {
+        const ts = new Date(o.createdAt || o.eventDate).getTime();
+        if (isNaN(ts)) return;
+        const rev = calculateOrderPaymentBreakdown(o).confirmedPrice;
+        if (ts >= last30Start) {
+          currentRev += rev;
+          currentCount += 1;
+        } else if (ts >= prev30Start && ts < last30Start) {
+          prevRev += rev;
+          prevCount += 1;
+        }
+      });
+
+    const revPct =
+      prevRev > 0
+        ? Math.round(((currentRev - prevRev) / prevRev) * 100)
+        : currentRev > 0
+        ? 100
+        : 0;
+    const orderPct =
+      prevCount > 0
+        ? Math.round(((currentCount - prevCount) / prevCount) * 100)
+        : currentCount > 0
+        ? 100
+        : 0;
+
+    return { revPct, orderPct, currentCount, prevCount };
+  }, [orders]);
+
+  // Pending balance orders
   const pendingOrders = useMemo(() => {
     return activeFilteredOrders
       .filter((o) => calculateOrderPaymentBreakdown(o).remainingAmount > 0)
@@ -123,13 +177,108 @@ export function BusinessReportsView({
       .sort((a, b) => b.revenue - a.revenue);
   }, [filteredOrders, totalRevenue]);
 
-  // Monthly Revenue Chart Mock / Trend bars (using actual order months)
+  // Crew Productivity Analytics (RPT-002)
+  const crewProductivity = useMemo(() => {
+    const map = new Map<
+      string,
+      {
+        memberId: string;
+        name: string;
+        skills: string;
+        shootsAssigned: number;
+        tasksAssigned: number;
+        tasksCompleted: number;
+        reworkCount: number;
+        turnaroundDaysTotal: number;
+        turnaroundSamples: number;
+      }
+    >();
+
+    initialMembers.forEach((m) => {
+      map.set(m.id, {
+        memberId: m.id,
+        name: m.name,
+        skills: (m.skills || []).join(", ") || "General",
+        shootsAssigned: 0,
+        tasksAssigned: 0,
+        tasksCompleted: 0,
+        reworkCount: 0,
+        turnaroundDaysTotal: 0,
+        turnaroundSamples: 0,
+      });
+    });
+
+    filteredOrders.forEach((o) => {
+      (o.assignedResources || []).forEach((r) => {
+        if (!r.memberId || r.memberId === "unassigned") return;
+        const existing = map.get(r.memberId) || {
+          memberId: r.memberId,
+          name: r.memberName || "Crew Member",
+          skills: r.skill || "General",
+          shootsAssigned: 0,
+          tasksAssigned: 0,
+          tasksCompleted: 0,
+          reworkCount: 0,
+          turnaroundDaysTotal: 0,
+          turnaroundSamples: 0,
+        };
+        existing.shootsAssigned += 1;
+        map.set(r.memberId, existing);
+      });
+    });
+
+    const filteredOrderIds = new Set(filteredOrders.map((o) => o.id));
+
+    initialTasks.forEach((t) => {
+      if (!filteredOrderIds.has(t.orderId)) return;
+      if (!t.assignedMemberId || t.assignedMemberId === "unassigned") return;
+      const existing = map.get(t.assignedMemberId) || {
+        memberId: t.assignedMemberId,
+        name: t.assignedMemberName || "Crew Member",
+        skills: t.serviceCategory || "General",
+        shootsAssigned: 0,
+        tasksAssigned: 0,
+        tasksCompleted: 0,
+        reworkCount: 0,
+        turnaroundDaysTotal: 0,
+        turnaroundSamples: 0,
+      };
+      existing.tasksAssigned += 1;
+      if (t.status === "COMPLETED") {
+        existing.tasksCompleted += 1;
+        const created = new Date(t.createdAt).getTime();
+        const updated = new Date(t.updatedAt).getTime();
+        if (!isNaN(created) && !isNaN(updated) && updated >= created) {
+          const days = Math.max(0.5, (updated - created) / (1000 * 60 * 60 * 24));
+          existing.turnaroundDaysTotal += days;
+          existing.turnaroundSamples += 1;
+        }
+      }
+      if (t.status === "REWORK" || (t.reworkNotes && t.reworkNotes.trim().length > 0)) {
+        existing.reworkCount += 1;
+      }
+      map.set(t.assignedMemberId, existing);
+    });
+
+    return Array.from(map.values())
+      .map((item) => ({
+        ...item,
+        completionRate:
+          item.tasksAssigned > 0 ? Math.round((item.tasksCompleted / item.tasksAssigned) * 100) : 100,
+        avgTurnaroundDays:
+          item.turnaroundSamples > 0
+            ? Number((item.turnaroundDaysTotal / item.turnaroundSamples).toFixed(1))
+            : 1.5,
+      }))
+      .sort((a, b) => b.tasksCompleted + b.shootsAssigned - (a.tasksCompleted + a.shootsAssigned));
+  }, [initialMembers, filteredOrders, initialTasks]);
+
+  // Monthly Revenue Chart
   const monthlyRevenueData = useMemo(() => {
     const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
     const now = new Date();
     const result: { month: string; revenue: number; orders: number }[] = [];
 
-    // Last 6 rolling months
     for (let i = 5; i >= 0; i--) {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
       const mIdx = d.getMonth();
@@ -159,6 +308,7 @@ export function BusinessReportsView({
   };
 
   const handleExportReportsExcel = useCallback(() => {
+    if (!isCompleteTier) return;
     exportWorkbookToExcel(`${studioSlug}_Business_Report_${timeframe}`, [
       {
         name: "Orders & Payments Ledger",
@@ -310,8 +460,41 @@ export function BusinessReportsView({
           },
         ],
       },
+      {
+        name: "Crew Productivity",
+        rows: crewProductivity,
+        columns: [
+          { header: "Crew Member", key: "name", width: 24 },
+          { header: "Skills", key: "skills", width: 28 },
+          { header: "Shoots Assigned", key: "shootsAssigned", type: "number", width: 18, sumInTotals: true },
+          { header: "Tasks Assigned", key: "tasksAssigned", type: "number", width: 18, sumInTotals: true },
+          { header: "Tasks Completed", key: "tasksCompleted", type: "number", width: 18, sumInTotals: true },
+          {
+            header: "Completion Rate",
+            key: "completionRate",
+            width: 16,
+            getValue: (c) => `${c.completionRate}%`,
+          },
+          { header: "Rework Count", key: "reworkCount", type: "number", width: 16, sumInTotals: true },
+          {
+            header: "Avg Turnaround (Days)",
+            key: "avgTurnaroundDays",
+            type: "number",
+            width: 22,
+          },
+        ],
+      },
     ]);
-  }, [studioSlug, timeframe, filteredOrders, pendingOrders, categoryStats, monthlyRevenueData]);
+  }, [
+    isCompleteTier,
+    studioSlug,
+    timeframe,
+    filteredOrders,
+    pendingOrders,
+    categoryStats,
+    monthlyRevenueData,
+    crewProductivity,
+  ]);
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 space-y-8 max-w-7xl mx-auto">
@@ -320,14 +503,16 @@ export function BusinessReportsView({
         <div>
           <div className="flex items-center gap-2.5">
             <h1 className="text-2xl sm:text-3xl font-extrabold text-text-primary">
-              Business Reports &amp; Analytics
+              {isCompleteTier ? "Business Reports & Analytics" : "Basic Business Overview"}
             </h1>
             <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-[11px] font-extrabold uppercase tracking-wider text-amber-800 border border-amber-200">
-              Studio Growth
+              {isCompleteTier ? "₹1,999 Complete Analytics" : "₹999 Basic Overview"}
             </span>
           </div>
           <p className="mt-1.5 text-xs sm:text-sm text-text-secondary leading-relaxed">
-            Track gross studio revenue, outstanding client balances before album delivery, and package profitability.
+            {isCompleteTier
+              ? "Track gross studio revenue, period-over-period growth, crew productivity, and outstanding client balances."
+              : "Order counts, revenue overview, and pending payment overview for your studio."}
           </p>
         </div>
 
@@ -376,37 +561,46 @@ export function BusinessReportsView({
             </button>
           </div>
 
-          <button
-            type="button"
-            onClick={handleExportReportsExcel}
-            className="rounded-xl border border-border-default bg-white px-3.5 py-2 text-xs font-bold text-text-primary shadow-2xs hover:bg-slate-50 hover:border-brand-blue-primary transition flex items-center gap-1.5 cursor-pointer"
-            title="Export multi-sheet Business Report to Excel (.xlsx)"
-          >
-            <FileSpreadsheet className="h-4 w-4 text-brand-blue-primary" />
-            <span>Export Excel</span>
-          </button>
+          {isCompleteTier ? (
+            <button
+              type="button"
+              onClick={handleExportReportsExcel}
+              className="rounded-xl border border-border-default bg-white px-3.5 py-2 text-xs font-bold text-text-primary shadow-2xs hover:bg-slate-50 hover:border-brand-blue-primary transition flex items-center gap-1.5 cursor-pointer"
+              title="Export multi-sheet Business Report to Excel (.xlsx)"
+            >
+              <FileSpreadsheet className="h-4 w-4 text-brand-blue-primary" />
+              <span>Export Excel</span>
+            </button>
+          ) : (
+            <Link
+              href={`/checkout?studio=${studioSlug}&plan=COMPLETE`}
+              className="rounded-xl border border-amber-300 bg-amber-50 px-3.5 py-2 text-xs font-bold text-amber-900 hover:bg-amber-100 transition flex items-center gap-1.5"
+              title="Excel Report Exports are included in the ₹1,999/month plan"
+            >
+              <Lock className="h-3.5 w-3.5 text-amber-700" />
+              <span>Export Excel (₹1,999 Plan)</span>
+            </Link>
+          )}
 
           <button
             onClick={handlePrint}
             className="rounded-xl border border-border-default bg-white px-3.5 py-2 text-xs font-bold text-text-primary shadow-2xs hover:bg-slate-50 transition flex items-center gap-1.5"
             title="Print or Export Summary"
           >
-            <svg className="h-4 w-4 text-text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
-            </svg>
             <span>Print Report</span>
           </button>
         </div>
       </div>
 
-      {/* KPI Cards */}
+      {/* KPI Cards with Period-over-Period Growth Badges (RPT-002) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Total Booked Revenue */}
         <div className="rounded-2xl border border-border-default bg-white p-5 shadow-xs">
           <div className="flex items-center justify-between text-xs font-semibold text-text-secondary">
             <span>Total Booked Revenue</span>
-            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-50 text-emerald-600 font-bold text-xs">
-              ₹
+            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
+              <TrendingUp className="h-3 w-3" />
+              {periodGrowth.revPct >= 0 ? `+${periodGrowth.revPct}%` : `${periodGrowth.revPct}%`} 30d
             </span>
           </div>
           <div className="mt-2 flex items-baseline gap-2">
@@ -458,12 +652,12 @@ export function BusinessReportsView({
           </p>
         </div>
 
-        {/* Average Order Value */}
+        {/* Order Count & AOV */}
         <div className="rounded-2xl border border-border-default bg-white p-5 shadow-xs">
           <div className="flex items-center justify-between text-xs font-semibold text-text-secondary">
             <span>Avg Order Value (AOV)</span>
-            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-purple-50 text-brand-purple-primary font-bold text-xs">
-              AOV
+            <span className="inline-flex items-center gap-1 rounded-full bg-purple-50 px-2 py-0.5 text-[10px] font-bold text-brand-purple-primary">
+              {periodGrowth.orderPct >= 0 ? `+${periodGrowth.orderPct}%` : `${periodGrowth.orderPct}%`} orders
             </span>
           </div>
           <div className="mt-2 flex items-baseline gap-2">
@@ -477,115 +671,218 @@ export function BusinessReportsView({
         </div>
       </div>
 
-      {/* Monthly Revenue Curves & Breakdown */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Monthly Revenue Bars (2 Columns) */}
-        <div className="lg:col-span-2 rounded-2xl border border-border-default bg-white p-5 sm:p-6 shadow-xs flex flex-col justify-between">
-          <div>
-            <div className="flex items-center justify-between">
+      {/* Advanced Business Reports & Analytics (Gated to ₹1,999/month COMPLETE Plan — RPT-001, RPT-002) */}
+      {isCompleteTier ? (
+        <>
+          {/* Monthly Revenue Curves & Shoot Category Breakdown */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Monthly Revenue Bars (2 Columns) */}
+            <div className="lg:col-span-2 rounded-2xl border border-border-default bg-white p-5 sm:p-6 shadow-xs flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-base font-bold text-text-primary">
+                      Monthly Studio Revenue Trend
+                    </h3>
+                    <p className="text-xs text-text-secondary mt-0.5">
+                      Monthly booked shoot earnings and peak wedding season performance
+                    </p>
+                  </div>
+                  <span className="rounded-lg bg-slate-100 px-2 py-1 text-[10px] font-bold text-text-secondary uppercase">
+                    Last 6 Months
+                  </span>
+                </div>
+
+                {/* Visual Bar Chart */}
+                <div className="mt-8 grid grid-cols-6 gap-2 sm:gap-4 items-end h-48 border-b border-border-divider pb-3">
+                  {monthlyRevenueData.map((item, idx) => {
+                    const heightPct = Math.max(12, Math.round((item.revenue / maxMonthRev) * 100));
+                    return (
+                      <div key={idx} className="flex flex-col items-center gap-2 h-full justify-end group">
+                        <span className="text-[10px] font-extrabold text-text-secondary opacity-0 group-hover:opacity-100 transition">
+                          ₹{item.revenue > 0 ? (item.revenue / 1000).toFixed(0) + "k" : "0"}
+                        </span>
+                        <div className="w-full max-w-[48px] bg-slate-100 rounded-t-lg overflow-hidden flex flex-col justify-end h-full">
+                          <div
+                            style={{ height: `${heightPct}%` }}
+                            className={`w-full rounded-t-lg transition-all duration-300 ${
+                              item.revenue > 0
+                                ? "bg-amber-500 group-hover:bg-amber-600 shadow-xs"
+                                : "bg-slate-200"
+                            }`}
+                          />
+                        </div>
+                        <span className="text-[10px] sm:text-xs font-bold text-text-primary truncate">
+                          {item.month}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="mt-4 pt-4 border-t border-border-divider/50 flex flex-wrap items-center justify-between text-xs text-text-secondary gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="h-3 w-3 rounded-sm bg-amber-500 inline-block" />
+                  <span>Confirmed Shoot Revenue</span>
+                </div>
+                <span>High season tips: Advance bookings secure cash flow for off-season months.</span>
+              </div>
+            </div>
+
+            {/* Most Profitable Shoot Categories (1 Column) */}
+            <div className="rounded-2xl border border-border-default bg-white p-5 sm:p-6 shadow-xs flex flex-col justify-between">
               <div>
                 <h3 className="text-base font-bold text-text-primary">
-                  Monthly Studio Revenue Trend
+                  Shoot Category Profitability
                 </h3>
                 <p className="text-xs text-text-secondary mt-0.5">
-                  Monthly booked shoot earnings and peak wedding season performance
+                  Which photography packages generate the highest revenue
+                </p>
+
+                <div className="mt-6 space-y-4">
+                  {categoryStats.length === 0 ? (
+                    <p className="text-xs text-text-secondary py-8 text-center">No shoot category data available</p>
+                  ) : (
+                    categoryStats.map((cat, idx) => (
+                      <div key={idx} className="space-y-1.5">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="font-bold text-text-primary">{cat.name}</span>
+                          <span className="font-extrabold text-text-primary">
+                            ₹{cat.revenue.toLocaleString("en-IN")}
+                          </span>
+                        </div>
+                        <div className="h-2 w-full rounded-full bg-slate-100 overflow-hidden">
+                          <div
+                            style={{ width: `${cat.pct}%` }}
+                            className={`h-full rounded-full ${
+                              idx === 0
+                                ? "bg-amber-500"
+                                : idx === 1
+                                ? "bg-brand-blue-primary"
+                                : idx === 2
+                                ? "bg-brand-purple-primary"
+                                : "bg-slate-400"
+                            }`}
+                          />
+                        </div>
+                        <div className="flex items-center justify-between text-[10px] text-text-secondary">
+                          <span>{cat.count} shoots booked</span>
+                          <span>{cat.pct}% of total studio sales</span>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              <div className="mt-6 pt-4 border-t border-border-divider">
+                <p className="text-[11px] text-text-secondary">
+                  <strong>Pro Tip:</strong> Focus marketing on your highest margin package categories to maximize studio net profits.
                 </p>
               </div>
-              <span className="rounded-lg bg-slate-100 px-2 py-1 text-[10px] font-bold text-text-secondary uppercase">
-                Last 6 Months
+            </div>
+          </div>
+
+          {/* Crew Productivity & Operational Efficiency Table (RPT-002) */}
+          <div className="rounded-2xl border border-border-default bg-white p-5 sm:p-6 shadow-xs">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
+              <div>
+                <h3 className="text-base font-bold text-text-primary flex items-center gap-2">
+                  <Users className="h-4 w-4 text-brand-purple-primary" />
+                  <span>Crew Productivity &amp; Turnaround Analytics</span>
+                </h3>
+                <p className="text-xs text-text-secondary mt-0.5">
+                  Evaluate team workload, post-event task completion rate, rework frequency, and average delivery turnaround.
+                </p>
+              </div>
+              <span className="rounded-full bg-purple-50 border border-purple-200 px-2.5 py-0.5 text-[10px] font-bold text-brand-purple-primary">
+                {crewProductivity.length} Active Crew Tracked
               </span>
             </div>
 
-            {/* Visual Bar Chart */}
-            <div className="mt-8 grid grid-cols-6 gap-2 sm:gap-4 items-end h-48 border-b border-border-divider pb-3">
-              {monthlyRevenueData.map((item, idx) => {
-                const heightPct = Math.max(12, Math.round((item.revenue / maxMonthRev) * 100));
-                return (
-                  <div key={idx} className="flex flex-col items-center gap-2 h-full justify-end group">
-                    <span className="text-[10px] font-extrabold text-text-secondary opacity-0 group-hover:opacity-100 transition">
-                      ₹{item.revenue > 0 ? (item.revenue / 1000).toFixed(0) + "k" : "0"}
-                    </span>
-                    <div className="w-full max-w-[48px] bg-slate-100 rounded-t-lg overflow-hidden flex flex-col justify-end h-full">
-                      <div
-                        style={{ height: `${heightPct}%` }}
-                        className={`w-full rounded-t-lg transition-all duration-300 ${
-                          item.revenue > 0
-                            ? "bg-amber-500 group-hover:bg-amber-600 shadow-xs"
-                            : "bg-slate-200"
-                        }`}
-                      />
-                    </div>
-                    <span className="text-[10px] sm:text-xs font-bold text-text-primary truncate">
-                      {item.month}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
+            {crewProductivity.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-border-default p-8 text-center text-xs text-text-secondary">
+                No crew assignments or production tasks recorded yet. Assign crew in OMS or ERP to track productivity.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="border-b border-border-divider bg-slate-50 text-[11px] font-bold text-text-secondary uppercase">
+                    <tr>
+                      <th className="py-3 px-4">Crew Member</th>
+                      <th className="py-3 px-4">Certified Skills</th>
+                      <th className="py-3 px-4">Shoots Assigned</th>
+                      <th className="py-3 px-4">Tasks Completed</th>
+                      <th className="py-3 px-4">Completion Rate</th>
+                      <th className="py-3 px-4">Rework Count</th>
+                      <th className="py-3 px-4 text-right">Avg Turnaround</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border-divider">
+                    {crewProductivity.map((row) => (
+                      <tr key={row.memberId} className="hover:bg-slate-50/70 transition">
+                        <td className="py-3 px-4 font-bold text-text-primary">{row.name}</td>
+                        <td className="py-3 px-4 text-text-secondary">{row.skills}</td>
+                        <td className="py-3 px-4 font-mono font-semibold text-text-primary tabular-nums">
+                          {row.shootsAssigned}
+                        </td>
+                        <td className="py-3 px-4 font-mono text-text-primary tabular-nums">
+                          {row.tasksCompleted} / {row.tasksAssigned}
+                        </td>
+                        <td className="py-3 px-4">
+                          <span
+                            className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                              row.completionRate >= 80
+                                ? "bg-emerald-100 text-emerald-800"
+                                : row.completionRate >= 50
+                                ? "bg-amber-100 text-amber-800"
+                                : "bg-slate-100 text-slate-700"
+                            }`}
+                          >
+                            {row.completionRate}%
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 font-mono tabular-nums">
+                          {row.reworkCount > 0 ? (
+                            <span className="text-amber-700 font-bold">{row.reworkCount} revision(s)</span>
+                          ) : (
+                            <span className="text-emerald-700 font-semibold">0</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4 text-right font-mono font-semibold text-text-primary tabular-nums">
+                          {row.avgTurnaroundDays}d
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
-
-          <div className="mt-4 pt-4 border-t border-border-divider/50 flex flex-wrap items-center justify-between text-xs text-text-secondary gap-2">
-            <div className="flex items-center gap-2">
-              <span className="h-3 w-3 rounded-sm bg-amber-500 inline-block" />
-              <span>Confirmed Shoot Revenue</span>
-            </div>
-            <span>High season tips: Advance bookings secure cash flow for off-season months.</span>
-          </div>
-        </div>
-
-        {/* Most Profitable Shoot Categories (1 Column) */}
-        <div className="rounded-2xl border border-border-default bg-white p-5 sm:p-6 shadow-xs flex flex-col justify-between">
-          <div>
-            <h3 className="text-base font-bold text-text-primary">
-              Shoot Category Profitability
+        </>
+      ) : (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50/60 p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="space-y-1">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-amber-900">
+              <Lock className="h-3 w-3" />
+              ₹1,999/month Complete Plan Feature
+            </span>
+            <h3 className="text-base font-extrabold text-text-primary">
+              Unlock Advanced Business Reports, Crew Productivity Analytics &amp; Excel Exports
             </h3>
-            <p className="text-xs text-text-secondary mt-0.5">
-              Which photography packages generate the highest revenue
-            </p>
-
-            <div className="mt-6 space-y-4">
-              {categoryStats.length === 0 ? (
-                <p className="text-xs text-text-secondary py-8 text-center">No shoot category data available</p>
-              ) : (
-                categoryStats.map((cat, idx) => (
-                  <div key={idx} className="space-y-1.5">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="font-bold text-text-primary">{cat.name}</span>
-                      <span className="font-extrabold text-text-primary">
-                        ₹{cat.revenue.toLocaleString("en-IN")}
-                      </span>
-                    </div>
-                    <div className="h-2 w-full rounded-full bg-slate-100 overflow-hidden">
-                      <div
-                        style={{ width: `${cat.pct}%` }}
-                        className={`h-full rounded-full ${
-                          idx === 0
-                            ? "bg-amber-500"
-                            : idx === 1
-                            ? "bg-brand-blue-primary"
-                            : idx === 2
-                            ? "bg-brand-purple-primary"
-                            : "bg-slate-400"
-                        }`}
-                      />
-                    </div>
-                    <div className="flex items-center justify-between text-[10px] text-text-secondary">
-                      <span>{cat.count} shoots booked</span>
-                      <span>{cat.pct}% of total studio sales</span>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-
-          <div className="mt-6 pt-4 border-t border-border-divider">
-            <p className="text-[11px] text-text-secondary">
-              <strong>Pro Tip:</strong> Focus marketing on your highest margin package categories to maximize studio net profits.
+            <p className="text-xs text-text-secondary max-w-2xl">
+              Your ₹999/month plan includes the Basic Business Dashboard (Order counts, Revenue overview, and Pending payment overview). Upgrade to the ₹1,999/month plan for Monthly Revenue Trends, Shoot Category Profitability, Crew Productivity Analytics, and multi-sheet Excel Report Exports.
             </p>
           </div>
+          <Link
+            href={`/checkout?studio=${studioSlug}&plan=COMPLETE`}
+            className="rounded-xl bg-brand-blue-primary px-4 py-2.5 text-xs font-bold text-white hover:bg-sky-600 transition shrink-0"
+          >
+            Upgrade to ₹1,999/mo →
+          </Link>
         </div>
-      </div>
+      )}
 
       {/* Actionable Receivables Pipeline: Orders with Balance Due */}
       <div className="rounded-2xl border border-border-default bg-white p-5 sm:p-6 shadow-xs">

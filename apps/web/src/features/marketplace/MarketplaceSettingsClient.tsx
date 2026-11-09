@@ -6,13 +6,15 @@ import {
   saveMarketplaceProfile,
   getStudioPackagesAction,
   createStudioPackageAction,
+  updateStudioPackageAction,
   deleteStudioPackageAction,
   getStudioBookingRequestsAction,
   negotiateBookingRequestAction,
   getStudioPaymentsAction,
   verifyPaymentAction,
+  confirmBookingAndConvertToOrderAction,
 } from "@/actions/marketplaceActions";
-import { MarketplaceProfile, StudioPackage, BookingRequest, PaymentRecord } from "@focoman/types";
+import { MarketplaceProfile, StudioPackage, BookingRequest, PaymentRecord, PaymentMethod } from "@focoman/types";
 import { useStudioWorkspace } from "@/components/StudioWorkspaceProvider";
 
 export function MarketplaceSettingsClient({ studioId }: { studioId: string }) {
@@ -28,6 +30,7 @@ export function MarketplaceSettingsClient({ studioId }: { studioId: string }) {
   // Packages State
   const [packages, setPackages] = useState<StudioPackage[]>([]);
   const [showPackageModal, setShowPackageModal] = useState(false);
+  const [editingPkgId, setEditingPkgId] = useState<string | null>(null);
   const [newPkgName, setNewPkgName] = useState("");
   const [newPkgPrice, setNewPkgPrice] = useState<number>(15000);
   const [newPkgDesc, setNewPkgDesc] = useState("");
@@ -42,6 +45,10 @@ export function MarketplaceSettingsClient({ studioId }: { studioId: string }) {
   const [negotiatingId, setNegotiatingId] = useState<string | null>(null);
   const [negotiatedPrice, setNegotiatedPrice] = useState<number>(0);
   const [advanceRequested, setAdvanceRequested] = useState<number>(0);
+  const [confirmingBookingId, setConfirmingBookingId] = useState<string | null>(null);
+  const [confirmAdvanceAmount, setConfirmAdvanceAmount] = useState<number>(0);
+  const [confirmPaymentMethod, setConfirmPaymentMethod] = useState<PaymentMethod>("UPI");
+  const [confirmRefNumber, setConfirmRefNumber] = useState<string>("");
   const [actionLoading, setActionLoading] = useState(false);
 
   const { getIdToken } = useStudioWorkspace();
@@ -137,7 +144,29 @@ export function MarketplaceSettingsClient({ studioId }: { studioId: string }) {
     setSaving(false);
   };
 
-  const handleCreatePackage = async (e: React.FormEvent) => {
+  const openCreatePackageModal = () => {
+    setEditingPkgId(null);
+    setNewPkgName("");
+    setNewPkgPrice(15000);
+    setNewPkgDesc("");
+    setNewPkgServices("Photography, Album");
+    setNewPkgNegotiable(true);
+    setNewPkgPublished(true);
+    setShowPackageModal(true);
+  };
+
+  const openEditPackageModal = (pkg: StudioPackage) => {
+    setEditingPkgId(pkg.id);
+    setNewPkgName(pkg.name);
+    setNewPkgPrice(pkg.price);
+    setNewPkgDesc(pkg.description || "");
+    setNewPkgServices((pkg.services || []).join(", "));
+    setNewPkgNegotiable(pkg.isNegotiable);
+    setNewPkgPublished(pkg.isPublished);
+    setShowPackageModal(true);
+  };
+
+  const handleCreateOrUpdatePackage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newPkgName || newPkgPrice <= 0) return;
 
@@ -150,26 +179,50 @@ export function MarketplaceSettingsClient({ studioId }: { studioId: string }) {
 
     const services = newPkgServices.split(",").map((s) => s.trim()).filter(Boolean);
 
-    const res = await createStudioPackageAction(
-      {
-        studioId,
-        name: newPkgName,
-        price: newPkgPrice,
-        description: newPkgDesc,
-        services,
-        isNegotiable: newPkgNegotiable,
-        isPublished: newPkgPublished,
-      },
-      token
-    );
-
-    if (res.success && res.package) {
-      setPackages([res.package, ...packages]);
-      setShowPackageModal(false);
-      setNewPkgName("");
-      setNewPkgDesc("");
+    if (editingPkgId) {
+      const res = await updateStudioPackageAction(
+        {
+          packageId: editingPkgId,
+          studioId,
+          name: newPkgName,
+          price: newPkgPrice,
+          description: newPkgDesc,
+          services,
+          isNegotiable: newPkgNegotiable,
+          isPublished: newPkgPublished,
+        },
+        token
+      );
+      if (res.success && res.package) {
+        setPackages(packages.map((p) => (p.id === editingPkgId ? res.package! : p)));
+        setShowPackageModal(false);
+        setEditingPkgId(null);
+        setMessage({ type: "success", text: `Updated package "${res.package.name}".` });
+      } else {
+        setMessage({ type: "error", text: res.error || "Failed to update package." });
+      }
     } else {
-      alert(res.error || "Failed to create package");
+      const res = await createStudioPackageAction(
+        {
+          studioId,
+          name: newPkgName,
+          price: newPkgPrice,
+          description: newPkgDesc,
+          services,
+          isNegotiable: newPkgNegotiable,
+          isPublished: newPkgPublished,
+        },
+        token
+      );
+      if (res.success && res.package) {
+        setPackages([res.package, ...packages]);
+        setShowPackageModal(false);
+        setNewPkgName("");
+        setNewPkgDesc("");
+        setMessage({ type: "success", text: `Created package "${res.package.name}".` });
+      } else {
+        setMessage({ type: "error", text: res.error || "Failed to create package." });
+      }
     }
     setPkgSaving(false);
   };
@@ -183,7 +236,7 @@ export function MarketplaceSettingsClient({ studioId }: { studioId: string }) {
     if (res.success) {
       setPackages(packages.filter((p) => p.id !== pkgId));
     } else {
-      alert(res.error || "Failed to delete package");
+      setMessage({ type: "error", text: res.error || "Failed to delete package" });
     }
   };
 
@@ -215,7 +268,46 @@ export function MarketplaceSettingsClient({ studioId }: { studioId: string }) {
       setBookings(bookings.map((b) => (b.id === bookingRequestId ? res.bookingRequest! : b)));
       setNegotiatingId(null);
     } else {
-      alert(res.error || "Failed to confirm negotiation");
+      setMessage({ type: "error", text: res.error || "Failed to confirm negotiation" });
+    }
+    setActionLoading(false);
+  };
+
+  const handleStartConfirmBooking = (req: BookingRequest) => {
+    setConfirmingBookingId(req.id);
+    setConfirmAdvanceAmount(req.advanceRequested || Math.round((req.agreedPrice || req.originalPrice) * 0.3));
+    setConfirmPaymentMethod("UPI");
+    setConfirmRefNumber("");
+  };
+
+  const handleDirectConfirmAndConvert = async (bookingRequestId: string) => {
+    setActionLoading(true);
+    const token = await getIdToken();
+    if (!token) {
+      setActionLoading(false);
+      return;
+    }
+
+    const res = await confirmBookingAndConvertToOrderAction(
+      {
+        bookingRequestId,
+        studioId,
+        advanceAmount: confirmAdvanceAmount,
+        paymentMethod: confirmPaymentMethod,
+        referenceNumber: confirmRefNumber.trim() || undefined,
+      },
+      token
+    );
+
+    if (res.success && res.order) {
+      setConfirmingBookingId(null);
+      setMessage({
+        type: "success",
+        text: `Booking confirmed! Created canonical OMS Order ${res.order.id} (Passkey PIN: ${res.order.passkeyPin}).`,
+      });
+      await loadData();
+    } else {
+      setMessage({ type: "error", text: res.error || "Failed to confirm booking." });
     }
     setActionLoading(false);
   };
@@ -241,10 +333,13 @@ export function MarketplaceSettingsClient({ studioId }: { studioId: string }) {
     );
 
     if (res.success) {
-      alert("Payment verified successfully! The booking is now confirmed and OMS tasks are initialized.");
+      setMessage({
+        type: "success",
+        text: "Payment verified successfully! The booking is now confirmed and OMS tasks are initialized.",
+      });
       await loadData();
     } else {
-      alert(res.error || "Failed to verify payment");
+      setMessage({ type: "error", text: res.error || "Failed to verify payment" });
     }
     setActionLoading(false);
   };
@@ -452,7 +547,7 @@ export function MarketplaceSettingsClient({ studioId }: { studioId: string }) {
               </p>
             </div>
             <button
-              onClick={() => setShowPackageModal(true)}
+              onClick={openCreatePackageModal}
               className="rounded-xl bg-text-primary px-4 py-2 text-xs font-bold text-white hover:bg-black transition"
             >
               + Create Package
@@ -509,8 +604,16 @@ export function MarketplaceSettingsClient({ studioId }: { studioId: string }) {
                     </div>
                   )}
 
-                  <div className="pt-3 border-t border-border-divider flex justify-end">
+                  <div className="pt-3 border-t border-border-divider flex justify-between items-center">
                     <button
+                      type="button"
+                      onClick={() => openEditPackageModal(pkg)}
+                      className="text-xs font-bold text-brand-blue-primary hover:underline"
+                    >
+                      Edit Package
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => handleDeletePackage(pkg.id)}
                       className="text-xs font-semibold text-status-error hover:underline"
                     >
@@ -522,18 +625,27 @@ export function MarketplaceSettingsClient({ studioId }: { studioId: string }) {
             </div>
           )}
 
-          {/* New Package Modal */}
+          {/* Create / Edit Package Modal */}
           {showPackageModal && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
               <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl border border-border-default space-y-4">
                 <div className="flex justify-between items-center border-b border-border-divider pb-3">
-                  <h4 className="text-base font-bold text-text-primary">Create Studio Package</h4>
-                  <button onClick={() => setShowPackageModal(false)} className="text-text-tertiary hover:text-text-primary">
+                  <h4 className="text-base font-bold text-text-primary">
+                    {editingPkgId ? "Edit Studio Package" : "Create Studio Package"}
+                  </h4>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowPackageModal(false);
+                      setEditingPkgId(null);
+                    }}
+                    className="text-text-tertiary hover:text-text-primary"
+                  >
                     ✕
                   </button>
                 </div>
 
-                <form onSubmit={handleCreatePackage} className="space-y-3">
+                <form onSubmit={handleCreateOrUpdatePackage} className="space-y-3">
                   <div>
                     <label className="block text-xs font-semibold text-text-primary mb-1">Package Name *</label>
                     <input
@@ -604,7 +716,10 @@ export function MarketplaceSettingsClient({ studioId }: { studioId: string }) {
                   <div className="pt-3 border-t border-border-divider flex justify-end gap-2">
                     <button
                       type="button"
-                      onClick={() => setShowPackageModal(false)}
+                      onClick={() => {
+                        setShowPackageModal(false);
+                        setEditingPkgId(null);
+                      }}
                       className="rounded-xl border border-border-default px-4 py-2 text-xs font-semibold text-text-secondary"
                     >
                       Cancel
@@ -614,7 +729,7 @@ export function MarketplaceSettingsClient({ studioId }: { studioId: string }) {
                       disabled={pkgSaving}
                       className="rounded-xl bg-brand-blue-primary px-5 py-2 text-xs font-bold text-white hover:bg-sky-600 disabled:opacity-50"
                     >
-                      {pkgSaving ? "Creating..." : "Save Package"}
+                      {pkgSaving ? "Saving..." : editingPkgId ? "Update Package" : "Save Package"}
                     </button>
                   </div>
                 </form>
@@ -628,9 +743,9 @@ export function MarketplaceSettingsClient({ studioId }: { studioId: string }) {
       {activeTab === "bookings" && (
         <div className="space-y-6">
           <div>
-            <h3 className="text-base font-bold text-text-primary">Marketplace Inquiries & Booking Requests</h3>
+            <h3 className="text-base font-bold text-text-primary">Marketplace Inquiries &amp; Booking Requests</h3>
             <p className="text-xs text-text-secondary mt-0.5">
-              Review customer booking requests, agree on negotiated rates, and verify offline payments.
+              Review customer booking requests, agree on negotiated rates, record advance payments, and convert confirmed bookings into OMS orders.
             </p>
           </div>
 
@@ -643,22 +758,25 @@ export function MarketplaceSettingsClient({ studioId }: { studioId: string }) {
             <div className="space-y-4">
               {bookings.map((b) => {
                 const bPayments = payments.filter((p) => p.bookingRequestId === b.id);
+                const canDirectConfirm =
+                  !b.orderId &&
+                  (b.bookingStatus === "BOOKING_REQUEST" || b.bookingStatus === "AWAITING_PAYMENT");
 
                 return (
                   <div key={b.id} className="rounded-2xl border border-border-default bg-white p-5 shadow-sm space-y-4">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border-divider pb-3">
                       <div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
                           <span className="text-xs font-mono font-bold text-brand-blue-primary">{b.id}</span>
                           <span className="rounded-full bg-surface-app px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-text-secondary border border-border-default">
                             {b.bookingStatus}
                           </span>
                           {b.orderId && (
                             <a
-                              href={`/${studioId}/dashboard/oms`}
+                              href={`/${studioId}/dashboard/oms?orderId=${b.orderId}`}
                               className="inline-flex items-center gap-1 rounded-md bg-purple-50 px-2 py-0.5 text-[10px] font-bold text-purple-700 border border-purple-200 hover:bg-purple-100 transition"
                             >
-                              <span>OMS: {b.orderId} →</span>
+                              <span>OMS Order: {b.orderId} →</span>
                             </a>
                           )}
                         </div>
@@ -705,6 +823,7 @@ export function MarketplaceSettingsClient({ studioId }: { studioId: string }) {
                           <span className="text-xs font-bold text-blue-900">Negotiation Requested</span>
                           {negotiatingId !== b.id && (
                             <button
+                              type="button"
                               onClick={() => handleStartNegotiate(b)}
                               className="rounded-lg bg-blue-700 px-3 py-1 text-[11px] font-bold text-white hover:bg-blue-800"
                             >
@@ -735,6 +854,7 @@ export function MarketplaceSettingsClient({ studioId }: { studioId: string }) {
                             </div>
                             <div className="flex items-end gap-1">
                               <button
+                                type="button"
                                 onClick={() => handleConfirmNegotiation(b.id)}
                                 disabled={actionLoading}
                                 className="w-full rounded-lg bg-blue-700 py-1.5 text-xs font-bold text-white hover:bg-blue-800 disabled:opacity-50"
@@ -742,8 +862,96 @@ export function MarketplaceSettingsClient({ studioId }: { studioId: string }) {
                                 {actionLoading ? "Saving..." : "Confirm Rate"}
                               </button>
                               <button
+                                type="button"
                                 onClick={() => setNegotiatingId(null)}
                                 className="rounded-lg border border-blue-300 bg-white px-2 py-1.5 text-xs font-semibold text-blue-700"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Direct Studio Confirmation & Advance Payment Recording (MKT-001) */}
+                    {canDirectConfirm && (
+                      <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-3 space-y-3">
+                        <div className="flex flex-wrap justify-between items-center gap-2">
+                          <div>
+                            <span className="text-xs font-bold text-emerald-900">
+                              Ready for Studio Confirmation
+                            </span>
+                            <p className="text-[11px] text-emerald-800">
+                              Record advance received and convert this inquiry into a confirmed OMS order with a 6-digit customer passkey.
+                            </p>
+                          </div>
+                          {confirmingBookingId !== b.id && (
+                            <button
+                              type="button"
+                              onClick={() => handleStartConfirmBooking(b)}
+                              className="rounded-lg bg-emerald-700 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-emerald-800 transition"
+                            >
+                              Confirm Advance &amp; Convert to Order
+                            </button>
+                          )}
+                        </div>
+
+                        {confirmingBookingId === b.id && (
+                          <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 pt-2 border-t border-emerald-200">
+                            <div>
+                              <label className="block text-[10px] font-semibold text-emerald-900 mb-0.5">
+                                Advance Received (₹)
+                              </label>
+                              <input
+                                type="number"
+                                min={0}
+                                max={b.agreedPrice}
+                                value={confirmAdvanceAmount}
+                                onChange={(e) => setConfirmAdvanceAmount(Number(e.target.value))}
+                                className="w-full rounded-lg border border-emerald-300 bg-white px-2 py-1 text-xs"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[10px] font-semibold text-emerald-900 mb-0.5">
+                                Payment Method
+                              </label>
+                              <select
+                                value={confirmPaymentMethod}
+                                onChange={(e) => setConfirmPaymentMethod(e.target.value as PaymentMethod)}
+                                className="w-full rounded-lg border border-emerald-300 bg-white px-2 py-1 text-xs"
+                              >
+                                <option value="UPI">UPI</option>
+                                <option value="BANK_TRANSFER">Bank Transfer</option>
+                                <option value="CASH">Cash</option>
+                                <option value="ONLINE_GATEWAY">Online Gateway</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label className="block text-[10px] font-semibold text-emerald-900 mb-0.5">
+                                UTR / Ref # (Optional)
+                              </label>
+                              <input
+                                type="text"
+                                value={confirmRefNumber}
+                                onChange={(e) => setConfirmRefNumber(e.target.value)}
+                                placeholder="e.g. UTR4029182"
+                                className="w-full rounded-lg border border-emerald-300 bg-white px-2 py-1 text-xs"
+                              />
+                            </div>
+                            <div className="flex items-end gap-1">
+                              <button
+                                type="button"
+                                onClick={() => handleDirectConfirmAndConvert(b.id)}
+                                disabled={actionLoading}
+                                className="w-full rounded-lg bg-emerald-700 py-1.5 text-xs font-bold text-white hover:bg-emerald-800 disabled:opacity-50"
+                              >
+                                {actionLoading ? "Creating Order..." : "Create OMS Order"}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setConfirmingBookingId(null)}
+                                className="rounded-lg border border-emerald-300 bg-white px-2 py-1.5 text-xs font-semibold text-emerald-800"
                               >
                                 Cancel
                               </button>
@@ -789,11 +997,12 @@ export function MarketplaceSettingsClient({ studioId }: { studioId: string }) {
 
                             {p.verificationStatus === "PENDING_VERIFICATION" && (
                               <button
+                                type="button"
                                 onClick={() => handleVerifyPayment(p.id)}
                                 disabled={actionLoading}
                                 className="rounded-xl bg-status-success px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-600 disabled:opacity-50 transition"
                               >
-                                Verify Payment & Confirm Booking
+                                Verify Payment &amp; Confirm Booking
                               </button>
                             )}
                           </div>
