@@ -31,6 +31,7 @@ interface OrderVerticalWorkflowProps {
   onUnassignCrew?: (serviceName: string) => Promise<void>;
   onOpenErpWizard?: (serviceName: string, query?: string) => void;
   onAssignTaskCrew?: (taskId: string, memberName: string) => Promise<void>;
+  hasErp?: boolean;
 }
 
 type PhaseId = "phase_lead" | "phase_pre_event" | "phase_event_day" | "phase_post_event" | "phase_delivery" | "phase_completed";
@@ -46,6 +47,7 @@ export function OrderVerticalWorkflow({
   onUnassignCrew,
   onOpenErpWizard,
   onAssignTaskCrew,
+  hasErp = true,
 }: OrderVerticalWorkflowProps) {
   const isOms = variant === "oms";
   const fullOrder = isOms ? (order as Order) : null;
@@ -575,15 +577,17 @@ export function OrderVerticalWorkflow({
                         const currentQuery = crewSearchQuery[svcName] ?? "";
                         const trimmedQuery = currentQuery.trim();
 
-                        const matchingCrewForService = allSelectableCrew.filter((m) => {
-                          if (!trimmedQuery) return true;
-                          const q = trimmedQuery.toLowerCase();
-                          return (
-                            (m.name || "").toLowerCase().includes(q) ||
-                            (m.role || "").toLowerCase().includes(q) ||
-                            (m.skills || []).some((s) => (s || "").toLowerCase().includes(q))
-                          );
-                        });
+                        const matchingCrewForService = hasErp
+                          ? allSelectableCrew.filter((m) => {
+                              if (!trimmedQuery) return true;
+                              const q = trimmedQuery.toLowerCase();
+                              return (
+                                (m.name || "").toLowerCase().includes(q) ||
+                                (m.role || "").toLowerCase().includes(q) ||
+                                (m.skills || []).some((s) => (s || "").toLowerCase().includes(q))
+                              );
+                            })
+                          : [];
 
                         const matchingTemporaryCrew = temporaryCrewList.filter((t) => {
                           if (!trimmedQuery) return true;
@@ -646,7 +650,11 @@ export function OrderVerticalWorkflow({
                                       <input
                                         type="text"
                                         placeholder={
-                                          assignedRes ? "Change crew..." : "Select crew or type name..."
+                                          assignedRes
+                                            ? "Change crew..."
+                                            : hasErp
+                                            ? "Select crew or type name..."
+                                            : "Type freelancer / temporary crew name..."
                                         }
                                         value={currentQuery}
                                         onFocus={() => setActiveCrewDropdown(svcName)}
@@ -681,13 +689,13 @@ export function OrderVerticalWorkflow({
                                                   {trimmedQuery}
                                                 </span>
                                                 <span className="text-[10px] font-bold text-amber-800 bg-amber-100 px-1.5 py-0.2 rounded shrink-0">
-                                                  Assign
+                                                  {hasErp ? "Assign" : "Assign Freelancer"}
                                                 </span>
                                               </div>
                                             )}
 
                                             {/* 2. Registered ERP Studio Crew */}
-                                            {matchingCrewForService.length > 0 && (
+                                            {hasErp && matchingCrewForService.length > 0 && (
                                               <div className="space-y-0.5 mb-1">
                                                 <div className="text-[9px] font-bold uppercase tracking-wider text-text-tertiary px-1 py-0.5">
                                                   Studio Crew
@@ -733,7 +741,7 @@ export function OrderVerticalWorkflow({
                                             )}
 
                                             {/* 4. ERP Full Member Registration */}
-                                            {onOpenErpWizard && (
+                                            {hasErp && onOpenErpWizard && (
                                               <div
                                                 onClick={() => {
                                                   setActiveCrewDropdown(null);
@@ -1359,11 +1367,12 @@ export function OrderVerticalWorkflow({
                     className="rounded-md border border-border-default bg-white px-2 py-0.5 text-[10px] font-semibold text-text-primary outline-none focus:border-brand-blue-primary shadow-2xs"
                   >
                     <option value="">-- Select Crew --</option>
-                    {allSelectableCrew.map((c) => (
-                      <option key={c.id} value={c.name}>
-                        {c.name}
-                      </option>
-                    ))}
+                    {hasErp &&
+                      allSelectableCrew.map((c) => (
+                        <option key={c.id} value={c.name}>
+                          {c.name}
+                        </option>
+                      ))}
                     {temporaryCrewList.map((t) => (
                       <option key={t.id} value={t.name}>
                         {t.name} (Freelancer)

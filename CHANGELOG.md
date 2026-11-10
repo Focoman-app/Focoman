@@ -2,6 +2,17 @@
 
 All meaningful changes to the Focoman codebase, documentation, architecture, or agent workflow instructions must be recorded in this file according to Section 20 of **[Agents.md](Agents.md)**.
 
+## CHG-086 — Scope CRM & ERP Features Out of Basic Free OMS
+
+- **Date:** 2026-11-10
+- **Area:** apps/web/src/app/[studioSlug]/dashboard/oms/page.tsx, apps/web/src/components/oms/OmsCreateOrderModal.tsx, apps/web/src/components/workflow/OrderVerticalWorkflow.tsx, CHANGELOG.md.
+- **Change:**
+  1. **Order Creation (`OmsCreateOrderModal.tsx`)**: When `features.crm` is false (Free tier), hides the existing customer dropdown toggle, the CRM registered count badge, customer autocomplete dropdown, and the CRM duplicate match banner. Keeps order registration strictly manual (Customer Name, Phone, Email, Location).
+  2. **Crew Assignment (`OrderVerticalWorkflow.tsx`)**: When `features.erp` is false (Free tier), suppresses the registered studio roster crew section and the `+ Add as Permanent ERP Member` button. Restricts shoot planning and task assignment to temporary/freelancer crew only.
+  3. **OMS Coordinator (`oms/page.tsx`)**: Passed `hasCrm` and `hasErp` derived from effective studio features to modal and workflow components, cleared `matchingCustomers` / `duplicateCustomerWarning` when CRM is inactive, and cleared `allSelectableCrew` when ERP is inactive.
+- **Verification:** TypeScript typecheck passed with 0 errors (`tsc --project apps/web/tsconfig.json --noEmit`); `npm test` passed 38/38 tests.
+
+
 ## CHG-085 — Enforce Strict Module Entitlement Filtering in Dashboard Left Sidebar
 
 - **Date:** 2026-11-10

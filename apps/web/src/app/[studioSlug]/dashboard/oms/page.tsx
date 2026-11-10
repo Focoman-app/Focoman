@@ -73,6 +73,8 @@ export default function OmsPage({
     authLoading,
     getIdToken,
   } = useStudioWorkspace();
+  const hasCrm = Boolean(studio?.features?.crm);
+  const hasErp = Boolean(studio?.features?.erp);
   const [orders, setOrders] = useState<Order[]>([]);
   const [omsSection, setOmsSection] = useState<"ORDERS" | "LEADS">("ORDERS");
   const [leads, setLeads] = useState<StudioLead[]>([]);
@@ -281,6 +283,7 @@ export default function OmsPage({
   } | null>(null);
 
   const allSelectableCrew = useMemo(() => {
+    if (!hasErp) return [];
     const list: Array<{ id: string; name: string; skills: string[]; role: string }> =
       [];
     const ownerDisplayName =
@@ -310,7 +313,7 @@ export default function OmsPage({
       }
     });
     return list;
-  }, [studio, studioSlug, studioMembers, workspaceUser]);
+  }, [hasErp, studio, studioSlug, studioMembers, workspaceUser]);
 
   const temporaryCrewList = useMemo(() => {
     const map = new Map<
@@ -400,6 +403,7 @@ export default function OmsPage({
   }, []);
 
   const matchingCustomers = useMemo(() => {
+    if (!hasCrm) return [];
     const q = newOrderForm.customerName.trim().toLowerCase();
     if (!q) return studioCustomers.slice(0, 5);
     return studioCustomers
@@ -410,9 +414,10 @@ export default function OmsPage({
           (c.email && c.email.toLowerCase().includes(q))
       )
       .slice(0, 8);
-  }, [studioCustomers, newOrderForm.customerName]);
+  }, [hasCrm, studioCustomers, newOrderForm.customerName]);
 
   const duplicateCustomerWarning = useMemo(() => {
+    if (!hasCrm) return null;
     const name = newOrderForm.customerName.trim().toLowerCase();
     const phone = newOrderForm.customerPhone.trim().replace(/\D/g, "");
     if (!name && !phone) return null;
@@ -430,7 +435,7 @@ export default function OmsPage({
         );
       }) || null
     );
-  }, [studioCustomers, newOrderForm.customerName, newOrderForm.customerPhone]);
+  }, [hasCrm, studioCustomers, newOrderForm.customerName, newOrderForm.customerPhone]);
 
   const selectExistingCustomer = (c: Customer) => {
     let code = "+91";
@@ -1005,6 +1010,7 @@ export default function OmsPage({
     serviceName?: string,
     memberName?: string
   ) => {
+    if (!hasErp) return;
     let initialSkills = ["PHOTOGRAPHY"];
     if (serviceName) {
       const s = serviceName.toLowerCase();
@@ -1478,8 +1484,9 @@ export default function OmsPage({
             temporaryCrewList={temporaryCrewList}
             onAssignCrew={handleCommitCrewAssignment}
             onUnassignCrew={handleUnassignService}
-            onOpenErpWizard={openErpWizardForService}
+            onOpenErpWizard={hasErp ? openErpWizardForService : undefined}
             onAssignTaskCrew={handleAssignTaskCrew}
+            hasErp={hasErp}
           />
 
           {/* Production Aging and Turnaround SLA Banner */}
@@ -1646,6 +1653,7 @@ export default function OmsPage({
         setShowServicesDropdown={setShowServicesDropdown}
         onToggleService={toggleService}
         calculateOrderPrice={calculateOrderPrice}
+        hasCrm={hasCrm}
       />
 
       {/* In-App Cancellation & Soft-Delete Dialogs */}

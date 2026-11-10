@@ -33,6 +33,7 @@ interface OmsCreateOrderModalProps {
   setShowServicesDropdown: React.Dispatch<React.SetStateAction<boolean>>;
   onToggleService: (serviceName: string) => void;
   calculateOrderPrice: (selectedServices: string[], packageId?: string) => number;
+  hasCrm?: boolean;
 }
 
 export function OmsCreateOrderModal({
@@ -59,6 +60,7 @@ export function OmsCreateOrderModal({
   setShowServicesDropdown,
   onToggleService,
   calculateOrderPrice,
+  hasCrm = true,
 }: OmsCreateOrderModalProps) {
   if (!isOpen) return null;
 
@@ -102,7 +104,7 @@ export function OmsCreateOrderModal({
                 <label className="block text-xs font-bold text-text-primary">
                   Customer Full Name *
                 </label>
-                {studioCustomers.length > 0 && (
+                {hasCrm && studioCustomers.length > 0 && (
                   <span className="text-[10px] text-text-tertiary">
                     {studioCustomers.length} registered in CRM
                   </span>
@@ -112,16 +114,20 @@ export function OmsCreateOrderModal({
                 <input
                   type="text"
                   required
-                  placeholder="e.g. Ramesh Kumar (Search existing or type new)"
+                  placeholder={hasCrm ? "e.g. Ramesh Kumar (Search existing or type new)" : "e.g. Ramesh Kumar"}
                   value={newOrderForm.customerName}
-                  onFocus={() => setShowCustomerDropdown(true)}
+                  onFocus={() => {
+                    if (hasCrm) setShowCustomerDropdown(true);
+                  }}
                   onChange={(e) => {
                     setNewOrderForm({ ...newOrderForm, customerName: e.target.value });
-                    setShowCustomerDropdown(true);
+                    if (hasCrm) setShowCustomerDropdown(true);
                   }}
-                  className="w-full rounded-xl border border-border-default px-3.5 py-2 pr-10 text-xs outline-none focus:border-brand-blue-primary focus:ring-1 focus:ring-brand-blue-primary"
+                  className={`w-full rounded-xl border border-border-default px-3.5 py-2 text-xs outline-none focus:border-brand-blue-primary focus:ring-1 focus:ring-brand-blue-primary ${
+                    hasCrm && studioCustomers.length > 0 ? "pr-10" : "pr-3.5"
+                  }`}
                 />
-                {studioCustomers.length > 0 && (
+                {hasCrm && studioCustomers.length > 0 && (
                   <button
                     type="button"
                     onClick={() => setShowCustomerDropdown((prev) => !prev)}
@@ -151,7 +157,7 @@ export function OmsCreateOrderModal({
                 )}
 
               {/* Customer Autocomplete Dropdown */}
-              {showCustomerDropdown && matchingCustomers.length > 0 && (
+              {hasCrm && showCustomerDropdown && matchingCustomers.length > 0 && (
                 <div className="absolute top-full left-0 right-0 z-30 mt-1 rounded-2xl border border-border-default bg-white p-2 shadow-xl animate-in fade-in duration-100 max-h-48 overflow-y-auto">
                   <div className="flex items-center justify-between px-2 pb-1 border-b border-border-default text-[10px] font-bold text-text-tertiary uppercase tracking-wider">
                     <span>Select Existing Client or Type New</span>
@@ -236,7 +242,7 @@ export function OmsCreateOrderModal({
             </div>
 
             {/* Non-Blocking Duplicate Match Notice */}
-            {duplicateCustomerWarning && (
+            {hasCrm && duplicateCustomerWarning && (
               <div className="rounded-2xl border border-amber-200 bg-amber-50/90 p-3 text-xs text-amber-950 flex items-start gap-2.5 animate-in fade-in duration-150">
                 <span className="text-base leading-none shrink-0 mt-0.5">ℹ️</span>
                 <div className="space-y-0.5 min-w-0">
