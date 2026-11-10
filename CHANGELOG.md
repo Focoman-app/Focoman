@@ -2,6 +2,36 @@
 
 All meaningful changes to the Focoman codebase, documentation, architecture, or agent workflow instructions must be recorded in this file according to Section 20 of **[Agents.md](Agents.md)**.
 
+## CHG-083 — Fix Dirty-State Detection & Direct Mutation Tracking on Services Catalog
+
+- **Date:** 2026-11-10
+- **Area:** apps/web/src/app/[studioSlug]/dashboard/services/page.tsx, CHANGELOG.md.
+- **Change:** Fixed dirty-state detection on `/[studioSlug]/dashboard/services`. Initialized baseline snapshot immediately on component mount, added direct `isDirty` state triggers to all price input changes, package toggles, custom service additions, and deletions, and decoupled button enabling from client-side session race conditions so the Save button immediately and reliably enables upon any edit.
+- **Verification:** TypeScript typecheck passed with 0 errors (`tsc --project apps/web/tsconfig.json --noEmit`); `npm test` passed 38/38 tests. Hot-reloaded on dev server.
+
+## CHG-082 — Harmonize Google Drive Deliverables Panel Theme Across OMS & Tracking
+
+- **Date:** 2026-11-10
+- **Area:** apps/web/src/components/deliverables/GoogleDriveDeliverablesSection.tsx, CHANGELOG.md.
+- **Change:** Refactored `GoogleDriveDeliverablesSection.tsx` from dark slate/indigo styling to canonical FocoMan theme tokens and card designs. Harmonized the outer panel card (`rounded-2xl border border-border-default bg-white p-5 shadow-2xs`), zero-bandwidth access notice box, empty deliverables placeholder, item cards, action buttons, and client review feedback controls to match the surrounding OMS and `/track/[passkey]` interface.
+- **Verification:** TypeScript typecheck passed (`tsc --project apps/web/tsconfig.json --noEmit`); `npm test` passed 38/38 tests. Hot-reloaded on dev server.
+
+## CHG-081 — Dirty-State Detection and Dynamic Save Button Disabling on Services Catalog
+
+- **Date:** 2026-11-10
+- **Area:** apps/web/src/app/[studioSlug]/dashboard/services/page.tsx, CHANGELOG.md.
+- **Change:** Implemented dirty-state tracking for the studio services and packages catalog. Captures an initial state snapshot on load, detects changes to enabled flags, prices, custom services, and package configurations, and disables the "Save All Changes" button when there are no modifications. Re-enables the button dynamically when any edit occurs and updates the initial snapshot upon save.
+- **Verification:** TypeScript typecheck passed (`tsc --project apps/web/tsconfig.json --noEmit`); `npm test` passed 38/38 tests. Hot-reloaded on dev server.
+
+## CHG-080 — Fix Dashboard Logo Gradient Scoping and Auto-Redirect on Services Catalog Save
+
+- **Date:** 2026-11-10
+- **Area:** apps/web/src/components/FocomanLogo.tsx, apps/web/src/app/[studioSlug]/dashboard/services/page.tsx, CHANGELOG.md.
+- **Change:**
+  1. Updated `FocomanLogo.tsx` to dynamically generate unique SVG gradient IDs (`shieldBgId`, `fCyanId`, `purpleBorderId`) using `useId()`, preventing desktop logo instances from referencing paint servers inside hidden mobile breakpoint containers (`md:hidden`), which caused Chromium/WebKit to render the shield mark solid black.
+  2. Updated `handleSaveServices` in `services/page.tsx` so saving the studio catalog triggers an automated navigation back (`router.back()`) with a fallback to `/${studioSlug}/dashboard` after displaying the success toast confirmation.
+- **Verification:** TypeScript typecheck passed with 0 errors (`tsc --project apps/web/tsconfig.json --noEmit`); `npm test` passed 38/38 tests. Dev server active on port 3000.
+
 ## CHG-079 — Rebased Billing Delivery and Security Hardening
 
 - **Date:** 2026-11-10

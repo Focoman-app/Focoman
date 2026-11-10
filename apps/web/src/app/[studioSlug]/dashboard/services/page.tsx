@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, useMemo, useRef, Suspense } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useStudioWorkspace } from "@/components/StudioWorkspaceProvider";
@@ -38,6 +38,16 @@ function ServicesContent() {
   );
   const [loading, setLoading] = useState(true);
   const [savingServices, setSavingServices] = useState(false);
+  const [isDirty, setIsDirty] = useState(false);
+  const [initialSnapshot, setInitialSnapshot] = useState<string>(() =>
+    JSON.stringify({
+      services: studio.configuredServices && studio.configuredServices.length > 0
+        ? studio.configuredServices
+        : DEFAULT_STUDIO_SERVICES,
+      packages: getDefaultStudioPackages(studioSlug),
+    })
+  );
+  const hasLoadedServerRef = useRef(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -74,13 +84,18 @@ function ServicesContent() {
         if (!token) return;
 
         const res = await getStudioServicesAction(studioSlug, token);
-        if (res.success) {
-          if (Array.isArray(res.services)) {
-            setServices(res.services);
-          }
-          if (Array.isArray(res.packages)) {
-            setPackages(res.packages);
-          }
+        if (res.success && !hasLoadedServerRef.current) {
+          hasLoadedServerRef.current = true;
+          const loadedServices = Array.isArray(res.services) && res.services.length > 0
+            ? res.services
+            : (studio.configuredServices && studio.configuredServices.length > 0 ? studio.configuredServices : DEFAULT_STUDIO_SERVICES);
+          const loadedPackages = Array.isArray(res.packages) && res.packages.length > 0
+            ? res.packages
+            : getDefaultStudioPackages(studioSlug);
+
+          setServices(loadedServices);
+          setPackages(loadedPackages);
+          setInitialSnapshot(JSON.stringify({ services: loadedServices, packages: loadedPackages }));
         }
       } catch (err) {
         console.error("Failed to load studio services & packages:", err);
@@ -91,6 +106,12 @@ function ServicesContent() {
     loadData();
   }, [studioSlug, getIdToken]);
 
+  const hasChanges = useMemo(() => {
+    if (isOnboarding) return true;
+    if (isDirty) return true;
+    return initialSnapshot !== JSON.stringify({ services, packages });
+  }, [isOnboarding, isDirty, initialSnapshot, services, packages]);
+
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3500);
@@ -98,6 +119,7 @@ function ServicesContent() {
 
   // Toggle service enabled / disabled
   const handleToggleService = (id: string) => {
+    setIsDirty(true);
     setServices((prev) =>
       prev.map((s) => (s.id === id ? { ...s, enabled: !s.enabled } : s))
     );
@@ -105,6 +127,7 @@ function ServicesContent() {
 
   // Update base price for a service
   const handlePriceChange = (id: string, price: number) => {
+    setIsDirty(true);
     setServices((prev) =>
       prev.map((s) => (s.id === id ? { ...s, defaultPrice: Math.max(0, price) } : s))
     );
@@ -112,6 +135,7 @@ function ServicesContent() {
 
   // Toggle package enabled / disabled (same as services)
   const handleTogglePackage = (pkgId: string) => {
+    setIsDirty(true);
     setPackages((prev) =>
       prev.map((p) => (p.id === pkgId ? { ...p, isPublished: !p.isPublished } : p))
     );
@@ -119,6 +143,7 @@ function ServicesContent() {
 
   // Update package price in local state
   const handlePackagePriceChange = (pkgId: string, newPrice: number) => {
+    setIsDirty(true);
     setPackages((prev) =>
       prev.map((p) => (p.id === pkgId ? { ...p, price: Math.max(0, newPrice) } : p))
     );
@@ -126,6 +151,7 @@ function ServicesContent() {
 
   // Remove a custom service
   const handleRemoveService = (id: string) => {
+    setIsDirty(true);
     setServices((prev) => prev.filter((s) => s.id !== id));
   };
 
@@ -144,6 +170,7 @@ function ServicesContent() {
     };
 
     setServices((prev) => [...prev, newService]);
+    setIsDirty(true);
     setCustomServiceName("");
     setCustomServicePrice(15000);
     setCustomServiceDeliverable(false);
@@ -152,7 +179,7 @@ function ServicesContent() {
   };
 
   // Save all services and packages to database
-  const handleSaveServices = async (redirectAfter = false) => {
+  const handleSaveServices = async (forceDashboard = false) => {
     setSavingServices(true);
     setErrorMessage(null);
     try {
@@ -172,9 +199,17 @@ function ServicesContent() {
       }
 
       showToast("Services & packages saved successfully!");
-      if (redirectAfter) {
-        router.push(`/${studioSlug}/dashboard`);
-      }
+      setInitialSnapshot(JSON.stringify({ services, packages }));
+      setIsDirty(false);
+      setTimeout(() => {
+        if (forceDashboard) {
+          router.push(`/${studioSlug}/dashboard`);
+        } else if (typeof window !== "undefined" && window.history.length > 1) {
+          router.back();
+        } else {
+          router.push(`/${studioSlug}/dashboard`);
+        }
+      }, 500);
     } catch (err: unknown) {
       setErrorMessage(err instanceof Error ? err.message : "Failed to save services & packages.");
     } finally {
@@ -211,6 +246,7 @@ function ServicesContent() {
       }
 
       setPackages((prev) => [...prev, res.package]);
+      setIsDirty(true);
       setShowCreatePackageModal(false);
       setPackageName("");
       setPackageDesc("");
@@ -231,12 +267,14 @@ function ServicesContent() {
     try {
       if (deleteConfirmItem.type === "service") {
         setServices((prev) => prev.filter((s) => s.id !== deleteConfirmItem.id));
+        setIsDirty(true);
         showToast(`Removed "${deleteConfirmItem.name}" from catalog.`);
         setDeleteConfirmItem(null);
       } else {
         const pkgId = deleteConfirmItem.id;
         const pkgName = deleteConfirmItem.name;
         setPackages((prev) => prev.filter((p) => p.id !== pkgId));
+        setIsDirty(true);
         setDeleteConfirmItem(null);
         try {
           const token = await getIdToken();
@@ -598,6 +636,8 @@ function ServicesContent() {
           <div className="text-xs text-text-secondary hidden sm:block">
             {isOnboarding
               ? "Save your studio catalog to launch your workspace with instant pre-calculated rates."
+              : hasChanges
+              ? "You have unsaved changes in your catalog."
               : "Ready to book? Your active services immediately power the Confirmed Order form."}
           </div>
           <div className="flex items-center gap-3 w-full sm:w-auto shrink-0">
@@ -621,8 +661,13 @@ function ServicesContent() {
               <button
                 type="button"
                 onClick={() => handleSaveServices(false)}
-                disabled={savingServices || !isOwner}
-                className="w-full sm:w-auto rounded-xl bg-brand-blue-primary px-6 py-2.5 text-xs font-bold text-white hover:bg-brand-blue-hover transition shadow-sm disabled:opacity-50 flex items-center justify-center gap-2"
+                disabled={savingServices || !hasChanges}
+                className={`w-full sm:w-auto rounded-xl px-6 py-2.5 text-xs font-bold transition shadow-sm flex items-center justify-center gap-2 ${
+                  hasChanges
+                    ? "bg-brand-blue-primary text-white hover:bg-brand-blue-hover cursor-pointer"
+                    : "bg-slate-200 text-slate-400 cursor-not-allowed opacity-60"
+                }`}
+                title={!hasChanges ? "No changes to save" : undefined}
               >
                 {savingServices ? (
                   <>

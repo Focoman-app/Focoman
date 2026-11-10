@@ -190,13 +190,13 @@ export function GoogleDriveDeliverablesSection({
   };
 
   return (
-    <div className="rounded-xl border border-slate-800/80 bg-slate-900/40 p-5 space-y-4">
+    <div className="rounded-2xl border border-border-default bg-white p-5 space-y-4 shadow-2xs">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-300">
+          <h4 className="text-xs font-bold uppercase tracking-wider text-text-primary">
             Google Drive Deliverables &amp; In-App Preview
           </h4>
-          <p className="mt-0.5 text-xs text-slate-400">
+          <p className="mt-0.5 text-xs text-text-secondary">
             Preview photos, videos, album PDFs, or folders directly via Google Drive viewer, shortlist photo filenames, and submit client review approvals.
           </p>
         </div>
@@ -205,7 +205,7 @@ export function GoogleDriveDeliverablesSection({
           <button
             type="button"
             onClick={() => setShowAddForm((prev) => !prev)}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-500 transition-colors"
+            className="inline-flex items-center gap-1.5 rounded-xl bg-brand-blue-primary px-3 py-1.5 text-xs font-bold text-white hover:bg-brand-blue-hover transition shadow-2xs"
           >
             <Plus className="h-3.5 w-3.5" />
             <span>{showAddForm ? "Cancel" : "Add Drive Link"}</span>
@@ -214,17 +214,17 @@ export function GoogleDriveDeliverablesSection({
       </div>
 
       {/* Zero-Server-Bandwidth & Access Notice */}
-      <div className="flex items-start gap-2.5 rounded-lg border border-slate-800 bg-slate-950/60 px-3.5 py-2.5 text-[11px] text-slate-400">
-        <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-indigo-400" />
+      <div className="flex items-start gap-2.5 rounded-xl border border-border-default bg-surface-app/70 px-3.5 py-2.5 text-[11px] text-text-secondary">
+        <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-brand-blue-primary" />
         <div>
           Media streams directly from Google Drive using your browser internet connection when you click{" "}
-          <span className="font-medium text-slate-300">Preview in App</span>. If a file or folder is private, sign into the authorized Google account or use{" "}
-          <span className="font-medium text-slate-300">Open in Google Drive</span>.
+          <span className="font-semibold text-text-primary">Preview in App</span>. If a file or folder is private, sign into the authorized Google account or use{" "}
+          <span className="font-semibold text-text-primary">Open in Google Drive</span>.
         </div>
       </div>
 
       {errorMsg && (
-        <div className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-300">
+        <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-status-error font-medium">
           {errorMsg}
         </div>
       )}
@@ -233,11 +233,11 @@ export function GoogleDriveDeliverablesSection({
       {canManageLinks && showAddForm && (
         <form
           onSubmit={handleAddDeliverable}
-          className="space-y-3 rounded-lg border border-slate-800 bg-slate-950/80 p-4"
+          className="space-y-3 rounded-xl border border-border-default bg-surface-app/40 p-4"
         >
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div className="sm:col-span-2">
-              <label className="mb-1 block text-[11px] font-medium text-slate-400">
+              <label className="mb-1 block text-[11px] font-semibold text-text-secondary">
                 Deliverable Title *
               </label>
               <input
@@ -246,12 +246,12 @@ export function GoogleDriveDeliverablesSection({
                 value={newTitle}
                 onChange={(e) => setNewTitle(e.target.value)}
                 placeholder="e.g. Raw Photo Selection Folder, Wedding Highlight Film, Album Draft PDF"
-                className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs text-slate-100 focus:border-indigo-500 focus:outline-none"
+                className="w-full rounded-xl border border-border-default bg-white px-3 py-1.5 text-xs text-text-primary placeholder:text-text-tertiary focus:border-brand-blue-primary focus:outline-none focus:ring-1 focus:ring-brand-blue-primary"
               />
             </div>
 
             <div>
-              <label className="mb-1 block text-[11px] font-medium text-slate-400">
+              <label className="mb-1 block text-[11px] font-semibold text-text-secondary">
                 Media Type
               </label>
               <select
@@ -261,7 +261,7 @@ export function GoogleDriveDeliverablesSection({
                     e.target.value as OrderDriveDeliverable["category"]
                   )
                 }
-                className="w-full rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 text-xs text-slate-100 focus:border-indigo-500 focus:outline-none"
+                className="w-full rounded-xl border border-border-default bg-white px-2.5 py-1.5 text-xs text-text-primary focus:border-brand-blue-primary focus:outline-none focus:ring-1 focus:ring-brand-blue-primary"
               >
                 <option value="FOLDER">Google Drive Folder</option>
                 <option value="IMAGE">Photo / Image File</option>
@@ -274,7 +274,7 @@ export function GoogleDriveDeliverablesSection({
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
-              <label className="mb-1 block text-[11px] font-medium text-slate-400">
+              <label className="mb-1 block text-[11px] font-semibold text-text-secondary">
                 Google Drive Share URL *
               </label>
               <input
@@ -283,12 +283,12 @@ export function GoogleDriveDeliverablesSection({
                 value={newUrl}
                 onChange={(e) => setNewUrl(e.target.value)}
                 placeholder="https://drive.google.com/drive/folders/... or /file/d/..."
-                className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs text-slate-100 focus:border-indigo-500 focus:outline-none"
+                className="w-full rounded-xl border border-border-default bg-white px-3 py-1.5 text-xs text-text-primary placeholder:text-text-tertiary focus:border-brand-blue-primary focus:outline-none focus:ring-1 focus:ring-brand-blue-primary"
               />
             </div>
 
             <div>
-              <label className="mb-1 block text-[11px] font-medium text-slate-400">
+              <label className="mb-1 block text-[11px] font-semibold text-text-secondary">
                 Instructions / Notes for Client (Optional)
               </label>
               <input
@@ -296,7 +296,7 @@ export function GoogleDriveDeliverablesSection({
                 value={newNotes}
                 onChange={(e) => setNewNotes(e.target.value)}
                 placeholder="e.g. Please shortlist 250 photos for album design"
-                className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs text-slate-100 focus:border-indigo-500 focus:outline-none"
+                className="w-full rounded-xl border border-border-default bg-white px-3 py-1.5 text-xs text-text-primary placeholder:text-text-tertiary focus:border-brand-blue-primary focus:outline-none focus:ring-1 focus:ring-brand-blue-primary"
               />
             </div>
           </div>
@@ -305,14 +305,14 @@ export function GoogleDriveDeliverablesSection({
             <button
               type="button"
               onClick={() => setShowAddForm(false)}
-              className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-medium text-slate-300 hover:bg-slate-800"
+              className="rounded-xl border border-border-default bg-white px-3.5 py-1.5 text-xs font-semibold text-text-primary hover:bg-surface-app transition shadow-2xs"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={saving}
-              className="rounded-lg bg-indigo-600 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
+              className="rounded-xl bg-brand-blue-primary px-3.5 py-1.5 text-xs font-bold text-white hover:bg-brand-blue-hover disabled:opacity-50 transition shadow-2xs"
             >
               {saving ? "Saving..." : "Save Deliverable Link"}
             </button>
@@ -322,7 +322,7 @@ export function GoogleDriveDeliverablesSection({
 
       {/* Deliverables List */}
       {deliverables.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-slate-800 bg-slate-950/40 px-4 py-6 text-center text-xs text-slate-500">
+        <div className="rounded-xl border border-dashed border-border-default bg-surface-app/60 px-4 py-8 text-center text-xs text-text-tertiary">
           {canManageLinks
             ? "No Google Drive deliverable links added yet. Click 'Add Drive Link' to share photos, videos, or album proofs with the client."
             : "The studio has not shared any Google Drive deliverables for preview yet."}
@@ -344,53 +344,53 @@ export function GoogleDriveDeliverablesSection({
             return (
               <div
                 key={item.id}
-                className="rounded-lg border border-slate-800 bg-slate-950/70 p-4 space-y-3"
+                className="rounded-xl border border-border-default bg-surface-app/30 p-4 space-y-3"
               >
                 <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
                   <div className="flex items-start gap-3">
-                    <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-800 bg-slate-900 text-indigo-400">
+                    <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border-default bg-white text-brand-blue-primary shadow-2xs">
                       <CategoryIcon category={item.category} />
                     </div>
                     <div>
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-sm font-semibold text-slate-100">
+                        <span className="text-sm font-bold text-text-primary">
                           {item.title}
                         </span>
-                        <span className="rounded border border-slate-800 bg-slate-900 px-2 py-0.5 text-[10px] font-medium text-slate-400">
+                        <span className="rounded-md border border-border-default bg-surface-app px-2 py-0.5 text-[10px] font-semibold text-text-secondary">
                           {CATEGORY_LABELS[item.category]}
                         </span>
                         {item.clientApproved === true && (
-                          <span className="inline-flex items-center gap-1 rounded border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-300">
+                          <span className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-800">
                             <CheckCircle2 className="h-3 w-3" />
                             Client Approved
                           </span>
                         )}
                         {item.clientApproved === false && (
-                          <span className="inline-flex items-center gap-1 rounded border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-300">
+                          <span className="inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
                             <RotateCcw className="h-3 w-3" />
                             Revision Requested
                           </span>
                         )}
                         {item.selectedPhotos && item.selectedPhotos.length > 0 && (
-                          <span className="inline-flex items-center gap-1 rounded border border-indigo-500/30 bg-indigo-500/10 px-2 py-0.5 text-[10px] font-semibold text-indigo-300">
+                          <span className="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-800">
                             {item.selectedPhotos.length} Photo{item.selectedPhotos.length === 1 ? "" : "s"} Selected
                           </span>
                         )}
                       </div>
                       {item.notes && (
-                        <p className="mt-1 text-xs text-slate-400">
+                        <p className="mt-1 text-xs text-text-secondary">
                           {item.notes}
                         </p>
                       )}
                       {item.selectedPhotos && item.selectedPhotos.length > 0 && !canSubmitClientReview && (
                         <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-text-tertiary">
                             Shortlisted Photos:
                           </span>
                           {item.selectedPhotos.map((photo, idx) => (
                             <span
                               key={`${photo}-${idx}`}
-                              className="rounded bg-slate-900 border border-slate-700 px-2 py-0.5 font-mono text-[10px] text-indigo-200"
+                              className="rounded bg-white border border-border-default px-2 py-0.5 font-mono text-[10px] text-text-primary shadow-2xs"
                             >
                               {photo}
                             </span>
@@ -398,7 +398,7 @@ export function GoogleDriveDeliverablesSection({
                         </div>
                       )}
                       {item.clientFeedback && !canSubmitClientReview && (
-                        <p className="mt-1 text-xs text-indigo-300">
+                        <p className="mt-1 text-xs text-brand-blue-primary font-medium">
                           Client Note: &ldquo;{item.clientFeedback}&rdquo;
                         </p>
                       )}
@@ -412,10 +412,10 @@ export function GoogleDriveDeliverablesSection({
                         onClick={() =>
                           setActivePreviewId(isPreviewOpen ? null : item.id)
                         }
-                        className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                        className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold transition shadow-2xs ${
                           isPreviewOpen
-                            ? "border-indigo-500/50 bg-indigo-500/20 text-indigo-200"
-                            : "border-slate-700 bg-slate-900 text-slate-200 hover:bg-slate-800"
+                            ? "border-brand-blue-primary bg-brand-blue-soft text-brand-blue-primary font-bold"
+                            : "border-border-default bg-white text-text-primary hover:bg-surface-app"
                         }`}
                       >
                         {isPreviewOpen ? (
@@ -436,7 +436,7 @@ export function GoogleDriveDeliverablesSection({
                       href={parsed.openUrl || item.driveUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:border-slate-600 hover:bg-slate-800 transition-colors"
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-border-default bg-white px-3 py-1.5 text-xs font-semibold text-text-primary hover:bg-surface-app transition shadow-2xs"
                     >
                       <ExternalLink className="h-3.5 w-3.5" />
                       <span>Open in Google Drive</span>
@@ -448,7 +448,7 @@ export function GoogleDriveDeliverablesSection({
                         onClick={() => handleDeleteDeliverable(item.id)}
                         disabled={saving}
                         aria-label={`Remove ${item.title}`}
-                        className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-800 bg-slate-900 text-slate-400 hover:border-rose-500/40 hover:bg-rose-500/10 hover:text-rose-300"
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-border-default bg-white text-text-tertiary hover:border-red-200 hover:bg-red-50 hover:text-red-600 transition shadow-2xs"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
@@ -459,26 +459,26 @@ export function GoogleDriveDeliverablesSection({
                 {/* Lazy On-Demand Google Drive Native Embed Viewer */}
                 {isPreviewOpen && parsed.previewEmbedUrl && (
                   <div className="space-y-2 pt-2">
-                    <div className="overflow-hidden rounded-lg border border-slate-800 bg-slate-950">
+                    <div className="overflow-hidden rounded-xl border border-border-default bg-surface-app shadow-inner">
                       <iframe
                         src={parsed.previewEmbedUrl}
                         title={`Google Drive Preview - ${item.title}`}
-                        className="h-[420px] w-full border-0 bg-slate-950"
+                        className="h-[420px] w-full border-0 bg-white"
                         loading="lazy"
                         allow="autoplay; fullscreen"
                         referrerPolicy="no-referrer-when-downgrade"
                       />
                     </div>
-                    <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-400">
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-text-tertiary">
                       <span>
                         If Google Drive prompts for access or blocks embedding for restricted files, click{" "}
-                        <strong className="text-slate-300">Open in Google Drive</strong>.
+                        <strong className="text-text-primary font-semibold">Open in Google Drive</strong>.
                       </span>
                       <a
                         href={parsed.openUrl || item.driveUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 font-medium text-indigo-400 hover:text-indigo-300"
+                        className="inline-flex items-center gap-1 font-semibold text-brand-blue-primary hover:underline"
                       >
                         <span>Open in new tab</span>
                         <ExternalLink className="h-3 w-3" />
@@ -489,10 +489,10 @@ export function GoogleDriveDeliverablesSection({
 
                 {/* Client Photo Selection, Approval & Feedback Controls (on /track/[passkey]) */}
                 {canSubmitClientReview && onSubmitClientReview && (
-                  <div className="border-t border-slate-800/80 pt-3 space-y-2.5">
+                  <div className="border-t border-border-divider pt-3 space-y-2.5">
                     {(item.category === "FOLDER" || item.category === "IMAGE") && (
                       <div>
-                        <label className="mb-1 block text-[11px] font-medium text-slate-400">
+                        <label className="mb-1 block text-[11px] font-semibold text-text-secondary">
                           Selected Photo Numbers / Filenames (comma-separated)
                         </label>
                         <input
@@ -505,7 +505,7 @@ export function GoogleDriveDeliverablesSection({
                             }))
                           }
                           placeholder="e.g. IMG_0012, IMG_0045, IMG_0108, DSC_0291"
-                          className="w-full rounded-lg border border-slate-800 bg-slate-900 px-3 py-1.5 font-mono text-xs text-slate-200 focus:border-indigo-500 focus:outline-none"
+                          className="w-full rounded-xl border border-border-default bg-white px-3 py-1.5 font-mono text-xs text-text-primary placeholder:text-text-tertiary focus:border-brand-blue-primary focus:outline-none focus:ring-1 focus:ring-brand-blue-primary"
                         />
                       </div>
                     )}
@@ -520,14 +520,14 @@ export function GoogleDriveDeliverablesSection({
                           }))
                         }
                         placeholder="Optional selection note or revision feedback for studio..."
-                        className="w-full sm:max-w-md rounded-lg border border-slate-800 bg-slate-900 px-3 py-1.5 text-xs text-slate-200 focus:border-indigo-500 focus:outline-none"
+                        className="w-full sm:max-w-md rounded-xl border border-border-default bg-white px-3 py-1.5 text-xs text-text-primary placeholder:text-text-tertiary focus:border-brand-blue-primary focus:outline-none focus:ring-1 focus:ring-brand-blue-primary"
                       />
                       <div className="flex flex-wrap items-center gap-2 shrink-0">
                         <button
                           type="button"
                           disabled={reviewingId === item.id}
                           onClick={() => handleReviewAction(item, true)}
-                          className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-500 disabled:opacity-50"
+                          className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3.5 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-50 transition shadow-2xs"
                         >
                           <CheckCircle2 className="h-3.5 w-3.5" />
                           <span>Save Selection &amp; Approve</span>
@@ -536,7 +536,7 @@ export function GoogleDriveDeliverablesSection({
                           type="button"
                           disabled={reviewingId === item.id}
                           onClick={() => handleReviewAction(item, false)}
-                          className="inline-flex items-center gap-1.5 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-xs font-semibold text-amber-300 hover:bg-amber-500/20 disabled:opacity-50"
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-amber-300 bg-amber-50 px-3.5 py-1.5 text-xs font-bold text-amber-800 hover:bg-amber-100 disabled:opacity-50 transition shadow-2xs"
                         >
                           <RotateCcw className="h-3.5 w-3.5" />
                           <span>Request Changes</span>
