@@ -7,12 +7,7 @@
  * 3. COMPLETE (₹1,999/month): Everything in ₹999 + WhatsApp Operations & Interactive Bot + Advanced Business Reports & Analytics + Excel Report Exports.
  */
 
-export const LIFETIME_PRO_EMAILS: readonly string[] = [
-  "sivakrishna.era@gmail.com",
-  "unpredictable.knucklehead.era@gmail.com",
-  "randyrajesh678@gmail.com",
-  "sweetchinmusixyt@gmail.com",
-] as const;
+export const LIFETIME_PRO_EMAILS: readonly string[] = [] as const;
 
 export type EffectiveStudioTier = "FREE" | "PROFESSIONAL" | "COMPLETE";
 export type StudioSubscriptionTier = EffectiveStudioTier;

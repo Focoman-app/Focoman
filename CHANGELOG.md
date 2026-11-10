@@ -2,6 +2,22 @@
 
 All meaningful changes to the Focoman codebase, documentation, architecture, or agent workflow instructions must be recorded in this file according to Section 20 of **[Agents.md](Agents.md)**.
 
+## CHG-084 — Unify Settings Navigation, Add Studio Marketplace Module & Reset Entitlements to Basic
+
+- **Date:** 2026-11-10
+- **Area:** apps/web/src/components/DashboardSidebar.tsx, apps/web/src/components/DashboardTopNav.tsx, apps/web/src/app/[studioSlug]/dashboard/settings/page.tsx, apps/web/src/lib/proEntitlements.ts, CHANGELOG.md.
+- **Change:**
+  1. Updated `DashboardSidebar.tsx`: Renamed "Studio Settings" to generic "Settings" (sublabel: "Studio & Account") and removed the redundant "Services & Packages" nav item.
+  2. Updated `DashboardTopNav.tsx`: Linked user dropdown "Account Settings" to `/[studioSlug]/dashboard/settings?tab=account` with fallback to `/account-settings`.
+  3. Overhauled `apps/web/src/app/[studioSlug]/dashboard/settings/page.tsx`:
+     - Added tab switcher between "Studio Settings" and "Account Settings" with URL query sync (`?tab=account`).
+     - Removed the "OMS & Marketplace" badge from the Services & Packages Catalog card.
+     - Added "Studio Marketplace" (`features.marketplace`) to the "Operational Modules & Capabilities" grid.
+     - Embedded the Account Settings view (Display Name editing, Email display, User UID, Global Default Workspace selector, Sign Out, and permanent Account Deletion modal).
+  4. Reset Entitlements (`apps/web/src/lib/proEntitlements.ts`): Cleared `LIFETIME_PRO_EMAILS` to an empty array so all accounts without active Firestore subscriptions truthfully default to the Basic (`FREE · ₹0`) tier for onboarding and payment flow testing.
+- **Verification:** TypeScript typecheck passed with 0 errors (`tsc --project apps/web/tsconfig.json --noEmit`); `npm test` passed 38/38 tests.
+
+
 ## CHG-083 — Fix Dirty-State Detection & Direct Mutation Tracking on Services Catalog
 
 - **Date:** 2026-11-10
