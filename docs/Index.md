@@ -73,4 +73,3 @@ When evaluating specifications and implementation guidelines:
 ## 8. Brand Assets
 
 - **Brand Assets Directory:** `assets/brand/`
-
