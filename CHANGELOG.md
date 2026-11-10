@@ -2,6 +2,14 @@
 
 All meaningful changes to the Focoman codebase, documentation, architecture, or agent workflow instructions must be recorded in this file according to Section 20 of **[Agents.md](Agents.md)**.
 
+## CHG-085 — Enforce Strict Module Entitlement Filtering in Dashboard Left Sidebar
+
+- **Date:** 2026-11-10
+- **Area:** apps/web/src/components/DashboardSidebar.tsx, CHANGELOG.md.
+- **Change:** Updated `visibleNavItems` in `DashboardSidebar.tsx` to filter navigation links against the studio's effective `features` entitlement dictionary. For studios on the Basic (Free) tier, this strictly hides un-entitled items (Business Dashboard, CRM, ERP, WhatsApp Notifications, and Business Reports), displaying only Order Management (OMS), Studio Marketplace (Public Profile), and Settings (Studio & Account).
+- **Verification:** TypeScript typecheck passed (`tsc --project apps/web/tsconfig.json --noEmit`); `npm test` passed 38/38 tests.
+
+
 ## CHG-084 — Unify Settings Navigation, Add Studio Marketplace Module & Reset Entitlements to Basic
 
 - **Date:** 2026-11-10

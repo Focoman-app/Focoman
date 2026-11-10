@@ -31,6 +31,7 @@ export interface DashboardSidebarProps {
     whatsapp: boolean;
     marketplace: boolean;
     reports?: boolean;
+    basicDashboard?: boolean;
   };
   appEnv?: string;
   workspaces?: WorkspaceItem[];
@@ -221,9 +222,30 @@ export function DashboardSidebar({ studioSlug, role, plan, studioName, studioLog
           .map((item) => ({ ...item, label: "My Orders", sublabel: "Assigned Work" })),
         ...navItems.filter((item) => item.key === "settings"),
       ]
-    : plan === "basic"
-    ? navItems.filter((item) => item.key !== "dashboard")
-    : navItems;
+    : navItems.filter((item) => {
+        // Business Dashboard is excluded on the Basic (Free) tier
+        if (item.key === "dashboard") {
+          return plan !== "basic" && features?.basicDashboard !== false;
+        }
+        // Settings is always accessible to studio owners
+        if (item.key === "settings") {
+          return true;
+        }
+        // Modular items strictly check studio feature entitlements
+        if (item.module) {
+          if (features) {
+            return Boolean(features[item.module]);
+          }
+          if (plan === "basic") {
+            return item.module === "oms" || item.module === "marketplace";
+          }
+          if (plan === "professional") {
+            return item.module !== "whatsapp" && item.module !== "reports";
+          }
+          return true;
+        }
+        return true;
+      });
 
   const handleSignOut = async () => {
     try {
