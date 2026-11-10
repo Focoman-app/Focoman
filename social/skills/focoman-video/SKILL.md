@@ -17,4 +17,4 @@ Read the canonical [social framework](../../README.md) and relevant [brand refer
 - Provide factual publishing copy and relevant search phrases without ranking promises. Verify current platform/account capabilities when needed. File generation does not authorize social publication or paid services.
 - Verify output integrity and report performed checks. For phones use supported attachments or authorized accessible links, state expiry/host dependencies, and never call a Windows path a mobile download.
 
-Update `docs/Index.md` and `CHANGELOG.md` when changing the reusable framework. Keep detailed rules in the framework rather than duplicating them here. This skill is production guidance, not a rendering engine.
+Update `docs/Index.md` when changing the reusable framework. Keep detailed rules in the framework rather than duplicating them here. This skill is production guidance, not a rendering engine.

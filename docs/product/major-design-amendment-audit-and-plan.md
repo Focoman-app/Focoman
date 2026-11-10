@@ -46,7 +46,6 @@
 - `apps/web/src/app/[studioSlug]/dashboard/marketplace/page.tsx`
 - `apps/web/src/app/track/[passkey]/page.tsx`
 - `tests/backend-crud.test.ts`
-- `CHANGELOG.md`
 
 ---
 

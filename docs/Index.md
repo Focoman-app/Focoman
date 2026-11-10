@@ -30,10 +30,9 @@ When evaluating specifications and implementation guidelines:
 
 ---
 
-## 3. Governance & Agent Instruction System
+## 3. Governance
 
-- **[Agents.md](../Agents.md)** — Master Agent Operating Specification (Workflow, 4-Phase Protocol, AI Trust Contract, Engineering Rules, Definitions of Done).
-- **[CHANGELOG.md](../CHANGELOG.md)** — Record of all meaningful engineering changes, traceable to tasks, specs, and test results.
+- **[Agents.md](../Agents.md)** — Master workflow, security, and verification rules.
 
 ---
 
@@ -68,16 +67,9 @@ When evaluating specifications and implementation guidelines:
 
 - **[Quick Setup Guide](QUICK_SETUP_GUIDE.md)** — Local environment initialization and startup instructions.
 - **[Issue Analysis Document](ISSUE_ANALYSIS.md)** — Diagnostic records for past platform issues.
-- **[Email, Domain & WhatsApp Integration Action Items](tasks/email-domain-whatsapp-action-items.md)** — Planned provider setup, sender-domain configuration, mailbox decision, and WhatsApp Cloud API workstreams.
 
 ---
 
 ## 8. Brand Assets
 
 - **Brand Assets Directory:** `assets/brand/`
-
-## 9. Active Delivery Plans
-
-- [Rebase and completion guide](plan/analysis/rebase-completion-2026-11-09.md) — Approved rebase workflow, Gemini integration decisions and verification boundaries.
-
-- **[Minimal billing, Excel exports and Drive previews](plan/analysis/minimal-billing-exports-drive.md)** — Approved on 2026-11-05; plain invoice/receipt PDF and print, complete authorized business-data Excel exports, and Google-hosted preview feasibility. See [task map](plan/README.md).

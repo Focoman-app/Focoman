@@ -17,7 +17,7 @@ USER APPROVAL GATE (Explicit approval required before coding)
      ↓
 Solution Architect (Technical Blueprint / Solution Guide)
      ↓
-Developer (Focused Implementation & Change Log)
+Developer (Focused Implementation)
      ↓
 Testing (Truthful Verification & Real Data Integrity)
 ```
@@ -31,7 +31,6 @@ Testing (Truthful Verification & Real Data Integrity)
 5. **No Hallucination**: Never fabricate requirements, endpoints, schemas, or test results.
 6. **No Fake Data / No Silent Fallback**: Mock, dummy, placeholder, or hardcoded substitutes for real data are strictly prohibited. Surface truthful error/unavailable states.
 7. **Security & Permissions**: Preserve authorization boundaries. Do not bypass security to simplify implementation.
-8. **Change Log**: Every meaningful change must be logged in `CHANGELOG.md`.
-9. **No Automated Browser Subagents or Browser UAT**: NEVER open browser windows, spawn browser subagents, or execute automated browser UAT. All testing and browser validation is performed directly by the user. Agents must focus strictly on coding and the specific tasks assigned without spawning browser subagents or wasting tokens on visual validation.
+8. **No Automated Browser Subagents or Browser UAT**: NEVER open browser windows, spawn browser subagents, or execute automated browser UAT. All testing and browser validation is performed directly by the user. Agents must focus strictly on coding and the specific tasks assigned without spawning browser subagents or wasting tokens on visual validation.
 
 Refer to **[Agents.md](Agents.md)** for detailed role prompts, protocols, and definitions of done.

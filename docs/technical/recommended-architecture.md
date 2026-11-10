@@ -57,8 +57,7 @@ focoman/
 │
 ├── docs/                           # Documentation & Index.md
 ├── Agents.md                       # Master Agent Operating Specification
-├── AGENTS.md                       # Workspace Rule Entry Point
-└── CHANGELOG.md                    # Project Change Log
+└── AGENTS.md                       # Workspace Rule Entry Point
 ```
 
 ---
