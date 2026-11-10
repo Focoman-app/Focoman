@@ -2,6 +2,32 @@
 
 All meaningful changes to the Focoman codebase, documentation, architecture, or agent workflow instructions must be recorded in this file according to Section 20 of **[Agents.md](Agents.md)**.
 
+## CHG-090 — Multi-Tier Pricing Flow, Module Scoping & Capability Routing
+
+- **Date:** 2026-11-10
+- **Area:** apps/web/src/lib/proEntitlements.ts, apps/web/src/app/[studioSlug]/dashboard/crm/layout.tsx, apps/web/src/app/[studioSlug]/dashboard/erp/layout.tsx, apps/web/src/app/[studioSlug]/dashboard/whatsapp/layout.tsx, apps/web/src/app/[studioSlug]/dashboard/reports/page.tsx, apps/web/src/app/[studioSlug]/dashboard/oms/page.tsx, CHANGELOG.md.
+- **Change:**
+  1. **Modular Entitlements (`proEntitlements.ts`)**: Updated `getEffectiveStudioFeatures` to evaluate both bundle plans (`FREE`, `STARTER`, `PROFESSIONAL`) and standalone capability add-ons (`selectedCapabilities`). Accurately grants or scopes out CRM, ERP, Drive Client Review, Basic Dashboard, WhatsApp, and Reports based on plan tier or custom selections.
+  2. **Server Route Guards (`layout.tsx` / `page.tsx`)**: Added strict server-side redirect guards to `dashboard/crm/layout.tsx`, `dashboard/erp/layout.tsx`, `dashboard/whatsapp/layout.tsx`, and `dashboard/reports/page.tsx`. Navigating directly to an un-entitled module URL immediately redirects the user to `/[studioSlug]/dashboard/oms`.
+  3. **In-OMS Feature Scoping (`oms/page.tsx`)**: Conditioned `<OmsResourceSuggestionsSection>` on `hasErp` and `<GoogleDriveDeliverablesSection>` on `hasDriveReview`, ensuring studios without ERP or Drive Review entitlements do not see un-entitled production sections.
+- **Verification:** TypeScript typecheck passed with 0 errors (`tsc --project apps/web/tsconfig.json --noEmit`); `npm test` passed 40/40 tests.
+
+## CHG-089 — Redirect Free Tier Studios from Dashboard Route to OMS & Enforce Basic Default
+
+- **Date:** 2026-11-10
+- **Area:** apps/web/src/lib/proEntitlements.ts, apps/web/src/app/[studioSlug]/dashboard/page.tsx, CHANGELOG.md.
+- **Change:**
+  1. **Tier Resolution (`proEntitlements.ts`)**: Removed legacy `isTrial` bypass that automatically elevated test studios to `"COMPLETE"`. Added explicit check: if `planInfo.plan === "FREE"` or if an account has not purchased a paid tier (`COMPLETE`, `PROFESSIONAL`, or `STARTER`), it strictly resolves to `"FREE"`. This prevents legacy test accounts from bypassing the Free tier.
+  2. **Dashboard Redirection (`dashboard/page.tsx`)**: In `DashboardPage`, updated the redirect guard to check `effectiveTier === "FREE" || !effectiveFeatures.basicDashboard`. Studios on the Free tier hitting `/[studioSlug]/dashboard` (via direct URL, sign-in, or workspace launch) are immediately redirected server-side to `/[studioSlug]/dashboard/oms`.
+- **Verification:** TypeScript typecheck passed with 0 errors (`tsc --project apps/web/tsconfig.json --noEmit`); `npm test` passed 40/40 tests.
+
+## CHG-088 — Add Legal Documents and Align Public Plan Names
+
+- **Date:** 2026-11-10
+- **Area:** public legal pages, sign-in, pricing, checkout, and shared configuration.
+- **Change:** Replaced the short Terms and Privacy pages with professional policy documents; added Billing, Cancellation and Refund Policy; linked legal pages from public footers; added required Terms and Privacy acknowledgement before sign-in; aligned public plan names to Free, Starter, and Professional; set the workspace recovery period to 30 days; and changed browser-initiated account/workspace closure from permanent deletion to recoverable closure. Paid-plan refunds are documented as full within 7 days, 50% from day 8 through 14, and unavailable from day 15, subject to applicable law. Paid capabilities now require future verified payment confirmation and cannot be activated from the public checkout alone.
+- **Verification:** `npm test` passed 40/40. TypeScript typecheck passed with `apps/web/node_modules/.bin/tsc.exe --noEmit -p apps/web/tsconfig.json`. A production build was started but could not complete while the existing local Next development server was using the application build output.
+
 ## CHG-087 — Update Temporary Crew UI Labels from Freelancer to Temp
 
 - **Date:** 2026-11-10

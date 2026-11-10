@@ -8,8 +8,6 @@ import {
   getMembershipsByStudio,
   updateStudio,
   softDeleteStudio,
-  hardDeleteStudio,
-  purgeAllStudioData,
   leaveStudioMembership,
   restoreStudio,
   getFirestoreServerInstance,
@@ -19,7 +17,7 @@ import {
   saveStudioPackage,
 } from "@focoman/db";
 import { Studio, StudioMembership, StudioPlan, StudioServiceConfig, StudioPackage } from "@focoman/types";
-import { requireVerifiedUser, requireStudioMember, getAdminAuthInstance } from "@/lib/serverAuth";
+import { requireVerifiedUser, requireStudioMember } from "@/lib/serverAuth";
 import { DEFAULT_STUDIO_SERVICES, getDefaultStudioPackages } from "@/lib/studioServices";
 
 /**
@@ -39,6 +37,13 @@ export async function checkStudioSlugAvailabilityAction(slug: string): Promise<{
   const existing = await getStudioBySlug(cleanSlug);
   if (existing) {
     return { available: false, message: `Studio identifier "${cleanSlug}" is already in use.` };
+  }
+
+  // getStudioBySlug intentionally hides closed workspaces. Check the stored
+  // document as well so its identifier cannot be reused during recovery.
+  const storedStudio = await getFirestoreServerInstance().collection("studios").doc(cleanSlug).get();
+  if (storedStudio.exists) {
+    return { available: false, message: `Studio identifier "${cleanSlug}" is reserved while its data is retained.` };
   }
 
   return { available: true };
@@ -297,17 +302,15 @@ export async function resetStudioWhatsappConfigAction(
 export async function deleteStudioAction(
   studioSlug: string,
   idToken: string,
-  options?: { permanent?: boolean }
+  _options?: { permanent?: boolean }
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const decoded = await requireVerifiedUser(idToken);
     await requireStudioMember(decoded.uid, studioSlug, "STUDIO_OWNER");
 
-    if (options?.permanent) {
-      await hardDeleteStudio(studioSlug);
-    } else {
-      await softDeleteStudio(studioSlug, decoded.uid);
-    }
+    // Browser-initiated closure stays recoverable for the configured window.
+    // Permanent cleanup is an administrative operation, not a client request.
+    await softDeleteStudio(studioSlug, decoded.uid);
     return { success: true };
   } catch (err: unknown) {
     console.error("[deleteStudioAction] Error:", err);
@@ -345,7 +348,10 @@ export async function restoreStudioAction(
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const decoded = await requireVerifiedUser(idToken);
-    await requireStudioMember(decoded.uid, studioSlug, "STUDIO_OWNER");
+    const membership = await getMembershipByUidAndStudio(decoded.uid, studioSlug);
+    if (!membership || membership.role !== "STUDIO_OWNER") {
+      throw new Error("Only the studio owner can restore this workspace.");
+    }
 
     await restoreStudio(studioSlug);
     return { success: true };
@@ -364,8 +370,15 @@ export async function saveStudioCapabilitiesAction(
     const decoded = await requireVerifiedUser(idToken);
     await requireStudioMember(decoded.uid, studioSlug, "STUDIO_OWNER");
 
+    if (selectedCapabilities.length > 0) {
+      return {
+        success: false,
+        error: "Paid capability activation requires verified payment confirmation. No plan change was made.",
+      };
+    }
+
     const { updateStudioCapabilities } = await import("@focoman/entitlements");
-    await updateStudioCapabilities(studioSlug, selectedCapabilities as any);
+    await updateStudioCapabilities(studioSlug, []);
     return { success: true };
   } catch (err: unknown) {
     console.error("[saveStudioCapabilitiesAction] Error:", err);
@@ -374,8 +387,8 @@ export async function saveStudioCapabilitiesAction(
 }
 
 /**
- * Permanently deletes a user's account and personal session data.
- * Cleans up owned studio associations, releases claimed orders, and removes auth credentials.
+ * Starts account closure while preserving sole-owner workspaces for the
+ * configured recovery window. Permanent cleanup is not a browser action.
  */
 export async function deleteUserAccountAction(idToken: string): Promise<{
   success: boolean;
@@ -384,7 +397,6 @@ export async function deleteUserAccountAction(idToken: string): Promise<{
   try {
     const decoded = await requireVerifiedUser(idToken);
     const uid = decoded.uid;
-    const adminAuth = getAdminAuthInstance();
     const firestore = getFirestoreServerInstance();
 
     // 1. Fetch all memberships for this user
@@ -400,14 +412,14 @@ export async function deleteUserAccountAction(idToken: string): Promise<{
           );
 
           if (otherActiveOwners.length === 0) {
-            // Sole owner: Completely purge the studio and all associated data (orders, tasks, customers, etc.)
-            await purgeAllStudioData(m.studioId);
+            // Sole-owner workspaces remain recoverable under the Privacy Policy.
+            await softDeleteStudio(m.studioId, uid);
           } else {
             // Co-owned studio: Leave membership so studio remains with remaining owner
             await leaveStudioMembership(uid, m.studioId);
           }
         } catch (e) {
-          console.warn(`[deleteUserAccountAction] Purge studio ${m.studioId} warning:`, e);
+          console.warn(`[deleteUserAccountAction] Close studio ${m.studioId} warning:`, e);
         }
       } else {
         try {
@@ -418,32 +430,16 @@ export async function deleteUserAccountAction(idToken: string): Promise<{
       }
     }
 
-    // 3. Clear user preferences document
+    // 3. Record the request without deleting the account identity. This allows
+    // an authorised recovery request during the workspace recovery period.
     try {
-      await firestore.collection("user_preferences").doc(uid).delete();
+      await firestore.collection("user_preferences").doc(uid).set({
+        accountClosureRequestedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }, { merge: true });
     } catch (e) {
-      console.warn("[deleteUserAccountAction] Clear user_preferences warning:", e);
+      console.warn("[deleteUserAccountAction] Record closure request warning:", e);
     }
-
-    // 4. Clear customerUid on claimed orders so orders remain with studios but detach from deleted user
-    try {
-      const ordersSnap = await firestore
-        .collection("orders")
-        .where("customerUid", "==", uid)
-        .get();
-      if (!ordersSnap.empty) {
-        const batch = firestore.batch();
-        ordersSnap.docs.forEach((doc) => {
-          batch.update(doc.ref, { customerUid: null });
-        });
-        await batch.commit();
-      }
-    } catch (e) {
-      console.warn("[deleteUserAccountAction] Clear customerUid on orders warning:", e);
-    }
-
-    // 5. Delete user in Firebase Authentication
-    await adminAuth.deleteUser(uid);
 
     return { success: true };
   } catch (err: unknown) {

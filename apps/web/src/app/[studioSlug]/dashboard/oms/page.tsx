@@ -75,6 +75,7 @@ export default function OmsPage({
   } = useStudioWorkspace();
   const hasCrm = Boolean(studio?.features?.crm);
   const hasErp = Boolean(studio?.features?.erp);
+  const hasDriveReview = Boolean(studio?.features?.driveReview);
   const [orders, setOrders] = useState<Order[]>([]);
   const [omsSection, setOmsSection] = useState<"ORDERS" | "LEADS">("ORDERS");
   const [leads, setLeads] = useState<StudioLead[]>([]);
@@ -1553,20 +1554,24 @@ export default function OmsPage({
           {/* 4. Pre-flight Operational Check Report */}
           <OmsPreflightCheckSection order={selected} />
 
-          {/* 5. Automated Resource Suggestions */}
-          <OmsResourceSuggestionsSection
-            order={selected}
-            onConfirmSuggestion={handleConfirmSuggestion}
-          />
+          {/* 5. Automated Resource Suggestions (ERP only) */}
+          {hasErp && (
+            <OmsResourceSuggestionsSection
+              order={selected}
+              onConfirmSuggestion={handleConfirmSuggestion}
+            />
+          )}
 
-          {/* 5B. Google Drive Deliverables & Client Preview */}
-          <GoogleDriveDeliverablesSection
-            orderId={selected.id}
-            deliverables={selected.driveDeliverables || []}
-            canManageLinks={true}
-            canSubmitClientReview={false}
-            onSaveDeliverables={handleSaveDriveDeliverables}
-          />
+          {/* 5B. Google Drive Deliverables & Client Preview (Drive Review only) */}
+          {hasDriveReview && (
+            <GoogleDriveDeliverablesSection
+              orderId={selected.id}
+              deliverables={selected.driveDeliverables || []}
+              canManageLinks={true}
+              canSubmitClientReview={false}
+              onSaveDeliverables={handleSaveDriveDeliverables}
+            />
+          )}
 
           {/* 6. Customer Order Access and Tracking Link */}
           <OmsCustomerAccessCard

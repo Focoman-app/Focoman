@@ -147,6 +147,12 @@ export async function registerStudioTransaction(
       if (!existingData.isDeleted) {
         return { success: false, error: `Studio identifier "${studio.id}" is already in use.` };
       }
+      if (isWithinRecoveryWindow(existingData.deletedAt)) {
+        return {
+          success: false,
+          error: `Studio identifier "${studio.id}" is reserved for ${RECOVERY_WINDOW_DAYS} days after closure.`,
+        };
+      }
       // Studio was previously deleted: purge any leftover historical data before registering anew
       await purgeAllStudioData(sid);
     } else {
@@ -381,6 +387,19 @@ export async function restoreStudio(studioId: string): Promise<boolean> {
     deletedBy: null,
     updatedAt: now,
   });
+
+  const memberships = await firestore
+    .collection('memberships')
+    .where('studioId', '==', studioId.toLowerCase())
+    .where('status', '==', 'INACTIVE')
+    .get();
+  if (!memberships.empty) {
+    const batch = firestore.batch();
+    memberships.docs.forEach((membership) => {
+      batch.update(membership.ref, { status: 'ACTIVE', updatedAt: now });
+    });
+    await batch.commit();
+  }
   return true;
 }
 

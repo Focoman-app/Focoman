@@ -1,92 +1,18 @@
-import { Navbar } from "@/components/Navbar";
-import { BackButton } from "@/components/BackButton";
-import Link from "next/link";
+import { LegalDocumentLayout } from "@/components/legal/LegalDocumentLayout";
 
-export const metadata = {
-  title: "Terms and Conditions | Focoman",
-  description: "Terms and conditions governing the use of the Focoman Studio Operations platform.",
-};
+export const metadata = { title: "Terms of Service | Focoman", description: "Terms governing use of the Focoman studio operations platform." };
 
 export default function TermsPage() {
-  return (
-    <div className="min-h-screen bg-surface-app text-text-primary selection:bg-brand-blue-soft">
-      <Navbar />
-
-      <main className="mx-auto max-w-4xl px-4 py-12 sm:px-6 lg:px-8">
-        <div className="mb-6">
-          <BackButton fallbackHref="/" />
-        </div>
-
-        <div className="rounded-3xl border border-border-default bg-white p-8 shadow-sm sm:p-12">
-          <div className="border-b border-border-divider pb-8">
-            <span className="inline-block rounded-full bg-brand-blue-background px-3 py-1 text-xs font-bold uppercase tracking-widest text-brand-blue-primary">
-              Legal
-            </span>
-            <h1 className="mt-4 text-3xl font-extrabold tracking-tight text-text-primary sm:text-4xl">
-              Terms and Conditions
-            </h1>
-            <p className="mt-2 text-sm text-text-secondary">
-              Last updated: October 2026 • Effective for all Focoman studio workspaces
-            </p>
-          </div>
-
-          <div className="mt-8 space-y-8 text-sm leading-relaxed text-text-secondary">
-            <section>
-              <h2 className="text-base font-bold text-text-primary">1. Agreement to Terms</h2>
-              <p className="mt-2">
-                By accessing or using Focoman (operated by ThreadSafe), you agree to be bound by these Terms and Conditions. If you are registering on behalf of a photography studio or organization, you confirm that you have the authority to bind that entity to these terms.
-              </p>
-            </section>
-
-            <section>
-              <h2 className="text-base font-bold text-text-primary">2. Studio Workspaces and Accounts</h2>
-              <p className="mt-2">
-                You are responsible for maintaining the confidentiality of your workspace login credentials and for all activities that occur under your account. You agree to notify us immediately of any unauthorized use of your account.
-              </p>
-            </section>
-
-            <section>
-              <h2 className="text-base font-bold text-text-primary">3. Service Description and Usage</h2>
-              <p className="mt-2">
-                Focoman provides business operating tools including order workflows, crew management, shoot scheduling, client tracking portals, and WhatsApp notification automations. You agree to use the service only for lawful business operations and in compliance with all relevant industry regulations.
-              </p>
-            </section>
-
-            <section>
-              <h2 className="text-base font-bold text-text-primary">4. Subscriptions and Payments</h2>
-              <p className="mt-2">
-                Paid plans, modules, and add-ons are billed according to the agreed billing cycle. Trial periods provide full feature access without automated charges unless explicitly converted to a paid tier.
-              </p>
-            </section>
-
-            <section>
-              <h2 className="text-base font-bold text-text-primary">5. Studio Data Ownership</h2>
-              <p className="mt-2">
-                All client details, shoot schedules, booking financial records, and operational assets uploaded to your workspace remain your property. Focoman does not claim ownership over your studio records.
-              </p>
-            </section>
-
-            <section>
-              <h2 className="text-base font-bold text-text-primary">6. Contact Information</h2>
-              <p className="mt-2">
-                For questions regarding these Terms, contact our legal and support team at{" "}
-                <a href="mailto:support@focoman.com" className="font-semibold text-brand-blue-primary underline">
-                  support@focoman.com
-                </a>.
-              </p>
-            </section>
-          </div>
-
-          <div className="mt-12 border-t border-border-divider pt-6 flex justify-between items-center text-xs text-text-tertiary">
-            <Link href="/privacy" className="underline hover:text-text-primary">
-              View Privacy Policy →
-            </Link>
-            <Link href="/sign-in" className="font-semibold text-brand-blue-primary hover:underline">
-              Return to Sign In
-            </Link>
-          </div>
-        </div>
-      </main>
-    </div>
-  );
+  return <LegalDocumentLayout eyebrow="Legal agreement" title="Terms of Service" summary="These Terms govern access to Focoman, including studio workspaces, customer-facing tracking links and public marketplace pages.">
+    <section><h2>1. Agreement and authority</h2><p>By creating an account, using a workspace, or using a customer-facing Focoman page, you agree to these Terms and the Privacy Policy. A person creating or managing a studio workspace confirms that they have authority to act for that studio or organisation.</p></section>
+    <section><h2>2. The service</h2><p>Focoman provides software for studio operations, including orders, customer records, crew records, workflow tracking, documents, reporting, marketplace listings and optional integrations. Features depend on the plan, workspace settings and external service availability.</p><p>Focoman is not a photography, videography, delivery, payment, legal, tax or insurance service. It does not become a party to a contract between a studio and its customer.</p></section>
+    <section><h2>3. Accounts and workspace access</h2><p>You must provide accurate account information, protect access to your account, and promptly remove people who should no longer have access. Studio owners are responsible for invitations, permissions, content entered by members, and actions taken through their workspace.</p></section>
+    <section><h2>4. Studio and customer responsibilities</h2><p>Each studio is responsible for its quotes, packages, service descriptions, customer communications, collections, delivery commitments, cancellations, refunds, taxes, required permissions and local legal duties. Studios must obtain the permissions needed to store customer, crew and event information in Focoman and to send operational communications.</p></section>
+    <section><h2>5. Marketplace</h2><p>A marketplace profile is a studio’s public listing. The studio controls the information it publishes and is responsible for its accuracy. A booking request is not a confirmed booking, payment acceptance or service contract. Focoman does not guarantee enquiries, bookings, payments, availability, service quality or delivery by a studio.</p></section>
+    <section><h2>6. Acceptable use</h2><p>You must use Focoman lawfully and only for legitimate studio operations. You must not access another studio’s data, bypass access controls, submit false records, impersonate another person, upload malicious code, use the service to send spam, or use customer contact information for unlawful or unwanted communications.</p><p>We may restrict access where use creates a security risk, violates these Terms, harms other users, or is required by law.</p></section>
+    <section><h2>7. Data and integrations</h2><p>Studios remain responsible for the business records they enter. Optional integrations, such as Google authentication, Google Drive and WhatsApp, are also subject to their providers’ terms and permissions. Focoman may change or disable an integration when the provider changes its requirements or the integration is unsafe or unavailable.</p></section>
+    <section><h2>8. Billing</h2><p>Free, Starter and Professional plans are described on the pricing page. Paid subscriptions are governed by the Billing, Cancellation and Refund Policy. A paid feature is not activated by a promise of payment or by an unverified payment reference.</p></section>
+    <section><h2>9. Changes, suspension and termination</h2><p>Focoman may change these Terms when the service, law or security requirements change. Material changes will be posted with an updated date. We may suspend or end access for misuse, non-payment after paid billing is enabled, or legal and security reasons. Account closure and deletion requests are handled under the Privacy Policy.</p></section>
+    <section><h2>10. Governing law and contact</h2><p>These Terms are governed by the laws of India. Subject to rights that cannot be excluded by law, disputes are subject to the courts with jurisdiction over Manapparai, Tamil Nadu, India. Contact support@focoman.com for questions about these Terms.</p></section>
+  </LegalDocumentLayout>;
 }

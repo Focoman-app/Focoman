@@ -113,8 +113,8 @@ export function DashboardTopNav({
     if (currentPlanInfo.isTrial && currentPlanInfo.trialExpiresAt && new Date() <= new Date(currentPlanInfo.trialExpiresAt)) {
       return "COMPLETE";
     }
-    if (currentPlanInfo.plan === "COMPLETE" || hasReports || hasWhatsApp) return "COMPLETE";
-    if (currentPlanInfo.plan === "PROFESSIONAL" || hasCRM || hasERP || hasDrive) return "PROFESSIONAL";
+    if (currentPlanInfo.plan === "COMPLETE" || currentPlanInfo.plan === "PROFESSIONAL" || hasReports || hasWhatsApp) return "COMPLETE";
+    if (currentPlanInfo.plan === "STARTER" || hasCRM || hasERP || hasDrive) return "PROFESSIONAL";
     return "FREE";
   })();
 

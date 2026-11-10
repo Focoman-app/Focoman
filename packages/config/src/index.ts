@@ -45,7 +45,7 @@ export const DEFAULT_SERVICES = [
  * Standard Soft-Delete & Data Retention Configuration
  * Configurable recovery window before permanent administrative cleanup.
  */
-export const RECOVERY_WINDOW_DAYS = 14;
+export const RECOVERY_WINDOW_DAYS = 30;
 
 /**
  * Flexible Capability-Based Pricing Model Catalog (CHG-027)
@@ -329,7 +329,9 @@ export function getEffectiveCapabilities(selectedCapabilities: CapabilityId[] = 
  */
 export const PLAN_PRICES: Record<string, number> = {
   FREE: 0,
-  PROFESSIONAL: 999,
+  STARTER: 999,
+  PROFESSIONAL: 1999,
+  // Legacy records created before the three-plan public model retain access.
   COMPLETE: 1999,
 };
 
@@ -337,7 +339,7 @@ export const TRIAL_DURATION_DAYS = 30;
 
 export const PLAN_CAPABILITIES: Record<string, CapabilityId[]> = {
   FREE: ['OMS_BASIC', 'OMS_CORE', 'MARKETPLACE', 'STUDIO_MARKETPLACE'],
-  PROFESSIONAL: [
+  STARTER: [
     'OMS_BASIC',
     'OMS_CORE',
     'MARKETPLACE',
@@ -352,7 +354,7 @@ export const PLAN_CAPABILITIES: Record<string, CapabilityId[]> = {
     'CREW_ADVANCED',
     'ANALYTICS_BASIC',
   ],
-  COMPLETE: [
+  PROFESSIONAL: [
     'OMS_BASIC',
     'OMS_CORE',
     'MARKETPLACE',
@@ -371,5 +373,12 @@ export const PLAN_CAPABILITIES: Record<string, CapabilityId[]> = {
     'WHATSAPP_BOT',
     'BUSINESS_REPORTS',
     'ANALYTICS_ADVANCED',
+  ],
+  COMPLETE: [
+    'OMS_BASIC', 'OMS_CORE', 'MARKETPLACE', 'STUDIO_MARKETPLACE',
+    'DRIVE_CLIENT_REVIEW', 'OMS_ADVANCED', 'CUSTOMER_CRM', 'CUSTOMER_BASIC',
+    'CUSTOMER_ADVANCED', 'STUDIO_ERP', 'CREW_BASIC', 'CREW_ADVANCED',
+    'ANALYTICS_BASIC', 'WHATSAPP_NOTIFICATIONS', 'WHATSAPP_OPERATIONS',
+    'WHATSAPP_BOT', 'BUSINESS_REPORTS', 'ANALYTICS_ADVANCED',
   ],
 };

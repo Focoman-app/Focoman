@@ -3,7 +3,7 @@ import { Order, Task, StudioMember } from "@focoman/types";
 import { getOrdersByStudio, getTasksByStudio, getMembersByStudio, getStudioBySlug } from "@focoman/db";
 import { BusinessReportsView } from "@/features/dashboard/BusinessReportsView";
 import { requireDashboardStudioAccess } from "@/lib/dashboardAccess";
-import { getEffectiveStudioTier } from "@/lib/proEntitlements";
+import { getEffectiveStudioTier, getEffectiveStudioFeatures } from "@/lib/proEntitlements";
 
 export default async function ReportsPage({
   params,
@@ -15,8 +15,9 @@ export default async function ReportsPage({
 
   const studio = await getStudioBySlug(studioSlug);
   const studioTier = getEffectiveStudioTier(studio);
+  const effectiveFeatures = getEffectiveStudioFeatures(studio?.ownerEmail, studio?.features, studio?.planInfo);
 
-  if (studioTier === "FREE") {
+  if (!effectiveFeatures.reports) {
     redirect(`/${studioSlug}/dashboard/oms`);
   }
 

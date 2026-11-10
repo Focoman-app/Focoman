@@ -91,7 +91,7 @@ export function PricingTwoPanels({ hasMultiStudios = false }: PricingTwoPanelsPr
             {/* Header / Badge */}
             <div className="flex items-center justify-between">
               <span className="inline-block rounded-full bg-brand-orange-background border border-brand-orange-soft px-3.5 py-1 font-mono text-[11px] font-extrabold uppercase tracking-widest text-brand-orange-primary shadow-2xs">
-                [ PROFESSIONAL ]
+                [ STARTER ]
               </span>
             </div>
 
@@ -163,10 +163,10 @@ export function PricingTwoPanels({ hasMultiStudios = false }: PricingTwoPanelsPr
           {/* CTA Button to Checkout Page */}
           <div className="mt-8 pt-6 border-t border-[#D8D2C4]">
             <Link
-              href="/checkout"
+              href="/checkout?plan=starter"
               className="w-full rounded-xl bg-brand-orange-primary px-6 py-3.5 text-xs font-bold text-white shadow-[0_3px_0_#B84600] active:translate-y-[2px] active:shadow-none transition hover:bg-orange-600 flex items-center justify-center gap-2"
             >
-              <span>Check Details and Build Plan</span>
+              <span>Review Starter Plan</span>
               <span>→</span>
             </Link>
           </div>
@@ -178,7 +178,7 @@ export function PricingTwoPanels({ hasMultiStudios = false }: PricingTwoPanelsPr
             {/* Header / Badge */}
             <div className="flex items-center justify-between">
               <span className="inline-block rounded-full bg-brand-blue-background border border-brand-blue-soft px-3.5 py-1 font-mono text-[11px] font-extrabold uppercase tracking-widest text-brand-blue-primary shadow-2xs">
-                [ COMPLETE ]
+                [ PROFESSIONAL ]
               </span>
             </div>
 
@@ -241,10 +241,10 @@ export function PricingTwoPanels({ hasMultiStudios = false }: PricingTwoPanelsPr
           {/* CTA Button to Checkout Page */}
           <div className="mt-8 pt-6 border-t border-[#D8D2C4]">
             <Link
-              href="/checkout"
+              href="/checkout?plan=professional"
               className="w-full rounded-xl bg-[#1C1917] px-6 py-3.5 text-xs font-bold text-white shadow-[0_3px_0_#0F172A] active:translate-y-[2px] active:shadow-none transition hover:bg-[#2C2825] flex items-center justify-center gap-2"
             >
-              <span>Check Details and Build Plan</span>
+              <span>Review Professional Plan</span>
               <span>→</span>
             </Link>
           </div>

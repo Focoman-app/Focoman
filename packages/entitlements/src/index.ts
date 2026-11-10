@@ -1,4 +1,4 @@
-import { PLAN_CAPABILITIES, TRIAL_DURATION_DAYS, getEffectiveCapabilities } from '@focoman/config';
+import { PLAN_CAPABILITIES, getEffectiveCapabilities } from '@focoman/config';
 import { CapabilityId, PlanType, StudioPlan } from '@focoman/types';
 import { getStudioPlan as getStudioPlanFromDb, upsertStudioPlan as upsertStudioPlanInDb } from '@focoman/db';
 
@@ -80,24 +80,23 @@ export function getEffectivePlanAfterTrial(studioPlan?: StudioPlan): PlanType {
 }
 
 /**
- * Initialize a studio with Free Core (OMS_BASIC) and start a 30‑day trial.
+ * Initialize a studio on the published Free plan. Trial fields remain
+ * supported only for historical records created before the public pricing
+ * model was introduced.
  */
 export async function initializeStudioPlan(studioId: string, nowIso: string = new Date().toISOString()): Promise<void> {
-  const trialExpires = new Date();
-  trialExpires.setDate(trialExpires.getDate() + TRIAL_DURATION_DAYS);
   const plan: StudioPlan = {
     selectedCapabilities: ['OMS_BASIC'],
     plan: 'FREE',
-    isTrial: true,
-    trialStartedAt: nowIso,
-    trialExpiresAt: trialExpires.toISOString(),
+    isTrial: false,
     updatedAt: nowIso,
   };
   await upsertStudioPlanInDb(studioId, plan);
 }
 
 /**
- * Save selected capabilities for a studio and resolve the matching 3-tier plan (FREE, PROFESSIONAL, COMPLETE).
+ * Save selected capabilities for a studio and resolve the matching public
+ * plan (FREE, STARTER, PROFESSIONAL). COMPLETE remains a legacy plan value.
  */
 export async function updateStudioCapabilities(
   studioId: string,
@@ -125,9 +124,9 @@ export async function updateStudioCapabilities(
   let resolvedPlan: PlanType = explicitPlan || 'FREE';
   if (!explicitPlan) {
     if (selectedCapabilities.some((cap) => completeTierCaps.includes(cap))) {
-      resolvedPlan = 'COMPLETE';
-    } else if (selectedCapabilities.some((cap) => proTierCaps.includes(cap))) {
       resolvedPlan = 'PROFESSIONAL';
+    } else if (selectedCapabilities.some((cap) => proTierCaps.includes(cap))) {
+      resolvedPlan = 'STARTER';
     } else {
       resolvedPlan = 'FREE';
     }

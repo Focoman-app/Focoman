@@ -85,7 +85,6 @@ function SettingsPageContent() {
 
   // Delete / Leave Studio Modal State
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [permanentDelete, setPermanentDelete] = useState(true);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
@@ -197,7 +196,7 @@ function SettingsPageContent() {
 
       let res;
       if (isOwner) {
-        res = await deleteStudioAction(studioSlug, token, { permanent: permanentDelete });
+        res = await deleteStudioAction(studioSlug, token);
       } else {
         res = await leaveStudioAction(studioSlug, token);
       }
@@ -933,13 +932,13 @@ function SettingsPageContent() {
             </div>
           </div>
 
-          {/* 4. Danger Zone: Delete Account */}
+          {/* 4. Danger Zone: Close Account */}
           <div className="rounded-3xl border border-red-200 bg-red-50/40 p-6 shadow-sm sm:p-8 space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div>
-                <h2 className="text-base font-bold text-red-950">Delete Account</h2>
+                <h2 className="text-base font-bold text-red-950">Close Account</h2>
                 <p className="mt-1 text-xs text-red-900/80 max-w-xl leading-relaxed">
-                  Permanently remove your user profile, memberships, and studio ownership across Focoman.
+                  Close this account. Sole-owner workspaces remain recoverable for 30 days under the Privacy Policy.
                 </p>
               </div>
 
@@ -953,7 +952,7 @@ function SettingsPageContent() {
                   }}
                   className="rounded-xl bg-red-600 px-4 py-2.5 text-xs font-bold text-white hover:bg-red-700 transition shadow-xs cursor-pointer"
                 >
-                  Delete Account...
+                  Close Account...
                 </button>
               </div>
             </div>
@@ -983,7 +982,7 @@ function SettingsPageContent() {
             <p className="mt-2 text-xs text-text-secondary leading-relaxed">
               {isOwner ? (
                 <>
-                  Are you sure you want to delete <span className="font-bold text-text-primary">{name || studioSlug}</span> (<span className="font-mono">/{studioSlug}</span>)? This action removes access for all studio members.
+                  Are you sure you want to close <span className="font-bold text-text-primary">{name || studioSlug}</span> (<span className="font-mono">/{studioSlug}</span>)? It removes access for members and remains recoverable for 30 days.
                 </>
               ) : (
                 <>
@@ -992,21 +991,7 @@ function SettingsPageContent() {
               )}
             </p>
 
-            {isOwner && (
-              <div className="mt-4 rounded-xl border border-red-200 bg-red-50/70 p-3.5">
-                <label className="flex items-start gap-2.5 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={permanentDelete}
-                    onChange={(e) => setPermanentDelete(e.target.checked)}
-                    className="mt-0.5 rounded border-red-300 text-red-600 focus:ring-red-500"
-                  />
-                  <span className="text-xs text-red-950 leading-tight">
-                    <strong>Permanent Cleanup:</strong> Free up the studio identifier <span className="font-mono font-bold">/{studioSlug}</span> and clear crew memberships completely.
-                  </span>
-                </label>
-              </div>
-            )}
+            {isOwner && <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50/70 p-3.5 text-xs text-amber-950 leading-tight">This workspace remains recoverable for 30 days. Its identifier cannot be reused during that period.</div>}
 
             {deleteError && (
               <div className="mt-3 rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700">
@@ -1048,7 +1033,7 @@ function SettingsPageContent() {
         </div>
       )}
 
-      {/* Confirmation Modal: Delete Account */}
+      {/* Confirmation Modal: Close Account */}
       {showDeleteAccountModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
           <div className="w-full max-w-md rounded-3xl bg-white p-6 sm:p-8 shadow-2xl border border-border-default animate-in fade-in duration-150">
@@ -1064,11 +1049,11 @@ function SettingsPageContent() {
             </div>
 
             <h3 className="text-lg font-bold text-text-primary">
-              Permanently Delete Account
+              Close Account
             </h3>
 
             <p className="mt-2 text-xs text-text-secondary leading-relaxed">
-              This action cannot be undone. Deleting your account will permanently delete all associated studio workspaces, order records, client reviews, and crew memberships.
+              This action signs you out and starts the 30-day recovery period for sole-owner workspaces. Contact support through the Privacy Policy if restoration is needed during that period.
             </p>
 
             <div className="mt-4 rounded-xl border border-red-200 bg-red-50/70 p-3.5 space-y-2">
@@ -1115,7 +1100,7 @@ function SettingsPageContent() {
                     Deleting Account...
                   </>
                 ) : (
-                  "Permanently Delete"
+                  "Close Account"
                 )}
               </button>
             </div>

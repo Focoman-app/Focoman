@@ -23,6 +23,7 @@ function SignInContent() {
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const [showTroubleOptions, setShowTroubleOptions] = useState(false);
+  const [acceptedLegalTerms, setAcceptedLegalTerms] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -99,6 +100,10 @@ function SignInContent() {
   }, [router, redirectUrl, autoSync]);
 
   const handleGoogleSignIn = async () => {
+    if (!acceptedLegalTerms) {
+      setAuthError("Please confirm that you agree to the Terms of Service and Privacy Policy.");
+      return;
+    }
     try {
       setIsSigningIn(true);
       setAuthError(null);
@@ -141,6 +146,10 @@ function SignInContent() {
   };
 
   const handleGoogleAlternateSignIn = async () => {
+    if (!acceptedLegalTerms) {
+      setAuthError("Please confirm that you agree to the Terms of Service and Privacy Policy.");
+      return;
+    }
     try {
       setIsSigningIn(true);
       setAuthError(null);
@@ -194,10 +203,10 @@ function SignInContent() {
             Sign In to Focoman
           </h2>
 
-          {/* Account deleted notice */}
+          {/* Account closure notice */}
           {searchParams.get("deleted") === "true" && (
             <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3.5 text-xs font-semibold text-emerald-800 text-left">
-              Your user account and personal session have been successfully deleted.
+              Your account closure request was recorded and this session has been signed out. Sole-owner workspaces remain recoverable for 30 days.
             </div>
           )}
 
@@ -210,6 +219,13 @@ function SignInContent() {
               </div>
 
               <div className="pt-2 border-t border-amber-200/80">
+                <button
+                  type="button"
+                  onClick={() => setAuthError(null)}
+                  className="mb-2 w-full rounded-xl border border-amber-300 bg-white py-2.5 px-4 text-xs font-bold text-amber-900 hover:bg-amber-100 transition"
+                >
+                  Review sign-in options
+                </button>
                 <button
                   type="button"
                   onClick={handleGoogleAlternateSignIn}
@@ -229,11 +245,22 @@ function SignInContent() {
             </div>
           ) : (
             <div className="mt-6 flex flex-col items-center gap-3.5">
+              <label className="flex w-full items-start gap-2.5 rounded-xl border border-border-default bg-surface-app/50 p-3 text-left text-[11px] leading-5 text-text-secondary cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={acceptedLegalTerms}
+                  onChange={(event) => setAcceptedLegalTerms(event.target.checked)}
+                  className="mt-0.5 h-4 w-4 shrink-0 rounded border-border-default text-brand-blue-primary focus:ring-brand-blue-primary"
+                />
+                <span>
+                  I agree to the <Link href="/terms" className="font-semibold text-brand-blue-primary underline">Terms of Service</Link> and acknowledge the <Link href="/privacy" className="font-semibold text-brand-blue-primary underline">Privacy Policy</Link>.
+                </span>
+              </label>
               {/* Primary Sign-In Button */}
               <button
                 type="button"
                 onClick={handleGoogleSignIn}
-                disabled={isSigningIn}
+                disabled={isSigningIn || !acceptedLegalTerms}
                 className="inline-flex w-full justify-center items-center gap-3 rounded-xl border border-border-default bg-white px-6 py-3 text-sm font-bold text-text-primary shadow-xs transition hover:bg-gray-50 hover:shadow-sm disabled:opacity-60 cursor-pointer"
               >
                 {isSigningIn ? (
@@ -281,7 +308,7 @@ function SignInContent() {
                   <button
                     type="button"
                     onClick={handleGoogleAlternateSignIn}
-                    disabled={isSigningIn}
+                    disabled={isSigningIn || !acceptedLegalTerms}
                     className="w-full rounded-lg bg-text-primary text-white font-bold py-2 px-3 text-xs shadow-xs hover:bg-black transition text-center cursor-pointer"
                   >
                     Try alternate method
@@ -291,16 +318,7 @@ function SignInContent() {
             </div>
           )}
 
-          <p className="text-[10px] sm:text-xs text-text-tertiary max-w-xs mx-auto mt-6">
-            By signing in, you agree to our{" "}
-            <Link href="/terms" className="underline hover:text-text-primary transition">
-              Terms and Conditions
-            </Link>{" "}
-            and{" "}
-            <Link href="/privacy" className="underline hover:text-text-primary transition">
-              Privacy Policy
-            </Link>.
-          </p>
+          <p className="text-[10px] sm:text-xs text-text-tertiary max-w-xs mx-auto mt-6">Your selection is required before continuing with Google sign-in.</p>
         </div>
       </div>
     </div>

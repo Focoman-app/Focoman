@@ -5,7 +5,7 @@ import { getMembersByStudio, getOrdersByStudio, getTasksByMember, getStudioBySlu
 import { DashboardHomeView } from "@/features/dashboard/DashboardHomeView";
 import { MemberWorkDashboardView } from "@/features/dashboard/MemberWorkDashboardView";
 import { requireDashboardStudioAccess } from "@/lib/dashboardAccess";
-import { getEffectiveStudioTier } from "@/lib/proEntitlements";
+import { getEffectiveStudioTier, getEffectiveStudioFeatures } from "@/lib/proEntitlements";
 
 export default async function DashboardPage({ params }: { params: Promise<{ studioSlug: string }> }) {
   const { studioSlug } = await params;
@@ -44,9 +44,10 @@ export default async function DashboardPage({ params }: { params: Promise<{ stud
   ]);
 
   const effectiveTier = getEffectiveStudioTier(studio?.ownerEmail || access.decoded.email, studio?.planInfo);
+  const effectiveFeatures = getEffectiveStudioFeatures(studio?.ownerEmail || access.decoded.email, studio?.features, studio?.planInfo);
 
   // Free Plan (₹0) does NOT include the Business Dashboard — direct Free users to OMS
-  if (effectiveTier === "FREE") {
+  if (effectiveTier === "FREE" || !effectiveFeatures.basicDashboard) {
     redirect(`/${studioSlug}/dashboard/oms`);
   }
 

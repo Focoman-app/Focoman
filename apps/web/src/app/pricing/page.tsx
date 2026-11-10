@@ -12,13 +12,13 @@ export default function PricingPage() {
       <section className="border-b border-border-divider bg-gradient-to-b from-white to-surface-app px-4 py-14 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-3xl text-center">
           <span className="inline-block rounded-full border border-brand-orange-soft bg-brand-orange-background px-4 py-1.5 text-xs font-bold uppercase tracking-widest text-brand-orange-primary">
-            Flexible Capability Pricing
+            Studio plans
           </span>
           <h1 className="mt-5 text-4xl font-extrabold tracking-tight text-text-primary sm:text-5xl">
-            Simple &amp; Flexible Studio Pricing
+              Studio Pricing
           </h1>
           <p className="mx-auto mt-4 max-w-2xl text-base text-text-secondary">
-            Basic Order Management &amp; Studio Marketplace are 100% Free for everyone. Upgrade to the ₹999/month or ₹1,999/month plan as your studio operations grow.
+            Choose Free, Starter, or Professional based on the tools your studio needs. Review plan scope and billing terms before selecting a paid plan.
           </p>
         </div>
       </section>
@@ -37,7 +37,7 @@ export default function PricingPage() {
               Everything You Need to Know
             </h2>
             <p className="text-sm text-text-secondary">
-              Have questions about our free tier, modular capabilities, or billing? Find quick answers below.
+              Have questions about plans, included features or billing? Find quick answers below.
             </p>
           </div>
           <FaqAccordion />
@@ -49,7 +49,7 @@ export default function PricingPage() {
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-text-tertiary">
             <p>© {new Date().getFullYear()} Focoman. All rights reserved.</p>
-            <p>Built for professional photography studios.</p>
+            <div className="flex flex-wrap justify-center gap-x-4 gap-y-2"><Link href="/terms" className="hover:underline">Terms</Link><Link href="/privacy" className="hover:underline">Privacy</Link><Link href="/billing-and-refunds" className="hover:underline">Billing and refunds</Link></div>
           </div>
         </div>
       </footer>

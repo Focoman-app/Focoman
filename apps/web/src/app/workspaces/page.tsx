@@ -31,7 +31,6 @@ export default function WorkspacesPage() {
 
   // Deletion modal state
   const [targetWorkspaceToDelete, setTargetWorkspaceToDelete] = useState<StudioMembership | null>(null);
-  const [permanentDelete, setPermanentDelete] = useState(true);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [successToast, setSuccessToast] = useState<string | null>(null);
@@ -107,7 +106,7 @@ export default function WorkspacesPage() {
       
       let res;
       if (isOwner) {
-        res = await deleteStudioAction(targetWorkspaceToDelete.studioId, idToken, { permanent: permanentDelete });
+        res = await deleteStudioAction(targetWorkspaceToDelete.studioId, idToken);
       } else {
         res = await leaveStudioAction(targetWorkspaceToDelete.studioId, idToken);
       }
@@ -462,7 +461,7 @@ export default function WorkspacesPage() {
               <p className="mt-2 text-xs text-text-secondary leading-relaxed">
                 {targetWorkspaceToDelete.role === "STUDIO_OWNER" ? (
                   <>
-                    Are you sure you want to delete <span className="font-bold text-text-primary">{targetWorkspaceToDelete.studioName || targetWorkspaceToDelete.studioId}</span> (<span className="font-mono">/{targetWorkspaceToDelete.studioId}</span>)? This will remove the studio and deactivate associated crew memberships.
+                    Are you sure you want to close <span className="font-bold text-text-primary">{targetWorkspaceToDelete.studioName || targetWorkspaceToDelete.studioId}</span> (<span className="font-mono">/{targetWorkspaceToDelete.studioId}</span>)? It will be unavailable and may be restored by an authorised owner within 30 days.
                   </>
                 ) : (
                   <>
@@ -471,21 +470,6 @@ export default function WorkspacesPage() {
                 )}
               </p>
 
-              {targetWorkspaceToDelete.role === "STUDIO_OWNER" && (
-                <div className="mt-4 rounded-xl border border-red-200 bg-red-50/70 p-3.5">
-                  <label className="flex items-start gap-2.5 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={permanentDelete}
-                      onChange={(e) => setPermanentDelete(e.target.checked)}
-                      className="mt-0.5 rounded border-red-300 text-red-600 focus:ring-red-500"
-                    />
-                    <span className="text-xs text-red-950 leading-tight">
-                      <strong>Permanent Cleanup:</strong> Free up the slug <span className="font-mono font-bold">/{targetWorkspaceToDelete.studioId}</span> and delete crew memberships completely (recommended for test iterations).
-                    </span>
-                  </label>
-                </div>
-              )}
 
               {deleteError && (
                 <div className="mt-3 rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700">

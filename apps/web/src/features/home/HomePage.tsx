@@ -227,7 +227,7 @@ export function HomePage() {
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-text-tertiary">
             <p>© {new Date().getFullYear()} Focoman. All rights reserved.</p>
-            <p>Built for professional photography studios.</p>
+            <div className="flex flex-wrap justify-center gap-x-4 gap-y-2"><Link href="/terms" className="hover:underline">Terms</Link><Link href="/privacy" className="hover:underline">Privacy</Link><Link href="/billing-and-refunds" className="hover:underline">Billing and refunds</Link></div>
           </div>
         </div>
       </footer>

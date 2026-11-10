@@ -18,7 +18,38 @@ import type { CapabilityId } from "@focoman/types";
 // DYNAMIC PRICING FORMULA ENGINE
 // ==========================================
 
-export const MVP_LAUNCH_DISCOUNT_PERCENT = 100;
+// Public prices must match the published plan pages. A paid plan is not
+// activated until a payment workflow supplies a verified payment result.
+export const MVP_LAUNCH_DISCOUNT_PERCENT = 0;
+
+const PROFESSIONAL_PLAN_CAPABILITIES: readonly CapabilityId[] = [
+  "WHATSAPP_BOT",
+  "WHATSAPP_OPERATIONS",
+  "WHATSAPP_ALERTS",
+  "WHATSAPP_NOTIFICATIONS",
+  "BUSINESS_REPORTS",
+  "ANALYTICS_ADVANCED",
+];
+
+const STARTER_PLAN_CAPABILITIES: readonly CapabilityId[] = [
+  "DRIVE_CLIENT_REVIEW",
+  "OMS_ADVANCED",
+  "CUSTOMER_CRM",
+  "STUDIO_ERP",
+  "ANALYTICS_BASIC",
+];
+
+type CheckoutPlan = { name: "Free" | "Starter" | "Professional"; monthlyPrice: number };
+
+function getCheckoutPlan(selectedCapabilities: CapabilityId[]): CheckoutPlan {
+  if (selectedCapabilities.some((capability) => PROFESSIONAL_PLAN_CAPABILITIES.includes(capability))) {
+    return { name: "Professional", monthlyPrice: 1999 };
+  }
+  if (selectedCapabilities.length > 0) {
+    return { name: "Starter", monthlyPrice: 999 };
+  }
+  return { name: "Free", monthlyPrice: 0 };
+}
 
 export interface SingleModulePrice {
   originalPrice: number;
@@ -92,6 +123,7 @@ export function CheckoutBuilder() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const upgradeParam = searchParams.get("upgrade")?.toLowerCase() || searchParams.get("feature")?.toLowerCase();
+  const planParam = searchParams.get("plan")?.toLowerCase();
   const actionParam = searchParams.get("action")?.toLowerCase();
   const studioParam = searchParams.get("studio");
 
@@ -109,6 +141,10 @@ export function CheckoutBuilder() {
 
   // Currently selected capabilities
   const [selectedCaps, setSelectedCaps] = useState<CapabilityId[]>(() => {
+    if (planParam === "starter") return [...STARTER_PLAN_CAPABILITIES];
+    if (planParam === "professional") {
+      return Array.from(new Set([...STARTER_PLAN_CAPABILITIES, ...PURCHASABLE_CAPABILITIES.map((capability) => capability.id)])) as CapabilityId[];
+    }
     const initial: CapabilityId[] = [];
     if (upgradeParam === "crm") initial.push("CUSTOMER_CRM");
     else if (upgradeParam === "erp" || upgradeParam === "crew") initial.push("STUDIO_ERP");
@@ -148,8 +184,15 @@ export function CheckoutBuilder() {
     };
   }, [user, studioParam]);
 
-  // Dynamic formula calculation for the entire checkout
-  const cartPricing = computeCartPricing(selectedCaps, MVP_LAUNCH_DISCOUNT_PERCENT);
+  // Capability data determines plan scope, while public billing uses the
+  // published fixed Free, Starter and Professional plan prices.
+  const checkoutPlan = getCheckoutPlan(selectedCaps);
+  const capabilityPricing = computeCartPricing(selectedCaps, MVP_LAUNCH_DISCOUNT_PERCENT);
+  const cartPricing = {
+    ...capabilityPricing,
+    regularSubtotal: checkoutPlan.monthlyPrice,
+    finalPayableTotal: checkoutPlan.monthlyPrice,
+  };
 
   const handleToggleCapability = (capId: CapabilityId) => {
     setSelectedCaps((prev) => {
@@ -192,24 +235,32 @@ export function CheckoutBuilder() {
     }
   };
 
-  // Process checkout / module activation
+  // A selection is not a payment. Only the free-plan downgrade may be saved
+  // until the billing provider and payment-confirmation flow are available.
   const handleProceed = async () => {
     setIsSubmitting(true);
     setSubmitError(null);
 
     try {
-      if (user && studioParam) {
-        const idToken = await user.getIdToken();
-        const res = await saveStudioCapabilitiesAction(studioParam, selectedCaps, idToken);
-        if (!res.success) {
-          console.warn("[CheckoutBuilder] Capability update note:", res.error);
-        }
+      if (!user || !studioParam) {
+        throw new Error("Sign in and choose a studio workspace before changing a plan.");
+      }
+
+      if (cartPricing.finalPayableTotal > 0) {
+        throw new Error(
+          "Paid plan activation is not available until payment setup is complete. No payment or feature change has been made."
+        );
+      }
+
+      const idToken = await user.getIdToken();
+      const res = await saveStudioCapabilitiesAction(studioParam, selectedCaps, idToken);
+      if (!res.success) {
+        throw new Error(res.error || "Unable to save the Free plan selection.");
       }
       setCheckoutSuccess(true);
     } catch (err: unknown) {
       console.error("[CheckoutBuilder] Error updating studio capabilities:", err);
-      // Still show success UI so user isn't stuck
-      setCheckoutSuccess(true);
+      setSubmitError(err instanceof Error ? err.message : "Unable to update the studio plan.");
     } finally {
       setIsSubmitting(false);
     }
@@ -390,7 +441,7 @@ export function CheckoutBuilder() {
           {/* Tier 2: ₹999/month Plan */}
           <div
             onClick={() =>
-              setSelectedCaps(["OMS_ADVANCED", "CUSTOMER_CRM", "STUDIO_ERP"])
+              setSelectedCaps([...STARTER_PLAN_CAPABILITIES])
             }
             className={`rounded-3xl p-6 shadow-2xs space-y-4 flex flex-col justify-between cursor-pointer transition border ${
               selectedCaps.includes("CUSTOMER_CRM") &&
@@ -405,7 +456,7 @@ export function CheckoutBuilder() {
               <div className="flex items-center justify-between gap-2 border-b border-slate-200/80 pb-3">
                 <div>
                   <span className="rounded-full bg-sky-100 text-sky-800 border border-sky-200 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider">
-                    ₹999/month Plan
+                    Starter Plan
                   </span>
                   <h4 className="text-base font-extrabold text-text-primary mt-1.5">Studio Growth Suite</h4>
                 </div>
@@ -447,9 +498,9 @@ export function CheckoutBuilder() {
               <div className="flex items-center justify-between gap-2 border-b border-emerald-200/70 pb-3">
                 <div>
                   <span className="rounded-full bg-emerald-600 text-white px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider shadow-2xs">
-                    ₹1,999/month Plan
+                    Professional Plan
                   </span>
-                  <h4 className="text-base font-extrabold text-text-primary mt-1.5">Complete Studio OS</h4>
+                  <h4 className="text-base font-extrabold text-text-primary mt-1.5">Professional Studio OS</h4>
                 </div>
                 <div className="text-right">
                   <span className="text-xl font-black text-emerald-700">₹1,999</span>
@@ -477,14 +528,14 @@ export function CheckoutBuilder() {
           </div>
         </div>
 
-        {/* Unified Modules Stack */}
+        {/* Plan scope. Individual capabilities are shown for clarity, not sold as separate public plans. */}
         <div className="bg-white border border-border-default rounded-3xl p-6 shadow-xs space-y-5">
           <div className="border-b border-border-divider pb-3">
             <h4 className="text-base font-extrabold text-text-primary">
-              Choose Add-on Modules
+              Included plan scope
             </h4>
             <p className="text-xs text-text-secondary mt-0.5">
-              Select one or more professional modules. They will integrate seamlessly into your workspace.
+              The selected plan determines the capabilities shown below. Paid capability changes require completed payment setup.
             </p>
           </div>
 
@@ -495,13 +546,10 @@ export function CheckoutBuilder() {
               const isCoveredByAdvanced =
                 cap.id === "WHATSAPP_NOTIFICATIONS" && selectedCaps.includes("WHATSAPP_OPERATIONS");
 
-              const modulePrice = computeModuleCardPrice(cap.price, MVP_LAUNCH_DISCOUNT_PERCENT);
-
               return (
                 <div
                   key={cap.id}
-                  onClick={() => handleToggleCapability(cap.id)}
-                  className={`group relative rounded-2xl border p-5 transition-all duration-200 cursor-pointer bg-white ${
+                  className={`group relative rounded-2xl border p-5 transition-all duration-200 bg-white ${
                     isDirectlySelected
                       ? "border-brand-blue-primary bg-brand-blue-background/5 shadow-sm ring-2 ring-brand-blue-primary/15"
                       : isCoveredByAdvanced
@@ -512,12 +560,13 @@ export function CheckoutBuilder() {
                   <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
                     {/* Checkbox and text info */}
                     <div className="flex items-start gap-3.5 flex-1">
-                      <div className="pt-0.5" onClick={(e) => e.stopPropagation()}>
+                      <div className="pt-0.5">
                         <input
                           type="checkbox"
                           checked={isDirectlySelected || isCoveredByAdvanced}
-                          onChange={() => handleToggleCapability(cap.id)}
-                          className="h-5 w-5 rounded border-slate-300 text-brand-blue-primary focus:ring-brand-blue-primary cursor-pointer transition"
+                          readOnly
+                          aria-label={`${cap.name} included in selected plan`}
+                          className="h-5 w-5 rounded border-slate-300 text-brand-blue-primary focus:ring-brand-blue-primary cursor-default transition"
                         />
                       </div>
                       <div className="space-y-1">
@@ -547,64 +596,20 @@ export function CheckoutBuilder() {
                       </div>
                     </div>
 
-                    {/* Price and Status Button with Strikethrough Discount Display */}
+                    {/* Inclusion status */}
                     <div className="flex md:flex-col items-center md:items-end justify-between md:justify-start gap-3 shrink-0 pt-2 md:pt-0 border-t md:border-t-0 border-slate-100">
-                      <div className="text-left md:text-right">
-                        {isCoveredByAdvanced ? (
-                          <div>
-                            <div className="flex items-baseline gap-1.5 md:justify-end">
-                              <span className="text-sm line-through text-text-tertiary font-bold">
-                                ₹{cap.price}
-                              </span>
-                              <span className="text-2xl font-black text-emerald-600">
-                                ₹0
-                              </span>
-                              <span className="text-xs text-emerald-700 font-bold">/mo</span>
-                            </div>
-                            <span className="inline-block mt-0.5 rounded-full bg-emerald-100 border border-emerald-200 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-emerald-800">
-                              Included in Bot
-                            </span>
-                          </div>
-                        ) : (
-                          <div>
-                            <div className="flex items-baseline gap-1.5 md:justify-end">
-                              <span className="text-sm line-through text-text-tertiary font-bold">
-                                ₹{modulePrice.originalPrice}
-                              </span>
-                              <span className="text-2xl font-black text-emerald-600">
-                                ₹{modulePrice.discountedPrice}
-                              </span>
-                              <span className="text-xs text-emerald-700 font-bold">/mo</span>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-
                       <div className="md:mt-2 flex items-center gap-1.5 flex-wrap justify-end">
                         {isDirectlySelected ? (
-                          <>
-                            <span className="inline-block text-[11px] font-extrabold px-3 py-1 rounded-full tracking-wide bg-brand-blue-primary text-white shadow-2xs">
-                              ✓ Subscribed
-                            </span>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleToggleCapability(cap.id);
-                              }}
-                              className="text-[10px] font-bold px-2 py-0.5 rounded-full border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 transition cursor-pointer"
-                              title="Unselect this module"
-                            >
-                              Unselect
-                            </button>
-                          </>
+                          <span className="inline-block text-[11px] font-extrabold px-3 py-1 rounded-full tracking-wide bg-brand-blue-primary text-white shadow-2xs">
+                            Included
+                          </span>
                         ) : isCoveredByAdvanced ? (
                           <span className="inline-block text-[11px] font-extrabold px-3 py-1 rounded-full tracking-wide bg-emerald-100 text-emerald-800 border border-emerald-200">
                             ✓ Included in Bot
                           </span>
                         ) : (
-                          <span className="inline-block text-[11px] font-extrabold px-3 py-1 rounded-full tracking-wide bg-slate-100 text-text-primary border border-slate-200 hover:bg-slate-200">
-                            + Add Module
+                          <span className="inline-block text-[11px] font-extrabold px-3 py-1 rounded-full tracking-wide bg-slate-100 text-text-primary border border-slate-200">
+                            Not included
                           </span>
                         )}
                       </div>
@@ -631,15 +636,10 @@ export function CheckoutBuilder() {
             </h3>
           </div>
           <div className="flex items-baseline gap-2">
-            {cartPricing.regularSubtotal > 0 && (
-              <span className="text-lg line-through text-text-tertiary font-bold">
-                ₹{cartPricing.regularSubtotal}
-              </span>
-            )}
             <span className="text-3xl font-extrabold text-emerald-600">
               ₹{cartPricing.finalPayableTotal}
             </span>
-            <span className="text-xs text-emerald-700 font-bold">/ month (Limited Period)</span>
+            <span className="text-xs text-emerald-700 font-bold">/ month</span>
           </div>
         </div>
 
@@ -648,28 +648,15 @@ export function CheckoutBuilder() {
             <span>Basic Order management (₹0 Forever)</span>
             <span className="font-bold text-emerald-700">INCLUDED (₹0)</span>
           </div>
-          {cartPricing.itemizedBreakdown.map((item) => (
-            <div key={item.id} className="flex items-center justify-between py-1 border-b border-border-divider/50">
-              <span className="font-medium text-text-primary">{item.name}</span>
-              <span className="font-extrabold text-text-primary flex items-center gap-1.5">
-                {item.isCoveredByAdvanced ? (
-                  <span className="text-emerald-700 font-bold">INCLUDED IN BOT (₹0)</span>
-                ) : (
-                  <>
-                    <span className="line-through text-text-tertiary font-normal">₹{item.originalPrice}/mo</span>
-                    <span className="text-emerald-600 font-bold">₹{item.discountedPrice}</span>
-                  </>
-                )}
-              </span>
-            </div>
-          ))}
+          <div className="flex items-center justify-between py-1 border-b border-border-divider/50">
+            <span className="font-medium text-text-primary">Selected plan</span>
+            <span className="font-extrabold text-text-primary">{checkoutPlan.name}</span>
+          </div>
+          <div className="flex items-center justify-between py-1 border-b border-border-divider/50">
+            <span>Included paid capabilities</span>
+            <span className="font-extrabold text-text-primary">{selectedCaps.length}</span>
+          </div>
 
-          {cartPricing.discountAmount > 0 && (
-            <div className="flex items-center justify-between py-1.5 text-emerald-700 font-bold border-b border-border-divider/50">
-              <span>Introductory Discount ({cartPricing.discountPercentage}%)</span>
-              <span>-₹{cartPricing.discountAmount}/mo</span>
-            </div>
-          )}
         </div>
 
         {checkoutSuccess ? (
@@ -679,12 +666,12 @@ export function CheckoutBuilder() {
             </div>
             <div className="space-y-1.5">
               <h4 className="text-xl font-extrabold text-emerald-950">
-                Studio Modules Activated Successfully!
+                Free Plan Saved
               </h4>
               <p className="text-xs text-emerald-800 max-w-lg mx-auto">
-                Your modular configuration has been activated successfully for{" "}
+                Your Free plan selection has been saved for{" "}
                 <span className="font-extrabold">{studioParam ? `${studioParam} Studio Workspace` : "your studio"}</span>.
-                All selected capabilities are enabled and ready for use.
+                Core OMS access remains available. Paid capabilities require completed payment setup.
               </p>
             </div>
 
@@ -711,7 +698,7 @@ export function CheckoutBuilder() {
                 onClick={() => setCheckoutSuccess(false)}
                 className="px-4 py-3 rounded-xl border border-emerald-300 bg-white hover:bg-emerald-100/50 text-emerald-900 text-xs font-bold transition cursor-pointer"
               >
-                Adjust Selected Modules
+                Review plan selection
               </button>
               <Link
                 href="/pricing"
@@ -736,26 +723,18 @@ export function CheckoutBuilder() {
               }`}
             >
               {isSubmitting ? (
-                <span>Saving Studio Plan...</span>
+                  <span>Saving Free Plan...</span>
               ) : selectedCaps.length === 0 ? (
-                <span>Save Changes &amp; Revert to Free Core OMS (₹0/forever) →</span>
-              ) : cartPricing.finalPayableTotal === 0 ? (
-                <>
-                  <span>
-                    Save Subscription Changes (₹{cartPricing.finalPayableTotal}/mo)
-                  </span>
-                  <span>→</span>
-                </>
+                <span>Save Free Plan (₹0/month) →</span>
               ) : (
                 <>
-                  <span>Proceed to Payment Gateway (₹{cartPricing.finalPayableTotal}/mo)</span>
+                  <span>Paid plan setup unavailable (₹{cartPricing.finalPayableTotal}/mo)</span>
                   <span>→</span>
                 </>
               )}
             </button>
-            <p className="text-center text-[11px] text-text-tertiary">
-              Secure 256-bit SSL Payment Gateway · Cancel or adjust modules anytime from your studio settings
-            </p>
+            {submitError && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-center text-[11px] text-red-700">{submitError}</p>}
+            <p className="text-center text-[11px] text-text-tertiary">Payment collection is enabled only when a payment method, billing date, and the <Link href="/billing-and-refunds" className="underline hover:text-text-primary">Billing and Refund Policy</Link> are shown for acceptance.</p>
           </div>
         )}
       </div>

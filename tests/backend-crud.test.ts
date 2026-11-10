@@ -34,7 +34,7 @@ import {
   RecordPaymentSchema,
   CancelOrderSchema,
 } from "../packages/validation/src/index.ts";
-import { RECOVERY_WINDOW_DAYS } from "../packages/config/src/index.ts";
+import { PLAN_CAPABILITIES, PLAN_PRICES, RECOVERY_WINDOW_DAYS } from "../packages/config/src/index.ts";
 import {
   createInvitationLinkToken,
   formatInvitationCode,
@@ -79,8 +79,8 @@ describe("Firebase same-origin redirect auth domain", () => {
 });
 
 describe("1. Recovery System & Soft-Delete Domain Logic", () => {
-  test("RECOVERY_WINDOW_DAYS is strictly configured to 14 days", () => {
-    assert.strictEqual(RECOVERY_WINDOW_DAYS, 14);
+  test("RECOVERY_WINDOW_DAYS is strictly configured to 30 days", () => {
+    assert.strictEqual(RECOVERY_WINDOW_DAYS, 30);
   });
 
   test("isWithinRecoveryWindow returns true for recently deleted record", () => {
@@ -93,8 +93,8 @@ describe("1. Recovery System & Soft-Delete Domain Logic", () => {
     assert.strictEqual(isWithinRecoveryWindow(null), false);
   });
 
-  test("isWithinRecoveryWindow returns false for records deleted > 14 days ago", () => {
-    const expiredDate = new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString(); // 15 days ago
+  test("isWithinRecoveryWindow returns false for records deleted > 30 days ago", () => {
+    const expiredDate = new Date(Date.now() - 31 * 24 * 60 * 60 * 1000).toISOString();
     assert.strictEqual(isWithinRecoveryWindow(expiredDate), false);
   });
 
@@ -108,7 +108,7 @@ describe("1. Recovery System & Soft-Delete Domain Logic", () => {
     };
     const expiredRecord = {
       isDeleted: true,
-      deletedAt: new Date(Date.now() - 20 * 24 * 60 * 60 * 1000).toISOString(),
+      deletedAt: new Date(Date.now() - 31 * 24 * 60 * 60 * 1000).toISOString(),
     };
 
     assert.strictEqual(canRestoreRecord(validRecord).allowed, true);
@@ -138,6 +138,20 @@ describe("1. Recovery System & Soft-Delete Domain Logic", () => {
     assert.strictEqual(restored.isDeleted, false);
     assert.strictEqual(restored.deletedAt, null);
     assert.strictEqual(restored.deletedBy, null);
+  });
+});
+
+describe("1.1 Public plan catalog", () => {
+  test("publishes only Free, Starter and Professional prices", () => {
+    assert.strictEqual(PLAN_PRICES.FREE, 0);
+    assert.strictEqual(PLAN_PRICES.STARTER, 999);
+    assert.strictEqual(PLAN_PRICES.PROFESSIONAL, 1999);
+  });
+
+  test("keeps Starter and Professional capability sets separate", () => {
+    assert.ok(PLAN_CAPABILITIES.STARTER.includes("CUSTOMER_CRM"));
+    assert.ok(!PLAN_CAPABILITIES.STARTER.includes("WHATSAPP_OPERATIONS"));
+    assert.ok(PLAN_CAPABILITIES.PROFESSIONAL.includes("WHATSAPP_OPERATIONS"));
   });
 });
 

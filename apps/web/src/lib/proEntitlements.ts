@@ -3,8 +3,9 @@
  *
  * Tiers:
  * 1. FREE (₹0): Basic OMS + Studio Marketplace (No Business Dashboard; redirects to OMS).
- * 2. PROFESSIONAL (₹999/month): Free + Advanced OMS (Drive Preview & Selection + Client Review) + CRM + ERP + Basic Business Dashboard (Order counts, Revenue overview, Pending payment overview).
- * 3. COMPLETE (₹1,999/month): Everything in ₹999 + WhatsApp Operations & Interactive Bot + Advanced Business Reports & Analytics + Excel Report Exports.
+ * 2. STARTER (₹999/month): Free + Advanced OMS (Drive Preview & Selection + Client Review) + CRM + ERP + Basic Business Dashboard (Order counts, Revenue overview, Pending payment overview).
+ * 3. PROFESSIONAL (₹1,999/month): Everything in Starter + WhatsApp Operations & Interactive Bot + Advanced Business Reports & Analytics + Excel Report Exports.
+ * COMPLETE remains an internal legacy value for older records.
  */
 
 export const LIFETIME_PRO_EMAILS: readonly string[] = [] as const;
@@ -35,8 +36,8 @@ export interface StudioEntitlementShape {
 
 /**
  * Resolves the effective 3-tier subscription level for a studio:
- * - "COMPLETE" (₹1,999/month, active 30-day trial, or whitelisted lifetime Pro email)
- * - "PROFESSIONAL" (₹999/month)
+ * - internal "COMPLETE" (public Professional plan, active legacy trial, or whitelisted lifetime Pro email)
+ * - internal "PROFESSIONAL" (public Starter plan)
  * - "FREE" (₹0)
  */
 export function getEffectiveStudioTier(
@@ -54,40 +55,10 @@ export function getEffectiveStudioTier(
 
   if (isLifetimeProEmail(ownerEmail)) return "COMPLETE";
   if (!planInfo) return "FREE";
+  if (planInfo.plan === "FREE") return "FREE";
 
-  if (planInfo.isTrial && planInfo.trialExpiresAt) {
-    if (new Date() <= new Date(planInfo.trialExpiresAt)) {
-      return "COMPLETE";
-    }
-  }
-
-  if (planInfo.plan === "COMPLETE") return "COMPLETE";
-  if (planInfo.plan === "PROFESSIONAL") return "PROFESSIONAL";
-
-  const caps = Array.isArray(planInfo.selectedCapabilities) ? planInfo.selectedCapabilities : [];
-  const hasCompleteCaps = caps.some((c) =>
-    [
-      "WHATSAPP_BOT",
-      "WHATSAPP_OPERATIONS",
-      "WHATSAPP_ALERTS",
-      "WHATSAPP_NOTIFICATIONS",
-      "BUSINESS_REPORTS",
-      "ANALYTICS_ADVANCED",
-    ].includes(c)
-  );
-  if (hasCompleteCaps) return "COMPLETE";
-
-  const hasProCaps = caps.some((c) =>
-    [
-      "OMS_ADVANCED",
-      "DRIVE_CLIENT_REVIEW",
-      "CUSTOMER_CRM",
-      "STUDIO_ERP",
-      "ANALYTICS_BASIC",
-      "GOOGLE_DRIVE",
-    ].includes(c)
-  );
-  if (hasProCaps) return "PROFESSIONAL";
+  if (planInfo.plan === "COMPLETE" || planInfo.plan === "PROFESSIONAL") return "COMPLETE";
+  if (planInfo.plan === "STARTER") return "PROFESSIONAL";
 
   return "FREE";
 }
@@ -150,8 +121,8 @@ export function getEffectiveStudioFeatures(
       oms: true,
       crm: true,
       erp: true,
-      whatsapp: caps.includes("WHATSAPP_OPERATIONS") || caps.includes("WHATSAPP_BOT") || caps.includes("WHATSAPP_NOTIFICATIONS"),
-      reports: caps.includes("BUSINESS_REPORTS"),
+      whatsapp: caps.some((c) => ["WHATSAPP_OPERATIONS", "WHATSAPP_BOT", "WHATSAPP_NOTIFICATIONS", "WHATSAPP_ALERTS"].includes(c)),
+      reports: caps.some((c) => ["BUSINESS_REPORTS", "ANALYTICS_ADVANCED"].includes(c)),
       marketplace: true,
       driveReview: true,
       basicDashboard: true,
@@ -159,17 +130,24 @@ export function getEffectiveStudioFeatures(
     };
   }
 
-  // FREE Plan (₹0): Basic OMS + Studio Marketplace only
+  // FREE Plan (₹0) or modular capability add-ons:
+  const hasCrm = caps.some((c) => ["CUSTOMER_CRM", "CUSTOMER_BASIC", "CUSTOMER_ADVANCED"].includes(c));
+  const hasErp = caps.some((c) => ["STUDIO_ERP", "CREW_BASIC", "CREW_ADVANCED"].includes(c));
+  const hasDrive = caps.some((c) => ["DRIVE_CLIENT_REVIEW", "OMS_ADVANCED", "GOOGLE_DRIVE"].includes(c));
+  const hasDashboard = caps.some((c) => ["ANALYTICS_BASIC", "BUSINESS_REPORTS"].includes(c));
+  const hasWhatsapp = caps.some((c) => ["WHATSAPP_OPERATIONS", "WHATSAPP_BOT", "WHATSAPP_NOTIFICATIONS", "WHATSAPP_ALERTS"].includes(c));
+  const hasReports = caps.some((c) => ["BUSINESS_REPORTS", "ANALYTICS_ADVANCED"].includes(c));
+
   return {
     oms: true,
-    crm: false,
-    erp: false,
-    whatsapp: false,
-    reports: false,
+    crm: hasCrm,
+    erp: hasErp,
+    whatsapp: hasWhatsapp,
+    reports: hasReports,
     marketplace: true,
-    driveReview: false,
-    basicDashboard: false,
-    autoAssignCrew: false,
+    driveReview: hasDrive,
+    basicDashboard: hasDashboard,
+    autoAssignCrew: hasErp ? (configuredFeatures?.autoAssignCrew ?? true) : false,
   };
 }
 
