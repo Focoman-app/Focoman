@@ -622,7 +622,7 @@ export function OrderVerticalWorkflow({
                                     <span>{assignedRes.memberName}</span>
                                     {isTempAssigned && (
                                       <span className="rounded bg-amber-100 text-amber-800 border border-amber-200 px-1 py-0.2 text-[9px] font-bold">
-                                        Freelancer
+                                        Temp
                                       </span>
                                     )}
                                     <button
@@ -654,7 +654,7 @@ export function OrderVerticalWorkflow({
                                             ? "Change crew..."
                                             : hasErp
                                             ? "Select crew or type name..."
-                                            : "Type freelancer / temporary crew name..."
+                                            : "Type temporary crew name..."
                                         }
                                         value={currentQuery}
                                         onFocus={() => setActiveCrewDropdown(svcName)}
@@ -689,7 +689,7 @@ export function OrderVerticalWorkflow({
                                                   {trimmedQuery}
                                                 </span>
                                                 <span className="text-[10px] font-bold text-amber-800 bg-amber-100 px-1.5 py-0.2 rounded shrink-0">
-                                                  {hasErp ? "Assign" : "Assign Freelancer"}
+                                                  {hasErp ? "Assign" : "Assign Temp"}
                                                 </span>
                                               </div>
                                             )}
@@ -721,7 +721,7 @@ export function OrderVerticalWorkflow({
                                             {matchingTemporaryCrew.length > 0 && (
                                               <div className="space-y-0.5 mb-1">
                                                 <div className="text-[9px] font-bold uppercase tracking-wider text-amber-800/70 px-1 py-0.5">
-                                                  Freelancers & Temporary
+                                                  Temporary Crew
                                                 </div>
                                                 {matchingTemporaryCrew.map((t) => (
                                                   <div
@@ -730,7 +730,7 @@ export function OrderVerticalWorkflow({
                                                     className="flex items-center justify-between px-2 py-1 rounded-lg text-xs hover:bg-amber-100/60 cursor-pointer bg-amber-50/40"
                                                   >
                                                     <span className="font-semibold text-text-primary truncate">
-                                                      {t.name} (Freelancer)
+                                                      {t.name} (Temp)
                                                     </span>
                                                     <span className="text-[9px] font-bold text-amber-800 bg-amber-100 px-1.5 py-0.2 rounded">
                                                       Assign
@@ -1375,7 +1375,7 @@ export function OrderVerticalWorkflow({
                       ))}
                     {temporaryCrewList.map((t) => (
                       <option key={t.id} value={t.name}>
-                        {t.name} (Freelancer)
+                        {t.name} (Temp)
                       </option>
                     ))}
                   </select>

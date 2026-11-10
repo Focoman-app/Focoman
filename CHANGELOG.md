@@ -2,6 +2,14 @@
 
 All meaningful changes to the Focoman codebase, documentation, architecture, or agent workflow instructions must be recorded in this file according to Section 20 of **[Agents.md](Agents.md)**.
 
+## CHG-087 — Update Temporary Crew UI Labels from Freelancer to Temp
+
+- **Date:** 2026-11-10
+- **Area:** apps/web/src/components/workflow/OrderVerticalWorkflow.tsx, CHANGELOG.md.
+- **Change:** Updated temporary and ad-hoc crew labels in `OrderVerticalWorkflow.tsx`. Replaced "Freelancer" with generic "Temp" across assigned member badges, input placeholders, quick-assignment badges, and crew selection dropdowns to accommodate all temporary crew use cases.
+- **Verification:** TypeScript typecheck passed with 0 errors (`tsc --project apps/web/tsconfig.json --noEmit`); `npm test` passed 38/38 tests.
+
+
 ## CHG-086 — Scope CRM & ERP Features Out of Basic Free OMS
 
 - **Date:** 2026-11-10
