@@ -2,6 +2,7 @@
 
 import type { Order, OrderStatus } from "@focoman/types";
 import { FileSpreadsheet } from "lucide-react";
+import { FocomanSpinner } from "@/components/FocomanSpinner";
 import { getEventDaysRemaining } from "@/utils/dateUtils";
 import { STATUS_COLORS, STATUS_LABELS } from "./omsConstants";
 
@@ -13,6 +14,8 @@ interface OmsOrdersListPanelProps {
   selectedId: string | null;
   onSelectOrder: (orderId: string) => void;
   loading: boolean;
+  isRefreshing?: boolean;
+  refreshError?: string | null;
   query: string;
   onChangeQuery: (query: string) => void;
   statusFilter: "ALL" | "MARKETPLACE" | OrderStatus;
@@ -33,6 +36,8 @@ export function OmsOrdersListPanel({
   selectedId,
   onSelectOrder,
   loading,
+  isRefreshing = false,
+  refreshError,
   query,
   onChangeQuery,
   statusFilter,
@@ -120,14 +125,14 @@ export function OmsOrdersListPanel({
             placeholder="Search by customer, order number, event..."
             className="flex-1 rounded-xl border border-border-default bg-surface-app px-3.5 py-2 text-xs text-text-primary placeholder:text-text-tertiary focus:bg-white focus:outline-none focus:border-brand-blue-primary focus:ring-2 focus:ring-brand-blue-soft"
           />
-          <div className="flex gap-2">
+          <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto">
             <select
               suppressHydrationWarning
               value={statusFilter}
               onChange={(e) =>
                 onChangeStatusFilter(e.target.value as "ALL" | "MARKETPLACE" | OrderStatus)
               }
-              className="rounded-xl border border-border-default bg-surface-app px-3 py-2 text-xs font-semibold text-text-primary focus:bg-white focus:outline-none focus:border-brand-blue-primary focus:ring-2 focus:ring-brand-blue-soft"
+              className="min-w-0 w-full rounded-xl border border-border-default bg-surface-app px-3 py-2 text-xs font-semibold text-text-primary focus:bg-white focus:outline-none focus:border-brand-blue-primary focus:ring-2 focus:ring-brand-blue-soft sm:w-auto"
             >
               <option value="ALL">All States</option>
               <option value="MARKETPLACE">Studio Marketplace Orders</option>
@@ -146,7 +151,7 @@ export function OmsOrdersListPanel({
                 )
               }
               aria-label="Sort orders"
-              className="rounded-xl border border-border-default bg-surface-app px-3 py-2 text-xs font-semibold text-text-primary focus:bg-white focus:outline-none focus:border-brand-blue-primary focus:ring-2 focus:ring-brand-blue-soft"
+              className="min-w-0 w-full rounded-xl border border-border-default bg-surface-app px-3 py-2 text-xs font-semibold text-text-primary focus:bg-white focus:outline-none focus:border-brand-blue-primary focus:ring-2 focus:ring-brand-blue-soft sm:w-auto"
             >
               <option value="DATE_ASC">Earliest Date First</option>
               <option value="DATE_DESC">Latest Date First</option>
@@ -158,7 +163,15 @@ export function OmsOrdersListPanel({
       </header>
 
       <div className="flex-1 space-y-3 overflow-y-auto p-5">
-        {loading && orders.length === 0 ? (
+        {isRefreshing ? (
+          <div className="flex min-h-48 flex-col items-center justify-center gap-3 text-center" role="status" aria-live="polite">
+            <FocomanSpinner size="md" />
+            <div>
+              <p className="text-sm font-bold text-text-primary">Refreshing orders…</p>
+              <p className="mt-1 text-xs text-text-tertiary">Loading the newly registered order.</p>
+            </div>
+          </div>
+        ) : loading && orders.length === 0 ? (
           <div className="py-16 text-center text-xs text-text-tertiary">Loading orders from server...</div>
         ) : filtered.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-border-default bg-white p-12 text-center">
@@ -233,6 +246,11 @@ export function OmsOrdersListPanel({
               </div>
             </button>
           ))
+        )}
+        {refreshError && !isRefreshing && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-medium text-amber-900" role="alert">
+            {refreshError}
+          </div>
         )}
       </div>
     </div>
