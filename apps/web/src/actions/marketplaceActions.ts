@@ -46,6 +46,7 @@ import {
 } from "@focoman/types";
 import {
   performPreflightCheck,
+  performBasicPreflightCheck,
   generateResourceSuggestions,
   generateWorkflowTasks,
   getStudioTimestampIST,
@@ -481,13 +482,19 @@ async function convertBookingToCanonicalOrder(params: {
   const effectiveCustomerId = matchedCustomer ? matchedCustomer.id : customerId;
 
   const servicesList = [booking.packageName || booking.eventType];
-  const preflight = performPreflightCheck(
-    booking.eventDate,
-    booking.location.address,
-    servicesList,
-    studioOrders,
-    hasErp ? studioMembers : []
-  );
+  const preflight = hasErp
+    ? performPreflightCheck(
+        booking.eventDate,
+        booking.location.address,
+        servicesList,
+        studioOrders,
+        studioMembers
+      )
+    : performBasicPreflightCheck(
+        booking.eventDate,
+        booking.location.address,
+        studioOrders
+      );
 
   const suggestions = hasErp
     ? generateResourceSuggestions(

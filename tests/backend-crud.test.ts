@@ -11,6 +11,7 @@ import {
   generateWorkflowTasks,
   canConfirmBooking,
   performPreflightCheck,
+  performBasicPreflightCheck,
   generateResourceSuggestions,
   toCustomerOrderView,
   toCustomerTrackingView,
@@ -70,6 +71,13 @@ describe("ERP crew policy", () => {
   test("assigns Free workflow tasks to the Studio Owner across order creation paths", () => {
     assert.deepStrictEqual(getFreeWorkflowTaskAssignee(false, owner), owner);
     assert.strictEqual(getFreeWorkflowTaskAssignee(true, owner), undefined);
+  });
+
+  test("keeps Free pre-flight free of crew warnings and suggestions", () => {
+    const report = performBasicPreflightCheck("2030-01-01", "Chennai", []);
+    assert.deepStrictEqual(report.warnings, []);
+    assert.deepStrictEqual(report.suggestions, []);
+    assert.deepStrictEqual(report.resourceConflicts, []);
   });
 });
 

@@ -34,6 +34,7 @@ import {
 } from "@/lib/invitationPasscode";
 import {
   performPreflightCheck,
+  performBasicPreflightCheck,
   generateResourceSuggestions,
   generateWorkflowTasks,
   getStudioTimestampIST,
@@ -327,13 +328,15 @@ export async function convertLeadToOrderAction(params: {
     const eventDateVal = params.eventDate || lead.eventDate || now.split("T")[0];
     const locationVal = params.eventLocation || lead.location || studio?.city || "TBD";
 
-    const preflight = performPreflightCheck(
-      eventDateVal,
-      locationVal,
-      servicesList,
-      studioOrders,
-      hasErp ? studioMembers : []
-    );
+    const preflight = hasErp
+      ? performPreflightCheck(
+          eventDateVal,
+          locationVal,
+          servicesList,
+          studioOrders,
+          studioMembers
+        )
+      : performBasicPreflightCheck(eventDateVal, locationVal, studioOrders);
 
     const suggestions = hasErp
       ? generateResourceSuggestions(

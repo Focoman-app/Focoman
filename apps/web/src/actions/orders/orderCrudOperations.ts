@@ -8,6 +8,7 @@ import {
 import { CreateOrderSchema } from "@focoman/validation";
 import {
   generateResourceSuggestions,
+  performBasicPreflightCheck,
   generateWorkflowTasks,
   getStudioCalendarDate,
   getStudioTimestampIST,
@@ -99,13 +100,19 @@ export async function createOrderCore(rawInput: unknown): Promise<{
     );
     const effectiveCustomerId = matchedCustomer ? matchedCustomer.id : customerId;
 
-    const preflight = performPreflightCheck(
-      validated.eventDate,
-      validated.eventLocation || "",
-      validated.services,
-      studioOrders,
-      hasErp ? studioMembers : []
-    );
+    const preflight = hasErp
+      ? performPreflightCheck(
+          validated.eventDate,
+          validated.eventLocation || "",
+          validated.services,
+          studioOrders,
+          studioMembers
+        )
+      : performBasicPreflightCheck(
+          validated.eventDate,
+          validated.eventLocation || "",
+          studioOrders
+        );
     const suggestions = hasErp
       ? generateResourceSuggestions(
           validated.eventDate,
