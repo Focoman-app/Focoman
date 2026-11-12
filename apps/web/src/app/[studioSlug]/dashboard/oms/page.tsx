@@ -216,7 +216,7 @@ export default function OmsPage({
   }, [studioPackagesList]);
 
   const availableServices = useMemo(() => {
-    return studioServicesList;
+    return studioServicesList.filter((service) => service.enabled);
   }, [studioServicesList]);
 
   const calculateOrderPrice = useCallback(

@@ -1,9 +1,9 @@
 # OMS Reliability & Production Workflow Delivery Plan
 
-Status: approved for implementation on 2026-11-12.
+The completed OMS reliability delivery is recorded in [oms-001](tasks/oms-001.md). The proposed entitlement and experience delivery is defined in [analysis/oms-entitlement-and-ux-blueprint.md](analysis/oms-entitlement-and-ux-blueprint.md) and awaits studio-owner approval.
 
-This plan records the studio-owner-approved changes to confirmed-order registration, crew allocation, payment/billing, and production workflow. The implementation blueprint and interaction contract are in [analysis/oms-approved-workflow-blueprint.md](analysis/oms-approved-workflow-blueprint.md).
+Proposed tasks:
 
-Active task:
-
-- [oms-001](tasks/oms-001.md) — OMS reliability, billing, and production-flow implementation.
+- [oms-002](tasks/oms-002.md) — registration, package empty state, list refresh, and mobile filters.
+- [oms-003](tasks/oms-003.md) — ERP entitlement enforcement and Free task ownership.
+- [oms-004](tasks/oms-004.md) — Studio/Customer next-action status in OMS and tracking.

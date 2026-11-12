@@ -64,11 +64,11 @@ export function OmsCreateOrderModal({
   busyEventDates,
   hasCrm = true,
 }: OmsCreateOrderModalProps) {
-  if (!isOpen) return null;
   const [calendarMonth, setCalendarMonth] = useState(() => {
     const base = newOrderForm.eventDate ? new Date(`${newOrderForm.eventDate}T00:00:00`) : new Date();
     return new Date(base.getFullYear(), base.getMonth(), 1);
   });
+  const [isEventDatePickerOpen, setIsEventDatePickerOpen] = useState(false);
   const calendarDays = useMemo(() => {
     const first = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), 1);
     const pad = first.getDay();
@@ -76,6 +76,10 @@ export function OmsCreateOrderModal({
     return Array.from({ length: pad + count }, (_, index) => index < pad ? null : index - pad + 1);
   }, [calendarMonth]);
   const formatDate = (day: number) => `${calendarMonth.getFullYear()}-${String(calendarMonth.getMonth() + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  const today = new Date();
+  const todayValue = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs overflow-y-auto">
@@ -252,23 +256,6 @@ export function OmsCreateOrderModal({
                   }
                   className="mt-1 w-full rounded-xl border border-border-default px-3.5 py-2 text-xs outline-none focus:border-brand-blue-primary focus:ring-1 focus:ring-brand-blue-primary"
                 />
-                <div className="mt-2 rounded-xl border border-border-default bg-surface-app/50 p-2.5">
-                  <div className="mb-2 flex items-center justify-between text-[10px] font-bold text-text-secondary">
-                    <button type="button" disabled={isSubmitting} onClick={() => setCalendarMonth((month) => new Date(month.getFullYear(), month.getMonth() - 1, 1))} className="rounded px-1.5 py-0.5 hover:bg-white disabled:opacity-50" aria-label="Previous month">‹</button>
-                    <span>{calendarMonth.toLocaleDateString("en-IN", { month: "long", year: "numeric" })}</span>
-                    <button type="button" disabled={isSubmitting} onClick={() => setCalendarMonth((month) => new Date(month.getFullYear(), month.getMonth() + 1, 1))} className="rounded px-1.5 py-0.5 hover:bg-white disabled:opacity-50" aria-label="Next month">›</button>
-                  </div>
-                  <div className="grid grid-cols-7 gap-1 text-center text-[9px] text-text-tertiary">{["S", "M", "T", "W", "T", "F", "S"].map((day, index) => <span key={`${day}-${index}`}>{day}</span>)}</div>
-                  <div className="mt-1 grid grid-cols-7 gap-1">
-                    {calendarDays.map((day, index) => day === null ? <span key={`pad-${index}`} /> : (() => {
-                      const value = formatDate(day);
-                      const busy = busyEventDates.includes(value);
-                      const selected = newOrderForm.eventDate === value;
-                      return <button key={value} type="button" disabled={isSubmitting} onClick={() => setNewOrderForm({ ...newOrderForm, eventDate: value })} title={busy ? "This studio already has an event on this date" : "Select event date"} className={`h-6 rounded text-[10px] font-semibold transition ${selected ? "bg-brand-blue-primary text-white" : busy ? "bg-amber-100 text-amber-900 ring-1 ring-amber-300 hover:bg-amber-200" : "text-text-primary hover:bg-white"}`}>{day}</button>;
-                    })())}
-                  </div>
-                  <p className="mt-2 text-[9px] text-text-tertiary"><span className="mr-1 inline-block h-2 w-2 rounded-sm bg-amber-200 align-middle" />Highlighted dates already have studio events; they remain selectable after review.</p>
-                </div>
               </div>
             </div>
 
@@ -378,28 +365,60 @@ export function OmsCreateOrderModal({
                 )}
               </div>
 
-              <div>
+              <div className="relative">
                 <label
                   htmlFor="register-order-event-date"
                   className="block text-xs font-bold text-text-primary cursor-pointer"
                 >
                   Event Date *
                 </label>
-                <input
+                <button
                   id="register-order-event-date"
-                  type="date"
-                  required
-                  value={newOrderForm.eventDate}
-                  onChange={(e) =>
-                    setNewOrderForm({ ...newOrderForm, eventDate: e.target.value })
-                  }
-                  onClick={(e) => {
-                    try {
-                      e.currentTarget.showPicker?.();
-                    } catch {}
+                  type="button"
+                  disabled={isSubmitting}
+                  aria-haspopup="dialog"
+                  aria-expanded={isEventDatePickerOpen}
+                  onClick={() => {
+                    const base = newOrderForm.eventDate
+                      ? new Date(`${newOrderForm.eventDate}T00:00:00`)
+                      : new Date();
+                    setCalendarMonth(new Date(base.getFullYear(), base.getMonth(), 1));
+                    setIsEventDatePickerOpen((open) => !open);
                   }}
-                  className="mt-1 w-full rounded-xl border border-border-default px-3.5 py-2 text-xs outline-none focus:border-brand-blue-primary focus:ring-1 focus:ring-brand-blue-primary cursor-pointer [&::-webkit-calendar-picker-indicator]:cursor-pointer"
-                />
+                  className="mt-1 flex w-full items-center justify-between rounded-xl border border-border-default bg-white px-3.5 py-2 text-left text-xs outline-none transition focus:border-brand-blue-primary focus:ring-1 focus:ring-brand-blue-primary disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <span className={newOrderForm.eventDate ? "text-text-primary" : "text-text-tertiary"}>
+                    {newOrderForm.eventDate || "Choose event date"}
+                  </span>
+                  <span className="text-base leading-none text-text-tertiary" aria-hidden="true">⌄</span>
+                </button>
+
+                {isEventDatePickerOpen && (
+                  <div
+                    role="dialog"
+                    aria-label="Choose event date"
+                    className="absolute z-30 mt-1.5 w-full rounded-2xl border border-border-default bg-white p-3 shadow-xl animate-in fade-in duration-100"
+                  >
+                    <div className="mb-2 flex items-center justify-between text-[10px] font-bold text-text-secondary">
+                      <button type="button" disabled={isSubmitting} onClick={() => setCalendarMonth((month) => new Date(month.getFullYear(), month.getMonth() - 1, 1))} className="rounded px-1.5 py-0.5 hover:bg-surface-app disabled:opacity-50" aria-label="Previous month">‹</button>
+                      <span>{calendarMonth.toLocaleDateString("en-IN", { month: "long", year: "numeric" })}</span>
+                      <button type="button" disabled={isSubmitting} onClick={() => setCalendarMonth((month) => new Date(month.getFullYear(), month.getMonth() + 1, 1))} className="rounded px-1.5 py-0.5 hover:bg-surface-app disabled:opacity-50" aria-label="Next month">›</button>
+                    </div>
+                    <div className="grid grid-cols-7 gap-1 text-center text-[9px] text-text-tertiary">{["S", "M", "T", "W", "T", "F", "S"].map((day, index) => <span key={`${day}-${index}`}>{day}</span>)}</div>
+                    <div className="mt-1 grid grid-cols-7 gap-1">
+                      {calendarDays.map((day, index) => day === null ? <span key={`pad-${index}`} /> : (() => {
+                        const value = formatDate(day);
+                        const busy = busyEventDates.includes(value);
+                        const selected = newOrderForm.eventDate === value;
+                        const isToday = todayValue === value;
+                        return <button key={value} type="button" disabled={isSubmitting} onClick={() => { setNewOrderForm({ ...newOrderForm, eventDate: value }); setIsEventDatePickerOpen(false); }} title={busy ? "This studio already has an event on this date" : isToday ? "Today" : "Select event date"} className={`relative flex h-9 flex-col items-center justify-center rounded text-[10px] font-semibold transition ${selected ? "bg-brand-blue-primary text-white" : isToday ? "bg-brand-blue-50 text-brand-blue-primary ring-1 ring-brand-blue-soft hover:bg-brand-blue-100" : busy ? "bg-amber-50 text-amber-900 ring-1 ring-amber-200 hover:bg-amber-100" : "text-text-primary hover:bg-surface-app"}`}>
+                          <span>{day}</span>{isToday && <span className="text-[7px] leading-none">Today</span>}{busy && <span className="absolute right-0.5 top-0 text-[8px] leading-none" aria-label="Existing studio event">★</span>}
+                        </button>;
+                      })())}
+                    </div>
+                    <p className="mt-2 text-[9px] text-text-tertiary"><span className="mr-1 text-amber-600">★</span>Existing studio event — dates remain selectable after review.</p>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -484,7 +503,10 @@ export function OmsCreateOrderModal({
                     if (e.key === "Enter") {
                       e.preventDefault();
                       const custom = newOrderForm.customServiceInput.trim();
-                      if (custom && !newOrderForm.services.includes(custom)) {
+                      const isConfiguredService = studioServicesList.some(
+                        (service) => service.name.toLowerCase() === custom.toLowerCase()
+                      );
+                      if (custom && !isConfiguredService && !newOrderForm.services.includes(custom)) {
                         const nextServices = [...newOrderForm.services, custom];
                         const autoPrice = calculateOrderPrice(
                           nextServices,
@@ -590,7 +612,7 @@ export function OmsCreateOrderModal({
                       {newOrderForm.services
                         .filter(
                           (s) =>
-                            !availableServices.some(
+                            !studioServicesList.some(
                               (svc) => svc.name.toLowerCase() === s.toLowerCase()
                             )
                         )
@@ -615,7 +637,7 @@ export function OmsCreateOrderModal({
                         ))}
 
                       {newOrderForm.customServiceInput.trim() &&
-                        !availableServices.some(
+                        !studioServicesList.some(
                           (s) =>
                             s.name.toLowerCase() ===
                             newOrderForm.customServiceInput.trim().toLowerCase()
