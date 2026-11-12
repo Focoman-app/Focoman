@@ -41,6 +41,7 @@ import { getStudioServicesAction, updateStudioAction } from "@/actions/studioAct
 import { getStudioLeadsAction } from "@/actions/leadActions";
 import { DEFAULT_STUDIO_SERVICES } from "@/lib/studioServices";
 import { uploadPaymentProof } from "@/lib/paymentProofUpload";
+import { getEffectiveStudioFeatures } from "@/lib/proEntitlements";
 import { useStudioWorkspace } from "@/components/StudioWorkspaceProvider";
 import { AddCrewMemberModal } from "@/components/AddCrewMemberModal";
 import { OrderVerticalWorkflow } from "@/components/workflow/OrderVerticalWorkflow";
@@ -78,7 +79,11 @@ export default function OmsPage({
     getIdToken,
   } = useStudioWorkspace();
   const hasCrm = Boolean(studio?.features?.crm);
-  const hasErp = Boolean(studio?.features?.erp);
+  const hasErp = getEffectiveStudioFeatures(
+    studio?.ownerEmail,
+    studio?.features,
+    studio?.planInfo
+  ).erp;
   const hasDriveReview = Boolean(studio?.features?.driveReview);
   const [orders, setOrders] = useState<Order[]>([]);
   const [omsSection, setOmsSection] = useState<"ORDERS" | "LEADS">("ORDERS");
