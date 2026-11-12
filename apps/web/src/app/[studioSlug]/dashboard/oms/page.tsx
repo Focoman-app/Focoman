@@ -1489,8 +1489,8 @@ export default function OmsPage({
             }
           }}
           getIdToken={getIdToken}
-          onRefreshAll={() => {
-            void loadOrders(workspaceToken);
+          onRefreshAll={async () => {
+            await loadOrders(workspaceToken);
           }}
         />
       ) : (
