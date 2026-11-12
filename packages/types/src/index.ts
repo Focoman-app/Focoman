@@ -303,6 +303,7 @@ export interface CustomerTrackingView {
     studioLogoUrl?: string;
     studioCity?: string;
     studioPhone?: string;
+    hasErp?: boolean;
     studioBillingProfile?: StudioBillingProfile;
     customerName: string;
     customerEmail?: string;

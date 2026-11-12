@@ -300,6 +300,7 @@ export function toCustomerTrackingView(
     studioLogoUrl?: string;
     studioCity?: string;
     studioPhone?: string;
+    hasErp?: boolean;
     studioBillingProfile?: CustomerTrackingView['order']['studioBillingProfile'];
     staffEmails?: string[];
     staffUids?: string[];
@@ -320,6 +321,7 @@ export function toCustomerTrackingView(
       studioLogoUrl: studioInfo?.studioLogoUrl,
       studioCity: studioInfo?.studioCity,
       studioPhone: studioInfo?.studioPhone,
+      hasErp: studioInfo?.hasErp,
       studioBillingProfile: studioInfo?.studioBillingProfile,
       customerName: order.customer.name,
       customerEmail: order.customer.email,

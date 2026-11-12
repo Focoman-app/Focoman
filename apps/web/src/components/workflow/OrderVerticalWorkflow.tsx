@@ -566,7 +566,7 @@ export function OrderVerticalWorkflow({
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between text-[11px] font-bold text-text-tertiary uppercase tracking-wider">
                     <span>Booked Services</span>
-                    <span>{isOms ? "Assigned Shoot Crew" : "Shoot Readiness"}</span>
+                    <span>{isOms && hasErp ? "Assigned Shoot Crew" : "Shoot Readiness"}</span>
                   </div>
 
                   {services.length === 0 ? (
@@ -620,7 +620,7 @@ export function OrderVerticalWorkflow({
                             </div>
 
                             {/* Crew Assignment Control for OMS */}
-                            {isOms ? (
+                            {isOms && hasErp ? (
                               <div className="flex items-center gap-2 flex-wrap">
                                 {!isEditingThis ? (
                                   <>
@@ -741,7 +741,7 @@ export function OrderVerticalWorkflow({
                                   </div>
                                 )}
                               </div>
-                            ) : (
+                            ) : !isOms && hasErp ? (
                               /* Customer-Safe Read-Only View (No private wages or staff emails) */
                               <div className="flex items-center gap-1.5 text-xs">
                                 <span
@@ -763,7 +763,7 @@ export function OrderVerticalWorkflow({
                                     : "Unassigned"}
                                 </span>
                               </div>
-                            )}
+                            ) : null}
                           </div>
                         );
                       })}
@@ -1299,6 +1299,7 @@ export function OrderVerticalWorkflow({
       : isRework
       ? "Corrections requested"
       : isRawSelection ? "Preparing photo selection" : "Assigned";
+    const nextActionOwner = isDone ? null : isReview ? "Customer" : "Studio";
 
     return (
       <div
@@ -1321,13 +1322,24 @@ export function OrderVerticalWorkflow({
             <span className={`rounded px-1.5 py-0.2 text-[9px] font-bold border ${statusBadgeStyle}`}>
               {statusLabel}
             </span>
+            {nextActionOwner && (
+              <span
+                className={`rounded px-1.5 py-0.2 text-[9px] font-bold border ${
+                  nextActionOwner === "Customer"
+                    ? "border-purple-200 bg-purple-50 text-purple-800"
+                    : "border-brand-blue-soft bg-brand-blue-50 text-brand-blue-primary"
+                }`}
+              >
+                Next action: {nextActionOwner}
+              </span>
+            )}
             {isOms && (
               <span className={`rounded px-1.5 py-0.2 text-[9px] font-bold border ${taskAge.colorClass}`}>
                 {taskAge.label}
               </span>
             )}
           </div>
-          {isOms && (
+          {isOms && hasErp && (
             <div className="flex items-center gap-1.5 mt-1 flex-wrap">
               <span className="text-[10px] text-text-tertiary">Crew:</span>
               {editingTaskCrewId === task.id ? (

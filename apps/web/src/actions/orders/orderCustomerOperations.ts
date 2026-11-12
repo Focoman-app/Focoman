@@ -27,6 +27,7 @@ import {
 } from "@/lib/serverAuth";
 import { dispatchOrderStageWhatsAppNotification } from "@/services/whatsappService";
 import { sendPipelineStatusUpdateEmail } from "@/services/emailService";
+import { getEffectiveStudioFeatures } from "@/lib/proEntitlements";
 
 export async function getOrderByPasskeyCore(passkey: string): Promise<{
   success: boolean;
@@ -101,6 +102,11 @@ export async function getOrderByPasskeyCore(passkey: string): Promise<{
       studioLogoUrl: studio?.logoUrl,
       studioCity: studio?.city,
       studioPhone: studio?.ownerPhone,
+      hasErp: getEffectiveStudioFeatures(
+        studio?.ownerEmail,
+        studio?.features,
+        studio?.planInfo
+      ).erp,
       studioBillingProfile: studio?.billingProfile,
       staffEmails: Array.from(new Set(staffEmails)),
       staffUids: Array.from(new Set(staffUids)),

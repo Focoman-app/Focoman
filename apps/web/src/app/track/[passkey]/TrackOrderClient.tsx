@@ -981,6 +981,7 @@ export function TrackOrderClient({ view, rawIdentifier }: TrackOrderClientProps)
               order={order}
               tasks={tasks}
               variant="tracking"
+              hasErp={Boolean(order.hasErp)}
             />
           </div>
         </div>
