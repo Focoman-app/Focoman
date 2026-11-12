@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-import Link from "next/link";
+import { FocomanSpinner } from "@/components/FocomanSpinner";
 import type {
   Customer,
   StudioPackage,
@@ -12,7 +12,6 @@ import { PRESET_EVENT_TYPES, type NewOrderFormState } from "./omsConstants";
 interface OmsCreateOrderModalProps {
   isOpen: boolean;
   onClose: () => void;
-  studioSlug: string;
   newOrderForm: NewOrderFormState;
   setNewOrderForm: React.Dispatch<React.SetStateAction<NewOrderFormState>>;
   formError: string | null;
@@ -40,7 +39,6 @@ interface OmsCreateOrderModalProps {
 export function OmsCreateOrderModal({
   isOpen,
   onClose,
-  studioSlug,
   newOrderForm,
   setNewOrderForm,
   formError,
@@ -442,38 +440,37 @@ export function OmsCreateOrderModal({
             </div>
 
             {/* Studio Package / Combo Quick Selector */}
-            {activeStudioPackages.length > 0 && (
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="block text-xs font-bold text-text-primary">
-                    Package / Combo{" "}
-                    <span className="font-normal text-text-tertiary">(Optional)</span>
-                  </label>
-                  <Link
-                    href={`/${studioSlug}/dashboard/services`}
-                    target="_blank"
-                    className="text-[10px] text-brand-blue-primary font-semibold hover:underline"
-                  >
-                    Manage Catalog ↗
-                  </Link>
-                </div>
-                <select
-                  value={selectedPackageId}
-                  onChange={(e) => onSelectPackage(e.target.value)}
-                  className="w-full rounded-xl border border-brand-blue-soft bg-brand-blue-50/50 px-3.5 py-2 text-xs font-semibold text-text-primary outline-none focus:border-brand-blue-primary focus:ring-1 focus:ring-brand-blue-primary"
-                >
-                  <option value="">
-                    -- Custom Order (Choose Services Below) --
-                  </option>
-                  {activeStudioPackages.map((pkg) => (
-                    <option key={pkg.id} value={pkg.id}>
-                      {pkg.name} — ₹{pkg.price.toLocaleString("en-IN")} (
-                      {pkg.services.length} services)
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
+            <div>
+              <label className="mb-1 block text-xs font-bold text-text-primary">
+                Package / Combo{" "}
+                <span className="font-normal text-text-tertiary">(Optional)</span>
+              </label>
+              <select
+                value={selectedPackageId}
+                disabled={activeStudioPackages.length === 0 || isSubmitting}
+                onChange={(e) => onSelectPackage(e.target.value)}
+                className="w-full rounded-xl border border-brand-blue-soft bg-brand-blue-50/50 px-3.5 py-2 text-xs font-semibold text-text-primary outline-none focus:border-brand-blue-primary focus:ring-1 focus:ring-brand-blue-primary disabled:cursor-not-allowed disabled:border-border-default disabled:bg-surface-app disabled:text-text-tertiary"
+              >
+                {activeStudioPackages.length === 0 ? (
+                  <option value="">No packages configured</option>
+                ) : (
+                  <>
+                    <option value="">-- Custom Order (Choose Services Below) --</option>
+                    {activeStudioPackages.map((pkg) => (
+                      <option key={pkg.id} value={pkg.id}>
+                        {pkg.name} — ₹{pkg.price.toLocaleString("en-IN")} (
+                        {pkg.services.length} services)
+                      </option>
+                    ))}
+                  </>
+                )}
+              </select>
+              {activeStudioPackages.length === 0 && (
+                <p className="mt-1 text-[10px] text-text-tertiary">
+                  No packages configured. Manage catalog to add one.
+                </p>
+              )}
+            </div>
 
             {/* Studio Services and Deliverables Dropdown with Multi-Select */}
             <div className="flex flex-col">
@@ -899,7 +896,12 @@ export function OmsCreateOrderModal({
               }
               className="btn-brand-blue disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {isSubmitting ? "Creating..." : "Confirm and Save Order"}
+              {isSubmitting ? (
+                <>
+                  <FocomanSpinner size="xs" />
+                  <span>Registering…</span>
+                </>
+              ) : "Confirm and Save Order"}
             </button>
           </div>
         </form>
@@ -907,7 +909,7 @@ export function OmsCreateOrderModal({
       {isSubmitting && (
         <div className="absolute inset-0 z-20 flex items-center justify-center rounded-3xl bg-white/95 p-6 text-center" role="status" aria-live="polite">
           <div className="space-y-3">
-            <div className="mx-auto h-9 w-9 animate-spin rounded-full border-4 border-brand-blue-soft border-t-brand-blue-primary" />
+            <FocomanSpinner size="md" className="mx-auto" />
             <div><p className="text-sm font-bold text-text-primary">Registering confirmed order…</p><p className="mt-1 text-xs text-text-secondary">Saving the order and preparing its workflow.</p></div>
           </div>
         </div>

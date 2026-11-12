@@ -99,6 +99,8 @@ export default function OmsPage({
   >("DATE_ASC");
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
+  const [isOrdersRefreshing, setIsOrdersRefreshing] = useState(false);
+  const [ordersRefreshError, setOrdersRefreshError] = useState<string | null>(null);
   const [copiedField, setCopiedField] = useState<"code" | "link" | null>(null);
   const [origin, setOrigin] = useState("");
 
@@ -489,7 +491,7 @@ export default function OmsPage({
           tokenOverride ?? (await getIdToken(false)) ?? workspaceToken;
         if (!token) {
           setLoading(false);
-          return;
+          return false;
         }
         const [data, customersData, membersData, servicesRes, leadsRes] =
           await Promise.all([
@@ -514,8 +516,10 @@ export default function OmsPage({
             setStudioPackagesList(servicesRes.packages);
           }
         }
+        return true;
       } catch (err) {
         console.error("[OmsPage] Failed to load orders:", err);
+        return false;
       } finally {
         setLoading(false);
       }
@@ -652,7 +656,13 @@ export default function OmsPage({
         ...DEFAULT_ORDER_FORM,
         passkeyPin: Math.floor(100000 + Math.random() * 900000).toString(),
       });
-      await loadOrders();
+      setOrdersRefreshError(null);
+      setIsOrdersRefreshing(true);
+      const refreshed = await loadOrders();
+      setIsOrdersRefreshing(false);
+      if (!refreshed) {
+        setOrdersRefreshError("Order was registered, but the order list could not be refreshed. Please refresh the page to confirm it.");
+      }
       setSelectedId(res.order.id);
       if (res.tasks) setSelectedTasks(res.tasks);
     } else {
@@ -1479,7 +1489,9 @@ export default function OmsPage({
             }
           }}
           getIdToken={getIdToken}
-          onRefreshAll={() => loadOrders(workspaceToken)}
+          onRefreshAll={() => {
+            void loadOrders(workspaceToken);
+          }}
         />
       ) : (
         <>
@@ -1491,6 +1503,8 @@ export default function OmsPage({
             selectedId={selectedId}
             onSelectOrder={setSelectedId}
             loading={loading}
+            isRefreshing={isOrdersRefreshing}
+            refreshError={ordersRefreshError}
             query={query}
             onChangeQuery={setQuery}
             statusFilter={statusFilter}
@@ -1718,7 +1732,6 @@ export default function OmsPage({
       <OmsCreateOrderModal
         isOpen={showCreateModal}
         onClose={() => setShowCreateModal(false)}
-        studioSlug={studioSlug}
         newOrderForm={newOrderForm}
         setNewOrderForm={setNewOrderForm}
         formError={formError}
