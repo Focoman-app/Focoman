@@ -18,6 +18,7 @@ import {
   requireVerifiedUser,
 } from "@/lib/serverAuth";
 import { sendCrewShootAssignedEmail } from "@/services/emailService";
+import { requireCapability } from "@/lib/entitlementAuth";
 import { findActiveMemberRecord } from "./orderAccessHelpers";
 
 /**
@@ -33,6 +34,7 @@ export async function saveServiceCrewAssignmentsCore(rawInput: unknown): Promise
     const input = SaveServiceCrewAssignmentsSchema.parse(rawInput);
     const decoded = await requireVerifiedUser(input.idToken);
     await requireStudioOwner(decoded.uid, input.studioId);
+    await requireCapability(input.studioId, "STUDIO_ERP");
 
     const order = await getOrderById(input.orderId);
     if (!order || order.studioId.toLowerCase() !== input.studioId.toLowerCase()) {
@@ -124,6 +126,7 @@ export async function assignResourceCore(rawInput: unknown): Promise<{
     const decoded = await requireVerifiedUser(token);
     if (targetStudioId) {
       await requireStudioOwner(decoded.uid, targetStudioId);
+      await requireCapability(targetStudioId, "STUDIO_ERP");
     }
 
     if (targetStudioId && existingOrder.studioId.toLowerCase() !== targetStudioId) {
@@ -270,6 +273,7 @@ export async function assignTaskCrewCore(rawInput: {
     }
 
     await requireStudioMember(decoded.uid, studioId, "STUDIO_OWNER");
+    await requireCapability(studioId, "STUDIO_ERP");
 
     const updatedTask = await updateTask(rawInput.taskId, {
       assignedMemberId: rawInput.memberId,
@@ -369,6 +373,7 @@ export async function confirmResourceAvailabilityCore(
     }
     const targetStudioId = studioId || existingOrder.studioId;
     const membership = await requireStudioMember(decoded.uid, targetStudioId);
+    await requireCapability(targetStudioId, "STUDIO_ERP");
 
     if (existingOrder.studioId !== targetStudioId.toLowerCase()) {
       return { success: false, error: "Unauthorized: Order belongs to another studio." };
@@ -438,6 +443,7 @@ export async function updateAssignmentCallTimeCore(input: {
   try {
     const decoded = await requireVerifiedUser(input.idToken);
     await requireStudioOwner(decoded.uid, input.studioId);
+    await requireCapability(input.studioId, "STUDIO_ERP");
 
     const existingOrder = await getOrderById(input.orderId);
     if (!existingOrder || existingOrder.studioId.toLowerCase() !== input.studioId.toLowerCase()) {
