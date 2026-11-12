@@ -44,6 +44,34 @@ import {
   verifyInvitationPasscode,
 } from "../apps/web/src/lib/invitationPasscode.ts";
 import { shouldUseSameOriginAuthDomain } from "../apps/web/src/lib/firebaseAuthDomain.ts";
+import {
+  getFreeWorkflowTaskAssignee,
+  requiresErpForCrewMutation,
+} from "../apps/web/src/lib/erpCrewPolicy.ts";
+
+describe("ERP crew policy", () => {
+  const owner = { memberId: "owner-1", memberName: "Studio Owner" };
+
+  test("rejects a Free-plan crew assignment attempt", () => {
+    assert.strictEqual(
+      requiresErpForCrewMutation(false, { assignedMemberId: "crew-1", assignedMemberName: "Crew" }),
+      true,
+    );
+  });
+
+  test("allows non-assignment Free task updates and ERP crew mutations", () => {
+    assert.strictEqual(requiresErpForCrewMutation(false, {}), false);
+    assert.strictEqual(
+      requiresErpForCrewMutation(true, { assignedMemberId: "crew-1", assignedMemberName: "Crew" }),
+      false,
+    );
+  });
+
+  test("assigns Free workflow tasks to the Studio Owner across order creation paths", () => {
+    assert.deepStrictEqual(getFreeWorkflowTaskAssignee(false, owner), owner);
+    assert.strictEqual(getFreeWorkflowTaskAssignee(true, owner), undefined);
+  });
+});
 
 describe("Firebase same-origin redirect auth domain", () => {
   test("uses the app origin for a development Cloudflare Quick Tunnel", () => {

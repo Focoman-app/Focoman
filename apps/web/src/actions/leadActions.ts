@@ -44,6 +44,8 @@ import {
   requireStudioMember,
   requireStudioOwner,
 } from "@/lib/serverAuth";
+import { hasStudioCapability } from "@/lib/entitlementAuth";
+import { getFreeWorkflowTaskAssignee } from "@/lib/erpCrewPolicy";
 
 function generateStudioLeadId(studioId: string, now = new Date()): string {
   const studioPrefix = prefixLetters(studioId);
@@ -299,11 +301,12 @@ export async function convertLeadToOrderAction(params: {
     const passkeyPin = generateSixDigitPasskeyPin();
     const studioPrefix = prefixLetters(cleanSlug);
 
-    const [studioOrders, studioMembers, existingCustomers, studio] = await Promise.all([
+    const [studioOrders, studioMembers, existingCustomers, studio, hasErp] = await Promise.all([
       getOrdersByStudio(cleanSlug),
       getMembersByStudio(cleanSlug),
       getCustomersByStudio(cleanSlug),
       getStudioBySlug(cleanSlug),
+      hasStudioCapability(cleanSlug, "STUDIO_ERP"),
     ]);
 
     const customerPhone = lead.phone?.trim() || undefined;
@@ -329,17 +332,19 @@ export async function convertLeadToOrderAction(params: {
       locationVal,
       servicesList,
       studioOrders,
-      studioMembers
+      hasErp ? studioMembers : []
     );
 
-    const suggestions = generateResourceSuggestions(
-      eventDateVal,
-      ["PHOTOGRAPHY", "VIDEOGRAPHY", "ALBUM_DESIGN", "PHOTO_EDITING"],
-      studioMembers,
-      []
-    );
+    const suggestions = hasErp
+      ? generateResourceSuggestions(
+          eventDateVal,
+          ["PHOTOGRAPHY", "VIDEOGRAPHY", "ALBUM_DESIGN", "PHOTO_EDITING"],
+          studioMembers,
+          []
+        )
+      : [];
 
-    const autoAssignEnabled = studio?.features?.autoAssignCrew !== false;
+    const autoAssignEnabled = hasErp && studio?.features?.autoAssignCrew !== false;
     const assignedResources: ResourceAssignment[] = [];
     if (autoAssignEnabled) {
       const usedMembers = new Set<string>();
@@ -416,6 +421,10 @@ export async function convertLeadToOrderAction(params: {
       updatedAt: now,
     };
 
+    const studioOwner = getFreeWorkflowTaskAssignee(hasErp, {
+      memberId: studio?.ownerId || decoded.uid,
+      memberName: studio?.ownerName || decoded.name || decoded.email || "Studio Owner",
+    });
     const workflowTasks: Task[] = generateWorkflowTasks(orderId, cleanSlug, newOrder.services).map((t, idx) => {
       const { dateStamp, timeStamp } = generateTimestampDigits(nowDate);
       const seqSuffix = String(idx + 1).padStart(2, "0");
@@ -426,8 +435,8 @@ export async function convertLeadToOrderAction(params: {
       return {
         ...t,
         id: `TSK-${studioPrefix}-${dateStamp}-${timeStamp}-${seqSuffix}`,
-        assignedMemberId: matchedCrew?.memberId || t.assignedMemberId || "",
-        assignedMemberName: matchedCrew?.memberName || t.assignedMemberName || "Unassigned",
+        assignedMemberId: matchedCrew?.memberId || studioOwner?.memberId || t.assignedMemberId || "",
+        assignedMemberName: matchedCrew?.memberName || studioOwner?.memberName || t.assignedMemberName || "Unassigned",
         createdAt: now,
         updatedAt: now,
         isDeleted: false,

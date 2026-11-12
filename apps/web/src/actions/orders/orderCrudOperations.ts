@@ -46,6 +46,7 @@ import {
 } from "@/lib/serverAuth";
 import { sendOrderConfirmedCustomerEmail } from "@/services/emailService";
 import { hasStudioCapability } from "@/lib/entitlementAuth";
+import { getFreeWorkflowTaskAssignee } from "@/lib/erpCrewPolicy";
 import { requireAssignedOrderAccess } from "./orderAccessHelpers";
 
 export async function createOrderCore(rawInput: unknown): Promise<{
@@ -207,12 +208,10 @@ export async function createOrderCore(rawInput: unknown): Promise<{
       updatedAt: nowIso,
     };
 
-    const studioOwner = !hasErp
-      ? {
-          memberId: studio?.ownerId || decoded.uid,
-          memberName: studio?.ownerName || decoded.name || decoded.email || "Studio Owner",
-        }
-      : undefined;
+    const studioOwner = getFreeWorkflowTaskAssignee(hasErp, {
+      memberId: studio?.ownerId || decoded.uid,
+      memberName: studio?.ownerName || decoded.name || decoded.email || "Studio Owner",
+    });
     const workflowTasks = generateWorkflowTasks(orderId, validated.studioId, validated.services).map(
       (t, idx) => {
         const { dateStamp, timeStamp } = generateTimestampDigits(now);

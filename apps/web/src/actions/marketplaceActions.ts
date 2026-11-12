@@ -2,7 +2,8 @@
 
 import { randomBytes, randomUUID } from "crypto";
 import { requireVerifiedUser, requireStudioOwner } from "@/lib/serverAuth";
-import { requireCapability } from "@/lib/entitlementAuth";
+import { hasStudioCapability, requireCapability } from "@/lib/entitlementAuth";
+import { getFreeWorkflowTaskAssignee } from "@/lib/erpCrewPolicy";
 import {
   getMarketplaceProfile,
   upsertMarketplaceProfile,
@@ -461,11 +462,12 @@ async function convertBookingToCanonicalOrder(params: {
   const passkeyPin = generateSixDigitPasskeyPin();
   const studioPrefix = prefixLetters(studioId);
 
-  const [studioOrders, studioMembers, existingCustomers, studio] = await Promise.all([
+  const [studioOrders, studioMembers, existingCustomers, studio, hasErp] = await Promise.all([
     getOrdersByStudio(studioId),
     getMembersByStudio(studioId),
     getCustomersByStudio(studioId),
     getStudioBySlug(studioId),
+    hasStudioCapability(studioId, "STUDIO_ERP"),
   ]);
 
   const customerPhone = booking.customerPhone?.trim() || undefined;
@@ -484,17 +486,19 @@ async function convertBookingToCanonicalOrder(params: {
     booking.location.address,
     servicesList,
     studioOrders,
-    studioMembers
+    hasErp ? studioMembers : []
   );
 
-  const suggestions = generateResourceSuggestions(
-    booking.eventDate,
-    ["PHOTOGRAPHY", "VIDEOGRAPHY", "ALBUM_DESIGN", "PHOTO_EDITING"],
-    studioMembers,
-    []
-  );
+  const suggestions = hasErp
+    ? generateResourceSuggestions(
+        booking.eventDate,
+        ["PHOTOGRAPHY", "VIDEOGRAPHY", "ALBUM_DESIGN", "PHOTO_EDITING"],
+        studioMembers,
+        []
+      )
+    : [];
 
-  const autoAssignEnabled = studio?.features?.autoAssignCrew !== false;
+  const autoAssignEnabled = hasErp && studio?.features?.autoAssignCrew !== false;
   const assignedResources: ResourceAssignment[] = [];
   if (autoAssignEnabled) {
     const usedMembers = new Set<string>();
@@ -592,6 +596,10 @@ async function convertBookingToCanonicalOrder(params: {
     updatedAt: now,
   };
 
+  const studioOwner = getFreeWorkflowTaskAssignee(hasErp, {
+    memberId: studio?.ownerId || "",
+    memberName: studio?.ownerName || actorName || "Studio Owner",
+  });
   const workflowTasks: Task[] = generateWorkflowTasks(orderId, studioId, newOrder.services).map((t, idx) => {
     const { dateStamp, timeStamp } = generateTimestampDigits(nowDate);
     const seqSuffix = String(idx + 1).padStart(2, "0");
@@ -602,8 +610,8 @@ async function convertBookingToCanonicalOrder(params: {
     return {
       ...t,
       id: `TSK-${studioPrefix}-${dateStamp}-${timeStamp}-${seqSuffix}`,
-      assignedMemberId: matchedCrew?.memberId || t.assignedMemberId || "",
-      assignedMemberName: matchedCrew?.memberName || t.assignedMemberName || "Unassigned",
+      assignedMemberId: matchedCrew?.memberId || studioOwner?.memberId || t.assignedMemberId || "",
+      assignedMemberName: matchedCrew?.memberName || studioOwner?.memberName || t.assignedMemberName || "Unassigned",
       createdAt: now,
       updatedAt: now,
       isDeleted: false,
