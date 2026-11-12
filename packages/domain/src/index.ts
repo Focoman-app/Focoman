@@ -130,6 +130,43 @@ export function performPreflightCheck(
 }
 
 /**
+ * Free OMS pre-flight retains real event-date and location checks without
+ * introducing ERP crew terminology, matching, or resource suggestions.
+ */
+export function performBasicPreflightCheck(
+  eventDateISO: string,
+  locationAddress: string,
+  existingStudioOrders: Order[]
+): PreflightConflictReport {
+  const warnings: string[] = [];
+  const eventDateConflicts = existingStudioOrders
+    .filter(o => !o.isDeleted && o.orderStatus !== 'CANCELLED' && o.eventDate === eventDateISO)
+    .map(o => ({
+      orderId: o.id,
+      orderNumber: o.orderNumber,
+      eventType: o.eventType,
+    }));
+
+  if (eventDateConflicts.length > 0) {
+    warnings.push(
+      `Studio already has ${eventDateConflicts.length} active event(s) booked on ${eventDateISO}.`
+    );
+  }
+  if (!locationAddress || locationAddress.trim().length === 0) {
+    warnings.push('Event location address is incomplete.');
+  }
+
+  return {
+    hasConflicts: eventDateConflicts.length > 0 || warnings.length > 0,
+    eventDateConflicts,
+    resourceConflicts: [],
+    warnings,
+    suggestions: [],
+    evaluatedAt: new Date().toISOString(),
+  };
+}
+
+/**
  * Generates automated resource suggestions for studio owner review & confirmation.
  * Follows principle: SYSTEM SUGGESTS -> STUDIO OWNER REVIEWS -> STUDIO OWNER CONFIRMS -> SAVED.
  */

@@ -31,6 +31,8 @@ import {
   sendPipelineStatusUpdateEmail,
 } from "@/services/emailService";
 import { dispatchOrderStageWhatsAppNotification } from "@/services/whatsappService";
+import { hasStudioCapability, requireCapability } from "@/lib/entitlementAuth";
+import { getFreeWorkflowTaskAssignee, requiresErpForCrewMutation } from "@/lib/erpCrewPolicy";
 import { findActiveMemberRecord } from "./orderAccessHelpers";
 
 export async function createTaskCore(input: {
@@ -46,9 +48,16 @@ export async function createTaskCore(input: {
     const decoded = await requireVerifiedUser(input.idToken);
     await requireStudioOwner(decoded.uid, input.studioId);
 
-    const order = await getOrderById(input.orderId);
+    const [order, studio, hasErp] = await Promise.all([
+      getOrderById(input.orderId),
+      getStudioBySlug(input.studioId),
+      hasStudioCapability(input.studioId, "STUDIO_ERP"),
+    ]);
     if (!order || order.studioId !== input.studioId.toLowerCase()) {
       return { success: false, error: "Order not found in authorized studio." };
+    }
+    if (requiresErpForCrewMutation(hasErp, input)) {
+      await requireCapability(input.studioId, "STUDIO_ERP");
     }
 
     const existingTasks = await getTasksByOrder(input.orderId);
@@ -56,14 +65,22 @@ export async function createTaskCore(input: {
     const taskId = `TSK-${prefixLetters(input.studioId)}-${dateStamp}-${timeStamp}`;
     const now = new Date().toISOString();
 
+    const studioOwner = getFreeWorkflowTaskAssignee(hasErp, {
+      memberId: studio?.ownerId || decoded.uid,
+      memberName: studio?.ownerName || decoded.name || decoded.email || "Studio Owner",
+    });
     const task: Task = {
       id: taskId,
       orderId: input.orderId,
       studioId: input.studioId.toLowerCase(),
       title: input.title.trim(),
       serviceCategory: input.serviceCategory,
-      assignedMemberId: input.assignedMemberId || "unassigned",
-      assignedMemberName: input.assignedMemberName || "Unassigned Crew",
+      assignedMemberId: hasErp
+        ? input.assignedMemberId || "unassigned"
+        : studioOwner!.memberId,
+      assignedMemberName: hasErp
+        ? input.assignedMemberName || "Unassigned Crew"
+        : studioOwner!.memberName,
       status: "ASSIGNED",
       sequenceOrder: existingTasks.length + 1,
       isDeleted: false,
@@ -416,6 +433,13 @@ export async function updateTaskCore(input: {
     const task = await getTaskById(input.taskId);
     if (!task || task.studioId !== input.studioId.toLowerCase()) {
       return { success: false, error: "Task not found in authorized studio." };
+    }
+
+    if (
+      Object.prototype.hasOwnProperty.call(input.updates, "assignedMemberId") ||
+      Object.prototype.hasOwnProperty.call(input.updates, "assignedMemberName")
+    ) {
+      await requireCapability(input.studioId, "STUDIO_ERP");
     }
 
     const updated = await updateTask(input.taskId, input.updates);

@@ -8,6 +8,7 @@ import {
 import { CreateOrderSchema } from "@focoman/validation";
 import {
   generateResourceSuggestions,
+  performBasicPreflightCheck,
   generateWorkflowTasks,
   getStudioCalendarDate,
   getStudioTimestampIST,
@@ -45,6 +46,8 @@ import {
   requireVerifiedUser,
 } from "@/lib/serverAuth";
 import { sendOrderConfirmedCustomerEmail } from "@/services/emailService";
+import { hasStudioCapability } from "@/lib/entitlementAuth";
+import { getFreeWorkflowTaskAssignee } from "@/lib/erpCrewPolicy";
 import { requireAssignedOrderAccess } from "./orderAccessHelpers";
 
 export async function createOrderCore(rawInput: unknown): Promise<{
@@ -82,11 +85,12 @@ export async function createOrderCore(rawInput: unknown): Promise<{
     const initialOrderStatus: OrderStatus =
       validated.eventDate < todayStr ? "POST_EVENT_IN_PROGRESS" : "AWAITING_EVENT";
 
-    const [existingCustomers, studioOrders, studioMembers, studio] = await Promise.all([
+    const [existingCustomers, studioOrders, studioMembers, studio, hasErp] = await Promise.all([
       getCustomersByStudio(validated.studioId),
       getOrdersByStudio(validated.studioId),
       getMembersByStudio(validated.studioId),
       getStudioBySlug(validated.studioId),
+      hasStudioCapability(validated.studioId, "STUDIO_ERP"),
     ]);
     const matchedCustomer = existingCustomers.find((c) =>
       isContactMatch(
@@ -96,21 +100,29 @@ export async function createOrderCore(rawInput: unknown): Promise<{
     );
     const effectiveCustomerId = matchedCustomer ? matchedCustomer.id : customerId;
 
-    const preflight = performPreflightCheck(
-      validated.eventDate,
-      validated.eventLocation || "",
-      validated.services,
-      studioOrders,
-      studioMembers
-    );
-    const suggestions = generateResourceSuggestions(
-      validated.eventDate,
-      ["PHOTOGRAPHY", "VIDEOGRAPHY", "ALBUM_DESIGN", "PHOTO_EDITING"],
-      studioMembers,
-      []
-    );
+    const preflight = hasErp
+      ? performPreflightCheck(
+          validated.eventDate,
+          validated.eventLocation || "",
+          validated.services,
+          studioOrders,
+          studioMembers
+        )
+      : performBasicPreflightCheck(
+          validated.eventDate,
+          validated.eventLocation || "",
+          studioOrders
+        );
+    const suggestions = hasErp
+      ? generateResourceSuggestions(
+          validated.eventDate,
+          ["PHOTOGRAPHY", "VIDEOGRAPHY", "ALBUM_DESIGN", "PHOTO_EDITING"],
+          studioMembers,
+          []
+        )
+      : [];
 
-    const autoAssignEnabled = studio?.features?.autoAssignCrew !== false;
+    const autoAssignEnabled = hasErp && studio?.features?.autoAssignCrew !== false;
     const assignedResources: ResourceAssignment[] = [];
     if (autoAssignEnabled) {
       const usedMembers = new Set<string>();
@@ -203,6 +215,10 @@ export async function createOrderCore(rawInput: unknown): Promise<{
       updatedAt: nowIso,
     };
 
+    const studioOwner = getFreeWorkflowTaskAssignee(hasErp, {
+      memberId: studio?.ownerId || decoded.uid,
+      memberName: studio?.ownerName || decoded.name || decoded.email || "Studio Owner",
+    });
     const workflowTasks = generateWorkflowTasks(orderId, validated.studioId, validated.services).map(
       (t, idx) => {
         const { dateStamp, timeStamp } = generateTimestampDigits(now);
@@ -215,8 +231,8 @@ export async function createOrderCore(rawInput: unknown): Promise<{
         return {
           ...t,
           id: `TSK-${studioPrefix}-${dateStamp}-${timeStamp}-${seqSuffix}`,
-          assignedMemberId: matchedCrew?.memberId || t.assignedMemberId || "",
-          assignedMemberName: matchedCrew?.memberName || t.assignedMemberName || "Unassigned",
+          assignedMemberId: matchedCrew?.memberId || studioOwner?.memberId || t.assignedMemberId || "",
+          assignedMemberName: matchedCrew?.memberName || studioOwner?.memberName || t.assignedMemberName || "Unassigned",
           createdAt: nowIso,
           updatedAt: nowIso,
           isDeleted: false,
