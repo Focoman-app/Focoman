@@ -1,6 +1,6 @@
 "use client";
 
-import type React from "react";
+import React, { useMemo, useState } from "react";
 import Link from "next/link";
 import type {
   Customer,
@@ -33,6 +33,7 @@ interface OmsCreateOrderModalProps {
   setShowServicesDropdown: React.Dispatch<React.SetStateAction<boolean>>;
   onToggleService: (serviceName: string) => void;
   calculateOrderPrice: (selectedServices: string[], packageId?: string) => number;
+  busyEventDates: string[];
   hasCrm?: boolean;
 }
 
@@ -60,13 +61,25 @@ export function OmsCreateOrderModal({
   setShowServicesDropdown,
   onToggleService,
   calculateOrderPrice,
+  busyEventDates,
   hasCrm = true,
 }: OmsCreateOrderModalProps) {
   if (!isOpen) return null;
+  const [calendarMonth, setCalendarMonth] = useState(() => {
+    const base = newOrderForm.eventDate ? new Date(`${newOrderForm.eventDate}T00:00:00`) : new Date();
+    return new Date(base.getFullYear(), base.getMonth(), 1);
+  });
+  const calendarDays = useMemo(() => {
+    const first = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), 1);
+    const pad = first.getDay();
+    const count = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 0).getDate();
+    return Array.from({ length: pad + count }, (_, index) => index < pad ? null : index - pad + 1);
+  }, [calendarMonth]);
+  const formatDate = (day: number) => `${calendarMonth.getFullYear()}-${String(calendarMonth.getMonth() + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs overflow-y-auto">
-      <div className="w-full max-w-lg max-h-[90vh] flex flex-col rounded-3xl bg-white shadow-2xl border border-border-default animate-in fade-in duration-150 my-auto">
+      <div className="relative w-full max-w-lg max-h-[90vh] flex flex-col rounded-3xl bg-white shadow-2xl border border-border-default animate-in fade-in duration-150 my-auto">
         {/* Modal Header (Pinned at Top) */}
         <div className="flex items-center justify-between p-6 pb-4 border-b border-border-default shrink-0">
           <div>
@@ -80,6 +93,7 @@ export function OmsCreateOrderModal({
           <button
             type="button"
             onClick={onClose}
+            disabled={isSubmitting}
             className="text-text-tertiary hover:text-text-primary p-1.5 rounded-lg hover:bg-surface-app transition"
             aria-label="Close dialog"
           >
@@ -238,6 +252,23 @@ export function OmsCreateOrderModal({
                   }
                   className="mt-1 w-full rounded-xl border border-border-default px-3.5 py-2 text-xs outline-none focus:border-brand-blue-primary focus:ring-1 focus:ring-brand-blue-primary"
                 />
+                <div className="mt-2 rounded-xl border border-border-default bg-surface-app/50 p-2.5">
+                  <div className="mb-2 flex items-center justify-between text-[10px] font-bold text-text-secondary">
+                    <button type="button" disabled={isSubmitting} onClick={() => setCalendarMonth((month) => new Date(month.getFullYear(), month.getMonth() - 1, 1))} className="rounded px-1.5 py-0.5 hover:bg-white disabled:opacity-50" aria-label="Previous month">‹</button>
+                    <span>{calendarMonth.toLocaleDateString("en-IN", { month: "long", year: "numeric" })}</span>
+                    <button type="button" disabled={isSubmitting} onClick={() => setCalendarMonth((month) => new Date(month.getFullYear(), month.getMonth() + 1, 1))} className="rounded px-1.5 py-0.5 hover:bg-white disabled:opacity-50" aria-label="Next month">›</button>
+                  </div>
+                  <div className="grid grid-cols-7 gap-1 text-center text-[9px] text-text-tertiary">{["S", "M", "T", "W", "T", "F", "S"].map((day, index) => <span key={`${day}-${index}`}>{day}</span>)}</div>
+                  <div className="mt-1 grid grid-cols-7 gap-1">
+                    {calendarDays.map((day, index) => day === null ? <span key={`pad-${index}`} /> : (() => {
+                      const value = formatDate(day);
+                      const busy = busyEventDates.includes(value);
+                      const selected = newOrderForm.eventDate === value;
+                      return <button key={value} type="button" disabled={isSubmitting} onClick={() => setNewOrderForm({ ...newOrderForm, eventDate: value })} title={busy ? "This studio already has an event on this date" : "Select event date"} className={`h-6 rounded text-[10px] font-semibold transition ${selected ? "bg-brand-blue-primary text-white" : busy ? "bg-amber-100 text-amber-900 ring-1 ring-amber-300 hover:bg-amber-200" : "text-text-primary hover:bg-white"}`}>{day}</button>;
+                    })())}
+                  </div>
+                  <p className="mt-2 text-[9px] text-text-tertiary"><span className="mr-1 inline-block h-2 w-2 rounded-sm bg-amber-200 align-middle" />Highlighted dates already have studio events; they remain selectable after review.</p>
+                </div>
               </div>
             </div>
 
@@ -829,6 +860,7 @@ export function OmsCreateOrderModal({
             <button
               type="button"
               onClick={onClose}
+              disabled={isSubmitting}
               className="btn-brand-outline"
             >
               Cancel
@@ -850,6 +882,14 @@ export function OmsCreateOrderModal({
           </div>
         </form>
       </div>
+      {isSubmitting && (
+        <div className="absolute inset-0 z-20 flex items-center justify-center rounded-3xl bg-white/95 p-6 text-center" role="status" aria-live="polite">
+          <div className="space-y-3">
+            <div className="mx-auto h-9 w-9 animate-spin rounded-full border-4 border-brand-blue-soft border-t-brand-blue-primary" />
+            <div><p className="text-sm font-bold text-text-primary">Registering confirmed order…</p><p className="mt-1 text-xs text-text-secondary">Saving the order and preparing its workflow.</p></div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

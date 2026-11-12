@@ -268,10 +268,14 @@ export async function dispatchOrderStageWhatsAppNotification(input: {
     let targetPhone = input.order.customer?.phone || '';
     let audience: 'OWNER' | 'MEMBER' | 'CUSTOMER' = 'CUSTOMER';
 
-    if (input.newStatus === 'COMPLETED' && lowerTitle.includes('raw photo')) {
+    if (input.newStatus === 'REVIEW' && lowerTitle.includes('raw photo')) {
       if (config.raw_photos_sent === false) return;
       templateId = 'raw_photos_ready';
       audience = 'CUSTOMER';
+    } else if (input.newStatus === 'COMPLETED' && lowerTitle.includes('raw photo')) {
+      templateId = 'customer_selection_done';
+      audience = 'OWNER';
+      targetPhone = studio.ownerPhone || '';
     } else if (input.newStatus === 'REVIEW' && lowerTitle.includes('album')) {
       if (config.album_review_done === false) return;
       templateId = 'album_review_ready';

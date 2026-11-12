@@ -1,0 +1,17 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /payment-proofs/{studioId}/{orderId}/{paymentId}/{fileName} {
+      // The server action still decides whether a URL may be persisted on an order.
+      allow write: if request.auth != null
+        && firestore.exists(/databases/(default)/documents/memberships/$(studioId + '_' + request.auth.uid))
+        && firestore.get(/databases/(default)/documents/memberships/$(studioId + '_' + request.auth.uid)).data.role == 'STUDIO_OWNER'
+        && firestore.get(/databases/(default)/documents/memberships/$(studioId + '_' + request.auth.uid)).data.status == 'ACTIVE'
+        && request.resource.size <= 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+      allow read: if request.auth != null
+        && firestore.exists(/databases/(default)/documents/memberships/$(studioId + '_' + request.auth.uid))
+        && firestore.get(/databases/(default)/documents/memberships/$(studioId + '_' + request.auth.uid)).data.status == 'ACTIVE';
+    }
+  }
+}

@@ -4,12 +4,14 @@ import {
   getMembersByStudio,
   getMembershipByUidAndStudio,
   getMembershipsByStudio,
+  getMemberById,
   getOrderById,
   getOrderByPasskey,
   getOrdersByCustomerUid,
   getStudioBySlug,
   getTasksByOrder,
   updateOrder,
+  updateTask,
 } from "@focoman/db";
 import type {
   CustomerTrackingView,
@@ -23,6 +25,8 @@ import {
   requireStudioMember,
   requireVerifiedUser,
 } from "@/lib/serverAuth";
+import { dispatchOrderStageWhatsAppNotification } from "@/services/whatsappService";
+import { sendPipelineStatusUpdateEmail } from "@/services/emailService";
 
 export async function getOrderByPasskeyCore(passkey: string): Promise<{
   success: boolean;
@@ -408,10 +412,58 @@ export async function submitCustomerDeliverableReviewCore(input: {
       }`,
     };
 
+    let linkedTaskTitle: string | undefined;
+    let linkedTaskStatus: "COMPLETED" | "REWORK" | undefined;
+    let orderTasks: Awaited<ReturnType<typeof getTasksByOrder>> | undefined;
+    if (targetDeliverable.linkedTaskId) {
+      orderTasks = await getTasksByOrder(order.id);
+      const linkedTask = orderTasks.find((task) => task.id === targetDeliverable.linkedTaskId);
+      if (!linkedTask) return { success: false, error: "The linked production task is unavailable for this order." };
+      if (linkedTask.status !== "REVIEW") {
+        return { success: false, error: "This proof is not currently awaiting customer review." };
+      }
+      linkedTaskTitle = linkedTask.title;
+      linkedTaskStatus = input.approved ? "COMPLETED" : "REWORK";
+      await updateTask(linkedTask.id, {
+        status: input.approved ? "COMPLETED" : "REWORK",
+        ...(input.approved ? { reworkNotes: undefined } : { reworkNotes: input.feedback?.trim() || "Customer requested corrections." }),
+      });
+    }
+
     const updated = await updateOrder(order.id, {
       driveDeliverables: updatedDeliverables,
       auditLog: [...(order.auditLog || []), reviewAudit],
     });
+
+    if (linkedTaskTitle) {
+      void dispatchOrderStageWhatsAppNotification({
+        studioId: order.studioId,
+        order,
+        taskTitle: linkedTaskTitle,
+        newStatus: input.approved ? "COMPLETED" : "REWORK",
+      });
+      void (async () => {
+        try {
+          const studio = await getStudioBySlug(order.studioId);
+          if (!studio) return;
+          const status = linkedTaskStatus || (input.approved ? "COMPLETED" : "REWORK");
+          const details = input.feedback?.trim() || (input.approved ? "Customer approved the linked proof." : "Customer requested corrections.");
+          if (studio.ownerEmail) {
+            await sendPipelineStatusUpdateEmail({ toEmail: studio.ownerEmail, studioName: studio.name, studioSlug: studio.id, recipientName: studio.ownerName || "Studio Owner", orderId: order.id, eventTitle: order.eventType, taskTitle: linkedTaskTitle!, newStatus: status, details });
+          }
+          const rawSelectionCompleted = input.approved && targetDeliverable.reviewPurpose === "PHOTO_SELECTION";
+          const nextTask = rawSelectionCompleted
+            ? orderTasks?.find((task) => task.title.toLowerCase().includes("photo editing"))
+            : orderTasks?.find((task) => task.title === linkedTaskTitle);
+          if (nextTask?.assignedMemberId && nextTask.assignedMemberId !== "unassigned") {
+            const member = await getMemberById(nextTask.assignedMemberId);
+            if (member?.email) await sendPipelineStatusUpdateEmail({ toEmail: member.email, studioName: studio.name, studioSlug: studio.id, recipientName: member.name, orderId: order.id, eventTitle: order.eventType, taskTitle: nextTask.title, newStatus: rawSelectionCompleted ? "READY_TO_START" : status, details });
+          }
+        } catch (notificationError) {
+          console.warn("[submitCustomerDeliverableReview] Notification dispatch error:", notificationError);
+        }
+      })();
+    }
 
     return {
       success: true,

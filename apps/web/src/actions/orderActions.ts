@@ -25,6 +25,7 @@ import {
   restoreTaskCore,
   updateTaskCore,
   updateTaskStatusCore,
+  markTaskOfflineReviewReadyCore,
 } from "./orders/orderTaskOperations";
 import {
   sendManualPaymentReminderCore,
@@ -35,6 +36,7 @@ import {
   assignTaskCrewCore,
   checkIsStudioStaffCore,
   confirmResourceAvailabilityCore,
+  saveServiceCrewAssignmentsCore,
   updateAssignmentCallTimeCore,
 } from "./orders/orderCrewOperations";
 import {
@@ -156,6 +158,15 @@ export async function updateTaskStatusAction(rawInput: unknown): Promise<{
   return updateTaskStatusCore(rawInput);
 }
 
+export async function markTaskOfflineReviewReadyAction(input: {
+  orderId: string;
+  taskId: string;
+  studioId: string;
+  idToken: string;
+}) {
+  return markTaskOfflineReviewReadyCore(input);
+}
+
 export async function updateTaskAction(input: {
   taskId: string;
   studioId: string;
@@ -213,6 +224,14 @@ export async function assignResourceAction(rawInput: unknown): Promise<{
   error?: string;
 }> {
   return assignResourceCore(rawInput);
+}
+
+export async function saveServiceCrewAssignmentsAction(rawInput: unknown): Promise<{
+  success: boolean;
+  order?: Order;
+  error?: string;
+}> {
+  return saveServiceCrewAssignmentsCore(rawInput);
 }
 
 export async function assignTaskCrewAction(rawInput: {

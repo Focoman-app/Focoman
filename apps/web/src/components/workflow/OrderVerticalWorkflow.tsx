@@ -27,10 +27,11 @@ interface OrderVerticalWorkflowProps {
   onUpdateTaskStatus?: (taskId: string, nextStatus: TaskStatus) => void | Promise<void>;
   allSelectableCrew?: SelectableCrew[];
   temporaryCrewList?: Array<{ id: string; name: string; isTemporary: true }>;
-  onAssignCrew?: (serviceName: string, memberName: string) => Promise<void>;
-  onUnassignCrew?: (serviceName: string) => Promise<void>;
+  onSaveServiceCrew?: (serviceName: string, memberNames: string[]) => Promise<void>;
   onOpenErpWizard?: (serviceName: string, query?: string) => void;
   onAssignTaskCrew?: (taskId: string, memberName: string) => Promise<void>;
+  onMarkOfflineReviewReady?: (taskId: string) => Promise<void>;
+  onSaveSchedule?: (eventDate: string, eventLocation: string) => Promise<void>;
   hasErp?: boolean;
 }
 
@@ -43,10 +44,11 @@ export function OrderVerticalWorkflow({
   onUpdateTaskStatus,
   allSelectableCrew = [],
   temporaryCrewList = [],
-  onAssignCrew,
-  onUnassignCrew,
+  onSaveServiceCrew,
   onOpenErpWizard,
   onAssignTaskCrew,
+  onMarkOfflineReviewReady,
+  onSaveSchedule,
   hasErp = true,
 }: OrderVerticalWorkflowProps) {
   const isOms = variant === "oms";
@@ -58,6 +60,18 @@ export function OrderVerticalWorkflow({
   const isFutureEvent = Boolean(eventRem && eventRem.diffDays > 0);
   const isTodayEvent = Boolean(eventRem && eventRem.diffDays === 0);
   const isPastEvent = Boolean(eventRem && eventRem.diffDays < 0);
+
+  const [editingSchedule, setEditingSchedule] = useState(false);
+  const [scheduleDateDraft, setScheduleDateDraft] = useState(order.eventDate || "");
+  const [scheduleLocationDraft, setScheduleLocationDraft] = useState(order.eventLocation || "");
+  const [savingSchedule, setSavingSchedule] = useState(false);
+
+  useEffect(() => {
+    if (!editingSchedule) {
+      setScheduleDateDraft(order.eventDate || "");
+      setScheduleLocationDraft(order.eventLocation || "");
+    }
+  }, [order.eventDate, order.eventLocation, editingSchedule]);
 
   // Event date locking: if event is in the future, post-event tasks are locked
   const isEventLocked = Boolean(
@@ -254,25 +268,45 @@ export function OrderVerticalWorkflow({
   const [editingCrewService, setEditingCrewService] = useState<string | null>(null);
   const [activeCrewDropdown, setActiveCrewDropdown] = useState<string | null>(null);
   const [crewSearchQuery, setCrewSearchQuery] = useState<Record<string, string>>({});
+  const [serviceCrewDrafts, setServiceCrewDrafts] = useState<Record<string, string[]>>({});
+  const [savingCrewService, setSavingCrewService] = useState<string | null>(null);
 
-  const handleCommitCrew = async (svcName: string, crewName: string) => {
-    if (onAssignCrew) {
-      await onAssignCrew(svcName, crewName);
-      setActiveCrewDropdown(null);
-      setEditingCrewService(null);
-      setCrewSearchQuery((prev) => ({ ...prev, [svcName]: "" }));
-    }
+  const currentServiceCrew = (serviceName: string) => assignedResources
+    .filter((assignment) => assignment.skill.trim().toLowerCase() === serviceName.trim().toLowerCase())
+    .map((assignment) => assignment.memberName);
+  const startEditingServiceCrew = (serviceName: string) => {
+    setServiceCrewDrafts((previous) => ({ ...previous, [serviceName]: currentServiceCrew(serviceName) }));
+    setEditingCrewService(serviceName);
+    setActiveCrewDropdown(serviceName);
   };
-
-  const handleUnassign = async (svcName: string) => {
-    if (onUnassignCrew) {
-      await onUnassignCrew(svcName);
-      setCrewSearchQuery((prev) => ({ ...prev, [svcName]: "" }));
+  const stageCrew = (serviceName: string, crewName: string) => {
+    const cleaned = crewName.trim();
+    if (!cleaned) return;
+    setServiceCrewDrafts((previous) => {
+      const draft = previous[serviceName] ?? currentServiceCrew(serviceName);
+      return draft.some((name) => name.toLowerCase() === cleaned.toLowerCase()) ? previous : { ...previous, [serviceName]: [...draft, cleaned] };
+    });
+    setCrewSearchQuery((previous) => ({ ...previous, [serviceName]: "" }));
+  };
+  const removeStagedCrew = (serviceName: string, crewName: string) => setServiceCrewDrafts((previous) => ({
+    ...previous,
+    [serviceName]: (previous[serviceName] ?? currentServiceCrew(serviceName)).filter((name) => name.toLowerCase() !== crewName.toLowerCase()),
+  }));
+  const saveServiceCrew = async (serviceName: string) => {
+    if (!onSaveServiceCrew) return;
+    setSavingCrewService(serviceName);
+    try {
+      await onSaveServiceCrew(serviceName, serviceCrewDrafts[serviceName] ?? currentServiceCrew(serviceName));
+      setEditingCrewService(null);
+      setActiveCrewDropdown(null);
+    } finally {
+      setSavingCrewService(null);
     }
   };
 
   // Task-level crew assignment state for Phase 3
   const [editingTaskCrewId, setEditingTaskCrewId] = useState<string | null>(null);
+  const [taskCrewDraft, setTaskCrewDraft] = useState<Record<string, string>>({});
 
   const getDefaultCrewForTask = (task: Task): { name: string; isAuto: boolean } | null => {
     if (task.assignedMemberName) {
@@ -538,42 +572,13 @@ export function OrderVerticalWorkflow({
                   {services.length === 0 ? (
                     <p className="text-xs text-text-tertiary py-2 italic">No services listed for this order.</p>
                   ) : (
-                    <div className="divide-y divide-border-default/60 rounded-xl border border-border-default/80 bg-white overflow-hidden text-xs">
+                    <div className="relative divide-y divide-border-default/60 rounded-xl border border-border-default/80 bg-white overflow-visible text-xs">
                       {services.map((svcName) => {
                         const svcLower = svcName.trim().toLowerCase();
-                        const assignedRes = assignedResources.find((r) => {
-                          return (r.skill || "").trim().toLowerCase() === svcLower;
-                        });
-
-                        const isOwner = Boolean(
-                          assignedRes &&
-                            ((assignedRes.memberId && assignedRes.memberId.startsWith("owner-")) ||
-                              (assignedRes.memberName && assignedRes.memberName.toLowerCase().includes("(owner)")))
-                        );
-
-                        const isRegisteredMember =
-                          isOwner ||
-                          allSelectableCrew.some(
-                            (c) =>
-                              (assignedRes?.memberId && c.id === assignedRes.memberId) ||
-                              (assignedRes?.memberName &&
-                                c.name.toLowerCase() === assignedRes.memberName.toLowerCase()) ||
-                              (c.role === "Owner" &&
-                                assignedRes?.memberName &&
-                                c.name.toLowerCase().includes(assignedRes.memberName.toLowerCase()))
-                          );
-
-                        const isTempAssigned = Boolean(
-                          assignedRes &&
-                            !isOwner &&
-                            !isRegisteredMember &&
-                            (assignedRes.memberId.startsWith("temp_") ||
-                              temporaryCrewList.some(
-                                (t) => t.name.toLowerCase() === assignedRes.memberName.toLowerCase()
-                              ))
-                        );
-
-                        const isEditingThis = !assignedRes || editingCrewService === svcName;
+                        const assignedForService = assignedResources.filter((resource) => (resource.skill || "").trim().toLowerCase() === svcLower);
+                        const isEditingThis = editingCrewService === svcName;
+                        const displayedCrew = assignedForService.map((resource) => resource.memberName);
+                        const stagedCrew = serviceCrewDrafts[svcName] ?? displayedCrew;
                         const currentQuery = crewSearchQuery[svcName] ?? "";
                         const trimmedQuery = currentQuery.trim();
 
@@ -607,7 +612,7 @@ export function OrderVerticalWorkflow({
                         return (
                           <div
                             key={svcName}
-                            className="flex flex-col sm:flex-row sm:items-center justify-between p-2.5 gap-2 hover:bg-slate-50/50 transition"
+                            className="relative flex flex-col sm:flex-row sm:items-center justify-between p-2.5 gap-2 hover:bg-slate-50/50 transition"
                           >
                             <div className="font-semibold text-text-primary text-xs flex items-center gap-2">
                               <span className="h-1.5 w-1.5 rounded-full bg-brand-blue-primary" />
@@ -617,45 +622,18 @@ export function OrderVerticalWorkflow({
                             {/* Crew Assignment Control for OMS */}
                             {isOms ? (
                               <div className="flex items-center gap-2 flex-wrap">
-                                {assignedRes && !isEditingThis ? (
-                                  <div className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-emerald-800 font-bold text-xs shrink-0">
-                                    <span>{assignedRes.memberName}</span>
-                                    {isTempAssigned && (
-                                      <span className="rounded bg-amber-100 text-amber-800 border border-amber-200 px-1 py-0.2 text-[9px] font-bold">
-                                        Temp
-                                      </span>
-                                    )}
-                                    <button
-                                      type="button"
-                                      onClick={() => void handleUnassign(svcName)}
-                                      className="text-emerald-600 hover:text-red-600 transition ml-0.5 text-xs leading-none cursor-pointer"
-                                      title="Unassign crew"
-                                    >
-                                      ✕
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setEditingCrewService(svcName);
-                                        setActiveCrewDropdown(svcName);
-                                      }}
-                                      className="rounded border border-border-default bg-white px-1.5 py-0.5 text-[10px] font-semibold text-text-secondary hover:text-brand-blue-primary transition cursor-pointer ml-1"
-                                    >
-                                      Edit
-                                    </button>
-                                  </div>
+                                {!isEditingThis ? (
+                                  <>
+                                    {displayedCrew.length > 0 ? displayedCrew.map((name) => <span key={name} className="inline-flex items-center rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-bold text-emerald-800">{name}</span>) : <span className="text-[11px] italic text-text-tertiary">Unassigned</span>}
+                                    {onSaveServiceCrew && <button type="button" onClick={() => startEditingServiceCrew(svcName)} className="rounded border border-border-default bg-white px-1.5 py-0.5 text-[10px] font-semibold text-brand-blue-primary hover:border-brand-blue-primary">{displayedCrew.length ? "Edit" : "Assign crew"}</button>}
+                                  </>
                                 ) : (
-                                  <div className="relative flex items-center gap-1.5">
+                                  <div className="relative flex flex-col items-stretch gap-1.5 min-w-[220px]">
+                                    <div className="flex flex-wrap gap-1">{stagedCrew.map((name) => <span key={name} className="inline-flex items-center gap-1 rounded bg-brand-blue-50 px-1.5 py-0.5 text-[10px] font-semibold text-brand-blue-primary">{name}<button type="button" onClick={() => removeStagedCrew(svcName, name)} aria-label={`Remove ${name}`}>×</button></span>)}</div>
                                     <div className="relative min-w-[200px]">
                                       <input
                                         type="text"
-                                        placeholder={
-                                          assignedRes
-                                            ? "Change crew..."
-                                            : hasErp
-                                            ? "Select crew or type name..."
-                                            : "Type temporary crew name..."
-                                        }
+                                        placeholder={hasErp ? "Add a member…" : "Type crew name…"}
                                         value={currentQuery}
                                         onFocus={() => setActiveCrewDropdown(svcName)}
                                         onChange={(e) => {
@@ -666,7 +644,7 @@ export function OrderVerticalWorkflow({
                                           if (e.key === "Enter") {
                                             e.preventDefault();
                                             if (trimmedQuery) {
-                                              void handleCommitCrew(svcName, trimmedQuery);
+                                              stageCrew(svcName, trimmedQuery);
                                             }
                                           }
                                         }}
@@ -682,14 +660,14 @@ export function OrderVerticalWorkflow({
                                             {/* 1. Quick Free Text Option */}
                                             {trimmedQuery && !hasExactMatch && (
                                               <div
-                                                onClick={() => void handleCommitCrew(svcName, trimmedQuery)}
+                                                onClick={() => stageCrew(svcName, trimmedQuery)}
                                                 className="flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs hover:bg-amber-50 cursor-pointer bg-amber-50/50 border border-amber-200/70 mb-1 transition"
                                               >
                                                 <span className="font-semibold text-text-primary truncate">
                                                   {trimmedQuery}
                                                 </span>
                                                 <span className="text-[10px] font-bold text-amber-800 bg-amber-100 px-1.5 py-0.2 rounded shrink-0">
-                                                  {hasErp ? "Assign" : "Assign Temp"}
+                                                  {hasErp ? "Add" : "Add Temp"}
                                                 </span>
                                               </div>
                                             )}
@@ -703,14 +681,14 @@ export function OrderVerticalWorkflow({
                                                 {matchingCrewForService.map((c) => (
                                                   <div
                                                     key={c.id}
-                                                    onClick={() => void handleCommitCrew(svcName, c.name)}
+                                                    onClick={() => stageCrew(svcName, c.name)}
                                                     className="flex items-center justify-between px-2 py-1 rounded-lg text-xs hover:bg-blue-50 cursor-pointer"
                                                   >
                                                     <span className="font-semibold text-text-primary truncate">
                                                       {c.name}
                                                     </span>
                                                     <span className="text-[9px] font-bold text-brand-blue-primary bg-blue-100/60 px-1.5 py-0.2 rounded">
-                                                      Assign
+                                                      Add
                                                     </span>
                                                   </div>
                                                 ))}
@@ -726,14 +704,14 @@ export function OrderVerticalWorkflow({
                                                 {matchingTemporaryCrew.map((t) => (
                                                   <div
                                                     key={t.id}
-                                                    onClick={() => void handleCommitCrew(svcName, t.name)}
+                                                    onClick={() => stageCrew(svcName, t.name)}
                                                     className="flex items-center justify-between px-2 py-1 rounded-lg text-xs hover:bg-amber-100/60 cursor-pointer bg-amber-50/40"
                                                   >
                                                     <span className="font-semibold text-text-primary truncate">
                                                       {t.name} (Temp)
                                                     </span>
                                                     <span className="text-[9px] font-bold text-amber-800 bg-amber-100 px-1.5 py-0.2 rounded">
-                                                      Assign
+                                                      Add
                                                     </span>
                                                   </div>
                                                 ))}
@@ -745,7 +723,6 @@ export function OrderVerticalWorkflow({
                                               <div
                                                 onClick={() => {
                                                   setActiveCrewDropdown(null);
-                                                  setEditingCrewService(null);
                                                   onOpenErpWizard(svcName, trimmedQuery || undefined);
                                                 }}
                                                 className="px-2 py-1.5 rounded-lg text-xs font-bold text-brand-purple-primary hover:bg-purple-50 cursor-pointer border-t border-border-default/60 mt-1 flex items-center justify-between"
@@ -760,18 +737,7 @@ export function OrderVerticalWorkflow({
                                         </>
                                       )}
                                     </div>
-                                    {assignedRes && editingCrewService === svcName && (
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          setEditingCrewService(null);
-                                          setActiveCrewDropdown(null);
-                                        }}
-                                        className="text-[11px] font-medium text-text-tertiary hover:text-text-primary px-1 py-0.5"
-                                      >
-                                        Cancel
-                                      </button>
-                                    )}
+                                    <div className="flex justify-end gap-1"><button type="button" onClick={() => { setEditingCrewService(null); setActiveCrewDropdown(null); }} className="rounded border border-border-default bg-white px-2 py-1 text-[10px] font-semibold text-text-secondary">Cancel</button><button type="button" disabled={savingCrewService === svcName} onClick={() => void saveServiceCrew(svcName)} className="rounded bg-brand-blue-primary px-2 py-1 text-[10px] font-bold text-white disabled:opacity-50">{savingCrewService === svcName ? "Saving…" : "Save crew assignments"}</button></div>
                                   </div>
                                 )}
                               </div>
@@ -780,19 +746,19 @@ export function OrderVerticalWorkflow({
                               <div className="flex items-center gap-1.5 text-xs">
                                 <span
                                   className={`h-2 w-2 rounded-full ${
-                                    assignedRes && assignedRes.memberId !== "unassigned"
+                                    assignedForService.length > 0
                                       ? "bg-emerald-500"
                                       : "bg-slate-300"
                                   }`}
                                 />
                                 <span
                                   className={`font-semibold ${
-                                    assignedRes && assignedRes.memberId !== "unassigned"
+                                    assignedForService.length > 0
                                       ? "text-text-primary"
                                       : "text-text-tertiary"
                                   }`}
                                 >
-                                  {assignedRes && assignedRes.memberId !== "unassigned"
+                                  {assignedForService.length > 0
                                     ? "Crew & Equipment Confirmed"
                                     : "Unassigned"}
                                 </span>
@@ -883,7 +849,17 @@ export function OrderVerticalWorkflow({
 
             {expandedPhases.has("phase_event_day") && (
               <div className="mt-4 pt-3.5 border-t border-border-default/60 space-y-2.5 text-xs">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-text-secondary">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-text-tertiary">Event schedule</span>
+                  {isOms && onSaveSchedule && !editingSchedule && <button type="button" onClick={() => setEditingSchedule(true)} className="rounded border border-border-default bg-white px-2 py-1 text-[10px] font-semibold text-brand-blue-primary hover:border-brand-blue-primary">Edit schedule</button>}
+                </div>
+                {editingSchedule ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 rounded-xl border border-brand-blue-soft bg-blue-50/40 p-2.5">
+                    <label className="text-[10px] font-bold text-text-secondary">Event date<input type="date" value={scheduleDateDraft} onChange={(event) => setScheduleDateDraft(event.target.value)} className="mt-1 w-full rounded border border-border-default bg-white px-2 py-1 text-xs text-text-primary" /></label>
+                    <label className="text-[10px] font-bold text-text-secondary">Shoot venue<input type="text" value={scheduleLocationDraft} onChange={(event) => setScheduleLocationDraft(event.target.value)} className="mt-1 w-full rounded border border-border-default bg-white px-2 py-1 text-xs text-text-primary" /></label>
+                    <div className="sm:col-span-2 flex justify-end gap-2"><button type="button" disabled={savingSchedule} onClick={() => setEditingSchedule(false)} className="rounded border border-border-default bg-white px-2.5 py-1 text-[10px] font-semibold">Cancel</button><button type="button" disabled={savingSchedule || !scheduleDateDraft} onClick={() => void (async () => { if (!onSaveSchedule) return; setSavingSchedule(true); try { await onSaveSchedule(scheduleDateDraft, scheduleLocationDraft); setEditingSchedule(false); } finally { setSavingSchedule(false); } })()} className="rounded bg-brand-blue-primary px-2.5 py-1 text-[10px] font-bold text-white disabled:opacity-50">{savingSchedule ? "Saving…" : "Save schedule"}</button></div>
+                  </div>
+                ) : <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-text-secondary">
                   <div className="rounded-xl bg-slate-50 p-2.5 border border-border-default/60">
                     <span className="text-[10px] uppercase font-bold text-text-tertiary block">
                       Shoot Venue
@@ -912,7 +888,7 @@ export function OrderVerticalWorkflow({
                         : `Scheduled for ${order.eventDate}`}
                     </span>
                   </div>
-                </div>
+                </div>}
 
                 {isFutureEvent && (
                   <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-2.5 text-amber-900 text-[11px] flex items-center gap-2">
@@ -1296,6 +1272,9 @@ export function OrderVerticalWorkflow({
     const isInProgress = effectiveStatus === "IN_PROGRESS";
     const isReview = effectiveStatus === "REVIEW";
     const isRework = effectiveStatus === "REWORK";
+    const titleLower = task.title.toLowerCase();
+    const isRawSelection = titleLower.includes("raw photo") || titleLower.includes("photo selection");
+    const isPhotoEditing = titleLower.includes("photo editing") || titleLower.includes("retouch") || titleLower.includes("color grading");
 
     const statusBadgeStyle = isEventLocked || effectiveStatus === "AWAITING_EVENT"
       ? "bg-slate-100 text-slate-600 border-slate-200"
@@ -1310,16 +1289,16 @@ export function OrderVerticalWorkflow({
       : "bg-slate-100 text-slate-700 border-slate-200";
 
     const statusLabel = isEventLocked || effectiveStatus === "AWAITING_EVENT"
-      ? "Awaiting Event"
+      ? (isRawSelection ? "Event not started" : "Awaiting Event")
       : isDone
-      ? "Completed"
+      ? (isRawSelection ? "Selection confirmed" : "Completed")
       : isInProgress
-      ? "In Progress"
+      ? (isRawSelection ? "Gathering & processing photos" : isPhotoEditing ? "Editing in progress" : "In Progress")
       : isReview
-      ? "Client Review"
+      ? "Pending with customer"
       : isRework
-      ? "Revisions Requested"
-      : "Assigned";
+      ? "Corrections requested"
+      : isRawSelection ? "Preparing photo selection" : "Assigned";
 
     return (
       <div
@@ -1353,32 +1332,19 @@ export function OrderVerticalWorkflow({
               <span className="text-[10px] text-text-tertiary">Crew:</span>
               {editingTaskCrewId === task.id ? (
                 <div className="relative inline-flex items-center gap-1">
-                  <select
+                  <input
                     autoFocus
-                    defaultValue={task.assignedMemberName || getDefaultCrewForTask(task)?.name || ""}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setEditingTaskCrewId(null);
-                      if (val && onAssignTaskCrew) {
-                        void onAssignTaskCrew(task.id, val);
-                      }
-                    }}
-                    onBlur={() => setEditingTaskCrewId(null)}
+                    list={`task-crew-${task.id}`}
+                    value={taskCrewDraft[task.id] ?? task.assignedMemberName ?? getDefaultCrewForTask(task)?.name ?? ""}
+                    onChange={(event) => setTaskCrewDraft((previous) => ({ ...previous, [task.id]: event.target.value }))}
+                    placeholder="Search or type crew name"
                     className="rounded-md border border-border-default bg-white px-2 py-0.5 text-[10px] font-semibold text-text-primary outline-none focus:border-brand-blue-primary shadow-2xs"
-                  >
-                    <option value="">-- Select Crew --</option>
-                    {hasErp &&
-                      allSelectableCrew.map((c) => (
-                        <option key={c.id} value={c.name}>
-                          {c.name}
-                        </option>
-                      ))}
-                    {temporaryCrewList.map((t) => (
-                      <option key={t.id} value={t.name}>
-                        {t.name} (Temp)
-                      </option>
-                    ))}
-                  </select>
+                  />
+                  <datalist id={`task-crew-${task.id}`}>
+                    {hasErp && allSelectableCrew.map((crew) => <option key={crew.id} value={crew.name} />)}
+                    {temporaryCrewList.map((crew) => <option key={crew.id} value={crew.name} />)}
+                  </datalist>
+                  <button type="button" onClick={() => { const value = (taskCrewDraft[task.id] ?? task.assignedMemberName ?? getDefaultCrewForTask(task)?.name ?? "").trim(); if (value && onAssignTaskCrew) { void onAssignTaskCrew(task.id, value); setEditingTaskCrewId(null); } }} className="rounded bg-brand-blue-primary px-1.5 py-0.5 text-[10px] font-bold text-white">Save</button>
                   <button
                     type="button"
                     onClick={() => setEditingTaskCrewId(null)}
@@ -1407,7 +1373,7 @@ export function OrderVerticalWorkflow({
                       {onAssignTaskCrew && (
                         <button
                           type="button"
-                          onClick={() => setEditingTaskCrewId(task.id)}
+                          onClick={() => { setTaskCrewDraft((previous) => ({ ...previous, [task.id]: task.assignedMemberName || getDefaultCrewForTask(task)?.name || "" })); setEditingTaskCrewId(task.id); }}
                           className="text-[10px] text-brand-blue-primary hover:underline font-medium cursor-pointer ml-0.5"
                         >
                           {crewInfo?.name ? "Change" : "Assign"}
@@ -1438,7 +1404,7 @@ export function OrderVerticalWorkflow({
                     onClick={() => onUpdateTaskStatus(task.id, "IN_PROGRESS")}
                     className="rounded-lg bg-brand-blue-primary text-white font-bold text-[10px] px-2.5 py-1 hover:bg-sky-600 transition cursor-pointer shadow-2xs"
                   >
-                    Start
+                    {isRawSelection ? "Start preparation" : "Start"}
                   </button>
                 )}
 
@@ -1449,8 +1415,11 @@ export function OrderVerticalWorkflow({
                       onClick={() => onUpdateTaskStatus(task.id, "REVIEW")}
                       className="rounded-lg bg-purple-600 text-white font-bold text-[10px] px-2 py-1 hover:bg-purple-700 transition cursor-pointer shadow-2xs"
                     >
-                      Review
+                    {isRawSelection || isPhotoEditing ? "Send for review" : "Review"}
                     </button>
+                  {(isRawSelection || isPhotoEditing) && onMarkOfflineReviewReady && (
+                    <button type="button" onClick={() => void onMarkOfflineReviewReady(task.id)} className="rounded-lg border border-amber-300 bg-amber-50 px-2 py-1 text-[10px] font-bold text-amber-900 hover:bg-amber-100 transition">Confirm offline handoff</button>
+                  )}
                     <button
                       type="button"
                       onClick={() => onUpdateTaskStatus(task.id, "COMPLETED")}

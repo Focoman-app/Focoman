@@ -4,7 +4,7 @@ import { getOrderFinancials, getReceiptSources } from '../packages/domain/src/bi
 import { parseGoogleDriveUrl } from '../apps/web/src/utils/googleDriveUtils.ts';
 
 test('billing totals use only recorded payments and preserve a missing payment date for confirmation', () => {
-  const order = { pricing: { finalConfirmedPrice: 1000, advanceAmount: 200, installments: [{ id: 'p1', amount: 300, date: '' }] } } as any;
+  const order = { pricing: { finalConfirmedPrice: 1000, advanceAmount: 200, installments: [{ id: 'p1', amount: 300, date: '', method: 'UPI', referenceNumber: 'UPI-123' }] } } as any;
   assert.deepEqual(getOrderFinancials(order), { confirmed: 100000, advance: 20000, installmentsTotal: 30000, paid: 50000, remaining: 50000, overpayment: 0 });
   assert.equal(getReceiptSources(order)[1].requiresConfirmation, true);
 });

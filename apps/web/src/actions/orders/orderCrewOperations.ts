@@ -1,5 +1,5 @@
 import "server-only";
-import { AssignResourceSchema } from "@focoman/validation";
+import { AssignResourceSchema, SaveServiceCrewAssignmentsSchema } from "@focoman/validation";
 import { getStudioTimestampIST } from "@focoman/domain";
 import {
   getMemberById,
@@ -19,6 +19,84 @@ import {
 } from "@/lib/serverAuth";
 import { sendCrewShootAssignedEmail } from "@/services/emailService";
 import { findActiveMemberRecord } from "./orderAccessHelpers";
+
+/**
+ * Replaces crew for precisely one booked service. The UI stages changes locally,
+ * then this owner-authorized action commits one durable order update.
+ */
+export async function saveServiceCrewAssignmentsCore(rawInput: unknown): Promise<{
+  success: boolean;
+  order?: Order;
+  error?: string;
+}> {
+  try {
+    const input = SaveServiceCrewAssignmentsSchema.parse(rawInput);
+    const decoded = await requireVerifiedUser(input.idToken);
+    await requireStudioOwner(decoded.uid, input.studioId);
+
+    const order = await getOrderById(input.orderId);
+    if (!order || order.studioId.toLowerCase() !== input.studioId.toLowerCase()) {
+      return { success: false, error: "Order not found in authorized studio." };
+    }
+    const serviceName = input.serviceName.trim();
+    const serviceKey = serviceName.toLowerCase();
+    if (!order.services.some((service) => service.trim().toLowerCase() === serviceKey)) {
+      return { success: false, error: "That service is not booked on this order." };
+    }
+
+    const identities = new Set<string>();
+    for (const assignment of input.assignments) {
+      const identity = assignment.memberId.trim().toLowerCase();
+      if (identities.has(identity)) {
+        return { success: false, error: "The same crew member cannot be assigned twice to one service." };
+      }
+      identities.add(identity);
+    }
+
+    const retained = (order.assignedResources || []).filter(
+      (assignment) => assignment.skill.trim().toLowerCase() !== serviceKey
+    );
+    const replacement = input.assignments.map((assignment) => ({
+      memberId: assignment.memberId.trim(),
+      memberName: assignment.memberName.trim(),
+      skill: serviceName,
+      availabilityConfirmed: null,
+    }));
+
+    const actorName = decoded.name || decoded.email || "Studio Owner";
+    const audit: OrderAuditEntry = {
+      id: `audit_${Date.now()}_service_crew`,
+      timestamp: getStudioTimestampIST(new Date()),
+      actorName,
+      actorRole: "Owner",
+      action: "Service Crew Saved",
+      details: replacement.length
+        ? `Saved ${replacement.length} crew member${replacement.length === 1 ? "" : "s"} for ${serviceName}: ${replacement.map((item) => item.memberName).join(", ")}`
+        : `Cleared crew assignments for ${serviceName}`,
+    };
+
+    const updated = await updateOrder(order.id, {
+      assignedResources: [...retained, ...replacement],
+      auditLog: [...(order.auditLog || []), audit],
+    });
+
+    const temporary = replacement.filter((item) => item.memberId.startsWith("temp_") || item.memberId.startsWith("temp-"));
+    if (temporary.length > 0) {
+      const studio = await getStudioBySlug(input.studioId);
+      if (studio) {
+        const known = studio.temporaryCrew || [];
+        const additions = temporary.filter((item) => !known.some((current) => current.name.toLowerCase() === item.memberName.toLowerCase()))
+          .map((item) => ({ id: item.memberId, name: item.memberName, createdAt: new Date().toISOString(), lastUsedService: serviceName }));
+        if (additions.length > 0) await updateStudio(studio.id, { temporaryCrew: [...known, ...additions] });
+      }
+    }
+
+    return { success: true, order: updated || undefined };
+  } catch (error: unknown) {
+    console.error("[saveServiceCrewAssignments] Error:", error);
+    return { success: false, error: error instanceof Error ? error.message : "Failed to save service crew." };
+  }
+}
 
 export async function assignResourceCore(rawInput: unknown): Promise<{
   success: boolean;

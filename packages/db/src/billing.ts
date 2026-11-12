@@ -52,6 +52,9 @@ export async function issueBillingDocumentTransaction(input: IssueBillingInput):
     const fingerprint = getBillingSourceFingerprint(order, studio, input.kind, input.source);
     if (input.expectedSourceFingerprint !== fingerprint) throw new Error('Order or billing details changed. Refresh and review before issuing.');
     const amounts = getOrderFinancials(order);
+    if (input.kind === 'INVOICE' && (order.paymentStatus !== 'PAID' || amounts.confirmed <= 0 || amounts.remaining !== 0 || amounts.paid < amounts.confirmed)) {
+      throw new Error('A final invoice can be issued only after the order is paid in full. Issue individual payment receipts until then.');
+    }
     const issuer = { ...getBillingProfile(studio) };
     issuer.displayName = cleanText(issuer.displayName, 'Issuer name', 160);
     for (const value of Object.values(issuer)) if (value) { cleanText(value, 'Billing detail', 2000); }

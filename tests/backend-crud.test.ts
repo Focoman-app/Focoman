@@ -33,6 +33,7 @@ import {
   BookingRequestSchema,
   RecordPaymentSchema,
   CancelOrderSchema,
+  SaveServiceCrewAssignmentsSchema,
 } from "../packages/validation/src/index.ts";
 import { PLAN_CAPABILITIES, PLAN_PRICES, RECOVERY_WINDOW_DAYS } from "../packages/config/src/index.ts";
 import {
@@ -281,6 +282,24 @@ describe("3. Validation Schemas - CRUD Operations", () => {
       status: "IN_PROGRESS",
     });
     assert.strictEqual(missingAuth.success, false);
+  });
+
+  test("SaveServiceCrewAssignmentsSchema requires an authenticated whole-service payload", () => {
+    const valid = SaveServiceCrewAssignmentsSchema.safeParse({
+      orderId: "ORD-001",
+      studioId: "studio-1",
+      serviceName: "Photography",
+      assignments: [
+        { memberId: "MEM-1", memberName: "Anu" },
+        { memberId: "MEM-2", memberName: "Ravi" },
+      ],
+      idToken: "verified-token",
+    });
+    assert.strictEqual(valid.success, true);
+    const unauthenticated = SaveServiceCrewAssignmentsSchema.safeParse({
+      orderId: "ORD-001", studioId: "studio-1", serviceName: "Photography", assignments: [],
+    });
+    assert.strictEqual(unauthenticated.success, false);
   });
 
   test("CreateCustomerSchema and UpdateCustomerSchema validation", () => {

@@ -82,6 +82,42 @@ export async function createTaskCore(input: {
   }
 }
 
+/** Records a real-world proof/selection handoff without fabricating a Drive link. */
+export async function markTaskOfflineReviewReadyCore(input: {
+  orderId: string;
+  taskId: string;
+  studioId: string;
+  idToken: string;
+}): Promise<{ success: boolean; task?: Task; error?: string }> {
+  try {
+    const decoded = await requireVerifiedUser(input.idToken);
+    await requireStudioOwner(decoded.uid, input.studioId);
+    const [order, task] = await Promise.all([getOrderById(input.orderId), getTaskById(input.taskId)]);
+    if (!order || !task || order.studioId.toLowerCase() !== input.studioId.toLowerCase() || task.orderId !== order.id) {
+      return { success: false, error: "Task not found in authorized studio." };
+    }
+    if (order.eventDate >= getStudioCalendarDate() && order.orderStatus === "AWAITING_EVENT") {
+      return { success: false, error: "Production tasks are locked until the event shoot date has completed." };
+    }
+    if (task.status !== "IN_PROGRESS") {
+      return { success: false, error: "Start the production task before confirming an offline customer handoff." };
+    }
+    const updatedTask = await updateTask(task.id, { status: "REVIEW" });
+    const audit: OrderAuditEntry = {
+      id: `audit_${Date.now()}_offline_review`,
+      timestamp: getStudioTimestampIST(new Date()),
+      actorName: decoded.name || decoded.email || "Studio Owner",
+      actorRole: "Owner",
+      action: "Offline Customer Review Handoff Confirmed",
+      details: `Confirmed ${task.title} was handed to the customer offline and is now pending customer review.`,
+    };
+    await updateOrder(order.id, { auditLog: [...(order.auditLog || []), audit] });
+    return { success: true, task: updatedTask || undefined };
+  } catch (error: unknown) {
+    return { success: false, error: error instanceof Error ? error.message : "Failed to record offline review handoff." };
+  }
+}
+
 export async function updateTaskStatusCore(rawInput: unknown): Promise<{
   success: boolean;
   task?: Task;
@@ -138,6 +174,13 @@ export async function updateTaskStatusCore(rawInput: unknown): Promise<{
               "Cannot proceed with Photo Editing until Raw Photo Selection is completed by the customer.",
           };
         }
+      }
+      const requiresCustomerProof = validated.status === "REVIEW" && (
+        existingTask.title.toLowerCase().includes("raw photo") ||
+        existingTask.title.toLowerCase().includes("photo editing")
+      );
+      if (requiresCustomerProof && !(linkedOrder.driveDeliverables || []).some((deliverable) => deliverable.linkedTaskId === existingTask.id)) {
+        return { success: false, error: "Add and link a Google Drive proof first, or use Confirm offline handoff for an offline review." };
       }
       if (
         existingTask.serviceCategory === "ALBUM" ||

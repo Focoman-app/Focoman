@@ -5,7 +5,7 @@ import { getOrderBillingContextAction, issueBillingDocumentAction, saveBillingPr
 import { getCurrentUserIdToken } from '@/lib/firebaseAuth';
 
 type Context = Extract<Awaited<ReturnType<typeof getOrderBillingContextAction>>, { success: true }>['data'];
-const control = 'rounded border border-border-divider bg-surface-base p-2 text-text-primary';
+const control = 'rounded border border-border-divider bg-white p-2 text-text-primary';
 export function OrderBillingPanel({ studioId, orderId }: { studioId: string; orderId: string }) {
   const [context, setContext] = useState<Context>();
   const [profile, setProfile] = useState<BillingProfile>({ displayName: '' });
@@ -29,6 +29,7 @@ export function OrderBillingPanel({ studioId, orderId }: { studioId: string; ord
   }
   const source = context?.sources.find(s => s.key === selection);
   const previous = context?.documents.filter(d => d.sourceKey === selection).sort((a,b) => b.revision-a.revision)[0];
+  const finalInvoiceUnavailable = Boolean(context && !context.canIssueFinalInvoice);
   const money = (value: number) => `INR ${(value / 100).toFixed(2)}`;
   async function download(doc: BillingDocument, print = false) {
     // Open on the user gesture so browser popup blocking does not discard a fetched document.
@@ -50,12 +51,13 @@ export function OrderBillingPanel({ studioId, orderId }: { studioId: string; ord
       <details><summary>Issuer details (optional contact fields)</summary><div className="grid gap-3 py-3 sm:grid-cols-2">
         {(['displayName','address','phone','email','website','paymentInstructions','notes'] as const).map(key => <label key={key} className="grid gap-1 text-sm">{key === 'displayName' ? 'Issuer name (required)' : key}<textarea className={control} value={profile[key] || ''} maxLength={key === 'notes' ? 2000 : key === 'address' || key === 'paymentInstructions' ? 1000 : key === 'displayName' ? 160 : key === 'phone' ? 80 : 254} onChange={e => setProfile(p => ({ ...p, [key]: e.target.value }))} /></label>)}
       </div><button disabled={busy} className={control} onClick={() => run(async () => { const result = await saveBillingProfileAction({ studioId, profile, idToken: await getCurrentUserIdToken() || undefined }); if (!result.success) throw new Error(result.error); await load(); })}>Save issuer details</button></details>
-      <label className="grid gap-1">Document<select className={control} value={selection} onChange={e => { setSelection(e.target.value); setConfirmed(false); setPaymentDate(''); }}><option value="invoice">Invoice · {money(context.financials.confirmed)}</option>{context.sources.map(s => <option key={s.key} value={s.key}>{s.label} · {money(s.amountMinor)}</option>)}</select></label>
+      <label className="grid gap-1">Document<select className={control} value={selection} onChange={e => { setSelection(e.target.value); setConfirmed(false); setPaymentDate(''); }}><option value="invoice" disabled={finalInvoiceUnavailable}>Final Invoice · {money(context.financials.confirmed)}{finalInvoiceUnavailable ? ' (available after full payment)' : ''}</option>{context.sources.map(s => <option key={s.key} value={s.key}>{s.label} receipt · {money(s.amountMinor)}</option>)}</select></label>
       <p>Recorded paid: {money(context.financials.paid)} · Balance: {money(context.financials.remaining)}{context.financials.overpayment > 0 ? ` · Overpayment: ${money(context.financials.overpayment)}` : ''}</p>
+      {selection === 'invoice' && finalInvoiceUnavailable && <p role="status" className="rounded border border-amber-200 bg-amber-50 p-2 text-sm text-amber-900">Final invoice becomes available after every recorded payment is saved and the order is paid in full. You can issue receipts for each payment now.</p>}
       {source?.requiresConfirmation && <div className="space-y-2"><p>The payment date is missing or this entry was created by marking an order paid. Confirm the actual receipt of {money(source.amountMinor)}.</p><label className="block">Actual payment date<input className={control} type="date" value={paymentDate} onChange={e => setPaymentDate(e.target.value)} /></label><label><input type="checkbox" checked={confirmed} onChange={e=>setConfirmed(e.target.checked)} /> I confirm this amount was received on this date.</label></div>}
       {selection === 'invoice' && <label className="block">Due date (optional)<input className={control} type="date" value={dueDate} onChange={e=>setDueDate(e.target.value)} /></label>}
       <label className="grid gap-1">Document notes (optional)<textarea className={control} maxLength={2000} value={notes} onChange={e=>setNotes(e.target.value)} /></label>
-      <button className={control} disabled={busy || !context.canIssue || previous?.status === 'ISSUED' || Boolean(source?.requiresConfirmation && (!confirmed || !paymentDate))} onClick={() => run(async () => {
+      <button className={control} disabled={busy || !context.canIssue || (selection === 'invoice' && finalInvoiceUnavailable) || previous?.status === 'ISSUED' || Boolean(source?.requiresConfirmation && (!confirmed || !paymentDate))} onClick={() => run(async () => {
         const result = await issueBillingDocumentAction({ studioId, orderId, kind: source ? 'RECEIPT' : 'INVOICE', source: source?.source, expectedSourceFingerprint: source?.fingerprint || context.invoiceFingerprint, optionalFields: { notes: notes || undefined, dueDate: selection === 'invoice' ? dueDate || undefined : undefined }, receiptConfirmation: source?.requiresConfirmation ? { confirmed: true, amountMinor: source.amountMinor, paymentDate } : undefined, replacementOf: previous?.status === 'VOID' ? previous.id : undefined, idToken: await getCurrentUserIdToken() || undefined });
         if (!result.success) throw new Error(result.error); await load();
       })}>{busy ? 'Working…' : previous?.status === 'ISSUED' ? 'Already issued — download below' : previous ? 'Issue replacement' : 'Issue document'}</button>

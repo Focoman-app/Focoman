@@ -275,6 +275,12 @@ export interface OrderDriveDeliverable {
   driveUrl: string;
   driveId?: string;
   notes?: string;
+  /** The task this client review may advance. Deliberately absent for ordinary delivery links. */
+  linkedTaskId?: string;
+  reviewPurpose?: 'PHOTO_SELECTION' | 'FINAL_PROOF';
+  /** A real-world handoff is recorded by staff; no Drive URL is fabricated for it. */
+  offlineHandoffConfirmedAt?: string;
+  offlineHandoffConfirmedBy?: string;
   clientApproved?: boolean;
   clientFeedback?: string;
   selectedPhotos?: string[];
@@ -574,6 +580,9 @@ export interface OrderInstallment {
   amount: number;
   date: string; // YYYY-MM-DD
   notes?: string;
+  method?: PaymentMethod;
+  referenceNumber?: string;
+  proofUrl?: string;
   createdAt?: string;
   recordedBy?: string;
   recordedByRole?: string;

@@ -37,9 +37,15 @@ interface OmsPaymentSummarySectionProps {
   onChangeNewInstallmentDate: (value: string) => void;
   newInstallmentNotes: string;
   onChangeNewInstallmentNotes: (value: string) => void;
+  newInstallmentMethod: "CASH" | "UPI" | "BANK_TRANSFER";
+  onChangeNewInstallmentMethod: (value: "CASH" | "UPI" | "BANK_TRANSFER") => void;
+  newInstallmentReference: string;
+  onChangeNewInstallmentReference: (value: string) => void;
   installmentError: string | null;
   pricingError: string | null;
-  onAddInstallment: () => void;
+  onAddInstallment: () => void | Promise<void>;
+  newInstallmentProofFile: File | null;
+  onChangeNewInstallmentProofFile: (file: File | null) => void;
   onSavePricing: () => void;
 }
 
@@ -70,9 +76,15 @@ export function OmsPaymentSummarySection({
   onChangeNewInstallmentDate,
   newInstallmentNotes,
   onChangeNewInstallmentNotes,
+  newInstallmentMethod,
+  onChangeNewInstallmentMethod,
+  newInstallmentReference,
+  onChangeNewInstallmentReference,
   installmentError,
   pricingError,
   onAddInstallment,
+  newInstallmentProofFile,
+  onChangeNewInstallmentProofFile,
   onSavePricing,
 }: OmsPaymentSummarySectionProps) {
   return (
@@ -223,7 +235,7 @@ export function OmsPaymentSummarySection({
                         </span>
                         <span className="text-[10px] text-text-tertiary ml-2">
                           Recorded on {inst.date}
-                          {inst.notes ? ` · ${inst.notes}` : ""}
+                          {inst.method ? ` · ${inst.method.replace("_", " ")}` : ""}{inst.notes ? ` · ${inst.notes}` : ""}
                         </span>
                       </div>
                       <button
@@ -246,7 +258,7 @@ export function OmsPaymentSummarySection({
                   className="w-full py-2.5 px-3 rounded-xl bg-brand-blue-primary hover:bg-sky-600 active:bg-sky-700 text-white text-xs font-bold flex items-center justify-center gap-1.5 transition shadow-sm cursor-pointer"
                 >
                   <span className="text-sm font-extrabold">+</span>
-                  <span>Add Payment</span>
+                  <span>Add payment</span>
                 </button>
               )}
 
@@ -332,13 +344,42 @@ export function OmsPaymentSummarySection({
                       )}
 
                       <div>
+                        <label className="text-[10px] font-bold text-text-secondary block mb-0.5">Payment Mode</label>
+                        <select
+                          value={newInstallmentMethod}
+                          onChange={(e) => onChangeNewInstallmentMethod(e.target.value as "CASH" | "UPI" | "BANK_TRANSFER")}
+                          className="w-full rounded-lg border border-border-default bg-white px-2.5 py-1 text-xs text-text-primary focus:outline-none focus:border-brand-blue-primary focus:ring-1 focus:ring-brand-blue-primary"
+                        >
+                          <option value="CASH">Cash</option>
+                          <option value="UPI">UPI</option>
+                          <option value="BANK_TRANSFER">Bank Transfer</option>
+                        </select>
+                      </div>
+
+                      {newInstallmentMethod === "UPI" && (
+                        <div>
+                          <label className="text-[10px] font-bold text-text-secondary block mb-0.5">UPI Transaction ID <span className="font-normal">(Optional)</span></label>
+                          <input
+                            type="text"
+                            value={newInstallmentReference}
+                            onChange={(e) => onChangeNewInstallmentReference(e.target.value)}
+                            placeholder="UTR / transaction number"
+                            maxLength={200}
+                            className="w-full rounded-lg border border-border-default bg-white px-2.5 py-1 text-xs text-text-secondary focus:outline-none focus:border-brand-blue-primary focus:ring-1 focus:ring-brand-blue-primary"
+                          />
+                          <label className="mt-2 block text-[10px] font-bold text-text-secondary">Screenshot proof <span className="font-normal">(Optional)</span><input type="file" accept="image/*" onChange={(event) => onChangeNewInstallmentProofFile(event.target.files?.[0] || null)} className="mt-1 block w-full text-[10px] text-text-secondary" /></label>
+                          {newInstallmentProofFile && <p className="mt-1 text-[10px] text-text-tertiary">Selected: {newInstallmentProofFile.name}</p>}
+                        </div>
+                      )}
+
+                      <div>
                         <input
                           type="text"
                           value={newInstallmentNotes}
                           onChange={(e) =>
                             onChangeNewInstallmentNotes(e.target.value)
                           }
-                          placeholder="Optional note (e.g. Cash, UPI, 2nd installment)"
+                          placeholder="Optional note"
                           maxLength={50}
                           className="w-full rounded-lg border border-border-default bg-white px-2.5 py-1 text-xs text-text-secondary focus:outline-none focus:border-brand-blue-primary focus:ring-1 focus:ring-brand-blue-primary"
                         />
@@ -358,7 +399,7 @@ export function OmsPaymentSummarySection({
                           onClick={onAddInstallment}
                           className="btn-brand-blue py-1 px-3 text-[11px] disabled:opacity-40"
                         >
-                          Add
+                          Add to unsaved payments
                         </button>
                       </div>
                     </div>
@@ -441,7 +482,7 @@ export function OmsPaymentSummarySection({
                 className="btn-brand-blue py-1.5 px-4 text-xs font-bold disabled:opacity-50 flex items-center gap-1.5 shadow-2xs"
               >
                 <span>✓</span>
-                <span>{isUpdatingPayment ? "Saving Changes..." : "Save Changes"}</span>
+                <span>{isUpdatingPayment ? "Saving payments..." : "Save payments"}</span>
               </button>
             </div>
           </>

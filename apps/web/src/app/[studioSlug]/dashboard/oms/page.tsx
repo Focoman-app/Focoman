@@ -30,6 +30,9 @@ import {
   cancelOrderAction,
   deleteOrderAction,
   sendManualPaymentReminderAction,
+  saveServiceCrewAssignmentsAction,
+  markTaskOfflineReviewReadyAction,
+  updateOrderAction,
   updateOrderDriveDeliverablesAction,
 } from "@/actions/orderActions";
 import { getStudioMembersAction } from "@/actions/memberActions";
@@ -37,6 +40,7 @@ import { getStudioCustomersAction } from "@/actions/customerActions";
 import { getStudioServicesAction, updateStudioAction } from "@/actions/studioActions";
 import { getStudioLeadsAction } from "@/actions/leadActions";
 import { DEFAULT_STUDIO_SERVICES } from "@/lib/studioServices";
+import { uploadPaymentProof } from "@/lib/paymentProofUpload";
 import { useStudioWorkspace } from "@/components/StudioWorkspaceProvider";
 import { AddCrewMemberModal } from "@/components/AddCrewMemberModal";
 import { OrderVerticalWorkflow } from "@/components/workflow/OrderVerticalWorkflow";
@@ -162,6 +166,9 @@ export default function OmsPage({
   const [newInstallmentAmount, setNewInstallmentAmount] = useState("");
   const [newInstallmentDate, setNewInstallmentDate] = useState("");
   const [newInstallmentNotes, setNewInstallmentNotes] = useState("");
+  const [newInstallmentMethod, setNewInstallmentMethod] = useState<"CASH" | "UPI" | "BANK_TRANSFER">("CASH");
+  const [newInstallmentReference, setNewInstallmentReference] = useState("");
+  const [newInstallmentProofFile, setNewInstallmentProofFile] = useState<File | null>(null);
   const [pricingError, setPricingError] = useState<string | null>(null);
   const [installmentError, setInstallmentError] = useState<string | null>(null);
   const [showAuditHistory, setShowAuditHistory] = useState(false);
@@ -673,14 +680,38 @@ export default function OmsPage({
     }
   };
 
+  const handleSaveOrderSchedule = async (eventDate: string, eventLocation: string) => {
+    if (!selected) return;
+    const token = (await getIdToken(false)) ?? workspaceToken;
+    if (!token) throw new Error("Authentication error. Please sign in again.");
+    const res = await updateOrderAction({
+      orderId: selected.id,
+      studioId: studioSlug,
+      updates: { eventDate, eventLocation: eventLocation.trim() },
+      idToken: token,
+    });
+    if (!res.success || !res.order) throw new Error(res.error || "Failed to save event schedule.");
+    setOrders((previous) => previous.map((order) => order.id === res.order!.id ? res.order! : order));
+  };
+
+  const handleMarkTaskOfflineReviewReady = async (taskId: string) => {
+    if (!selected) return;
+    const token = (await getIdToken(false)) ?? workspaceToken;
+    if (!token) throw new Error("Authentication error. Please sign in again.");
+    const res = await markTaskOfflineReviewReadyAction({ orderId: selected.id, taskId, studioId: studioSlug, idToken: token });
+    if (!res.success || !res.task) throw new Error(res.error || "Failed to confirm offline handoff.");
+    setSelectedTasks((previous) => previous.map((task) => task.id === res.task!.id ? res.task! : task));
+    await loadOrders();
+  };
+
   const handleUpdatePayment = async (
     newPaymentStatus?: PaymentStatus,
     advanceAmount?: number,
     finalConfirmedPrice?: number,
     installments?: OrderInstallment[],
     advanceDate?: string
-  ) => {
-    if (!selected || isUpdatingPayment) return;
+  ): Promise<boolean> => {
+    if (!selected || isUpdatingPayment) return false;
     setIsUpdatingPayment(true);
 
     const previousOrders = [...orders];
@@ -815,7 +846,7 @@ export default function OmsPage({
       if (!token) {
         setIsUpdatingPayment(false);
         setOrders(previousOrders);
-        return;
+        return false;
       }
       const res = await updatePaymentStatusAction({
         idToken: token,
@@ -833,9 +864,11 @@ export default function OmsPage({
           prev.map((o) => (o.id === res.order!.id ? res.order! : o))
         );
         await loadOrders();
+        return true;
       } else {
         setOrders(previousOrders);
         alert(res.error || "Failed to update payment status");
+        return false;
       }
     } catch (err: unknown) {
       setIsUpdatingPayment(false);
@@ -843,6 +876,7 @@ export default function OmsPage({
       alert(
         err instanceof Error ? err.message : "Failed to update payment status"
       );
+      return false;
     }
   };
 
@@ -893,12 +927,14 @@ export default function OmsPage({
     setNewInstallmentAmount("");
     setNewInstallmentDate(new Date().toISOString().split("T")[0]);
     setNewInstallmentNotes("");
+    setNewInstallmentMethod("CASH");
+    setNewInstallmentReference("");
     setPricingError(null);
     setInstallmentError(null);
     setIsEditingPricing(true);
   };
 
-  const handleAddInstallment = () => {
+  const handleAddInstallment = async () => {
     const amt = Number(newInstallmentAmount);
     if (!amt || amt <= 0) {
       setInstallmentError(
@@ -926,11 +962,25 @@ export default function OmsPage({
 
     setInstallmentError(null);
     setPricingError(null);
+    const paymentId = `inst_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+    let proofUrl: string | undefined;
+    if (newInstallmentMethod === "UPI" && newInstallmentProofFile) {
+      try {
+        if (!selected) throw new Error("Select an order first.");
+        proofUrl = await uploadPaymentProof({ studioId: studioSlug, orderId: selected.id, paymentId, file: newInstallmentProofFile });
+      } catch (error) {
+        setInstallmentError(error instanceof Error ? error.message : "Failed to upload payment proof.");
+        return;
+      }
+    }
     const newInst: OrderInstallment = {
-      id: `inst_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+      id: paymentId,
       amount: amt,
       date: newInstallmentDate.trim() || new Date().toISOString().split("T")[0],
       notes: newInstallmentNotes.trim() || undefined,
+      method: newInstallmentMethod,
+      referenceNumber: newInstallmentMethod === "UPI" && newInstallmentReference.trim() ? newInstallmentReference.trim() : undefined,
+      proofUrl,
       createdAt: new Date().toISOString(),
       recordedBy:
         workspaceUser?.displayName || studio?.ownerName || "Studio Owner",
@@ -939,6 +989,8 @@ export default function OmsPage({
     setEditInstallments((prev) => [...prev, newInst]);
     setNewInstallmentAmount("");
     setNewInstallmentNotes("");
+    setNewInstallmentReference("");
+    setNewInstallmentProofFile(null);
     setShowAddInstallment(false);
   };
 
@@ -974,14 +1026,14 @@ export default function OmsPage({
         ? "ADVANCE_RECEIVED"
         : "PENDING";
 
-    await handleUpdatePayment(
+    const saved = await handleUpdatePayment(
       calculatedStatus,
       advanceNum,
       confirmedNum,
       editInstallments,
       editAdvanceDate
     );
-    setIsEditingPricing(false);
+    if (saved) setIsEditingPricing(false);
   };
 
   const handleConfirmSuggestion = async (sug: ResourceSuggestion) => {
@@ -1073,6 +1125,24 @@ export default function OmsPage({
     } else {
       alert(res.error || "Failed to assign crew member");
     }
+  };
+
+  const handleSaveServiceCrewAssignments = async (serviceName: string, memberNames: string[]) => {
+    if (!selected) throw new Error("Select an order first.");
+    const token = (await getIdToken(false)) ?? workspaceToken;
+    if (!token) throw new Error("Authentication error. Please sign in again.");
+    const normalized = new Set<string>();
+    const assignments = memberNames.map((name, index) => {
+      const clean = name.trim();
+      const key = clean.toLowerCase();
+      if (!clean || normalized.has(key)) throw new Error("Each crew member can be assigned only once to this service.");
+      normalized.add(key);
+      const matched = allSelectableCrew.find((member) => member.name.toLowerCase() === key) || temporaryCrewList.find((member) => member.name.toLowerCase() === key);
+      return { memberId: matched?.id || `temp_${Date.now()}_${index}`, memberName: matched?.name || clean };
+    });
+    const res = await saveServiceCrewAssignmentsAction({ orderId: selected.id, studioId: studioSlug, serviceName, assignments, idToken: token });
+    if (!res.success || !res.order) throw new Error(res.error || "Failed to save crew assignments.");
+    setOrders((previous) => previous.map((order) => order.id === res.order!.id ? res.order! : order));
   };
 
   const handleUnassignService = async (serviceName: string) => {
@@ -1483,10 +1553,11 @@ export default function OmsPage({
             onUpdateTaskStatus={handleUpdateTaskStatus}
             allSelectableCrew={allSelectableCrew}
             temporaryCrewList={temporaryCrewList}
-            onAssignCrew={handleCommitCrewAssignment}
-            onUnassignCrew={handleUnassignService}
+            onSaveServiceCrew={handleSaveServiceCrewAssignments}
             onOpenErpWizard={hasErp ? openErpWizardForService : undefined}
             onAssignTaskCrew={handleAssignTaskCrew}
+            onMarkOfflineReviewReady={handleMarkTaskOfflineReviewReady}
+            onSaveSchedule={handleSaveOrderSchedule}
             hasErp={hasErp}
           />
 
@@ -1529,6 +1600,9 @@ export default function OmsPage({
               setInstallmentError(null);
               setNewInstallmentAmount("");
               setNewInstallmentNotes("");
+              setNewInstallmentMethod("CASH");
+              setNewInstallmentReference("");
+              setNewInstallmentProofFile(null);
               setNewInstallmentDate(new Date().toISOString().split("T")[0]);
               setShowAddInstallment(true);
             }}
@@ -1545,6 +1619,12 @@ export default function OmsPage({
             onChangeNewInstallmentDate={setNewInstallmentDate}
             newInstallmentNotes={newInstallmentNotes}
             onChangeNewInstallmentNotes={setNewInstallmentNotes}
+            newInstallmentMethod={newInstallmentMethod}
+            onChangeNewInstallmentMethod={setNewInstallmentMethod}
+            newInstallmentReference={newInstallmentReference}
+            onChangeNewInstallmentReference={setNewInstallmentReference}
+            newInstallmentProofFile={newInstallmentProofFile}
+            onChangeNewInstallmentProofFile={setNewInstallmentProofFile}
             installmentError={installmentError}
             pricingError={pricingError}
             onAddInstallment={handleAddInstallment}
@@ -1567,6 +1647,7 @@ export default function OmsPage({
             <GoogleDriveDeliverablesSection
               orderId={selected.id}
               deliverables={selected.driveDeliverables || []}
+              reviewTasks={selectedTasks.map((task) => ({ id: task.id, title: task.title }))}
               canManageLinks={true}
               canSubmitClientReview={false}
               onSaveDeliverables={handleSaveDriveDeliverables}
@@ -1658,6 +1739,10 @@ export default function OmsPage({
         setShowServicesDropdown={setShowServicesDropdown}
         onToggleService={toggleService}
         calculateOrderPrice={calculateOrderPrice}
+        busyEventDates={orders
+          .filter((order) => !order.isDeleted && order.orderStatus !== "CANCELLED")
+          .map((order) => order.eventDate)
+          .filter(Boolean)}
         hasCrm={hasCrm}
       />
 
@@ -1691,7 +1776,7 @@ export default function OmsPage({
 
       {selected && billingModalState.isOpen && (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-black/40 p-4" role="dialog" aria-modal="true" aria-label="Billing documents">
-          <div className="mx-auto my-8 max-w-2xl rounded-xl bg-surface-base p-6 shadow-xl">
+          <div className="mx-auto my-8 max-w-2xl rounded-xl border border-border-default bg-white p-6 text-text-primary shadow-2xl">
             <div className="mb-4 flex items-center justify-between gap-4"><h2 className="text-xl font-semibold">Billing documents</h2><button type="button" className="rounded border border-border-divider px-3 py-1" onClick={() => setBillingModalState(prev => ({ ...prev, isOpen: false }))}>Close</button></div>
             <OrderBillingPanel studioId={studioSlug} orderId={selected.id} />
           </div>

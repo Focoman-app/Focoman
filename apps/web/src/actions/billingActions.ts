@@ -29,8 +29,11 @@ export async function getOrderBillingContextAction(input: { studioId: string; or
     const [order, studio, documents] = await Promise.all([getOrderByIdIncludeDeleted(input.orderId), getStudioBySlug(input.studioId), listOrderBillingDocuments(input.studioId, input.orderId)]);
     if (!order || !studio || order.studioId !== studio.id || studio.id !== input.studioId) throw new Error('Order unavailable.');
     const sources = getReceiptSources(order).map(source => ({ ...source, fingerprint: getBillingSourceFingerprint(order, studio, 'RECEIPT', source.source) }));
-    return { success: true as const, data: { profile: getBillingProfile(studio), financials: getOrderFinancials(order), sources, documents,
-      invoiceFingerprint: getBillingSourceFingerprint(order, studio, 'INVOICE'), canIssue: !order.isDeleted && !order.isHeadless,
+    const financials = getOrderFinancials(order);
+    const canIssue = !order.isDeleted && !order.isHeadless;
+    const canIssueFinalInvoice = canIssue && order.paymentStatus === 'PAID' && financials.confirmed > 0 && financials.remaining === 0 && financials.paid >= financials.confirmed;
+    return { success: true as const, data: { profile: getBillingProfile(studio), financials, sources, documents,
+      invoiceFingerprint: getBillingSourceFingerprint(order, studio, 'INVOICE'), canIssue, canIssueFinalInvoice,
       customerName: order.customer.name, description: [order.eventType, ...order.services].filter(Boolean).join(' · ') } };
   } catch (error) { return { success: false as const, error: safeError(error) }; }
 }

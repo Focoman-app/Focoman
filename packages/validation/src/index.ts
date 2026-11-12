@@ -5,6 +5,20 @@ import { z } from 'zod';
  * Source of Truth: Focoman Product Discovery Document
  */
 
+/** Owner-only, whole-service replacement to avoid partial crew saves. */
+export const SaveServiceCrewAssignmentsSchema = z.object({
+  orderId: z.string().min(1, 'Order ID is required'),
+  studioId: z.string().min(1, 'Studio ID is required'),
+  serviceName: z.string().trim().min(1, 'Service name is required'),
+  assignments: z.array(z.object({
+    memberId: z.string().trim().min(1, 'Crew member ID is required'),
+    memberName: z.string().trim().min(1, 'Crew member name is required'),
+  })).max(30, 'A service can have at most 30 crew members'),
+  idToken: z.string().min(1, 'Identity token is required'),
+});
+
+export type SaveServiceCrewAssignmentsInput = z.infer<typeof SaveServiceCrewAssignmentsSchema>;
+
 export const CreateOrderSchema = z.object({
   idToken: z.string().min(1, 'Authentication required. No identity token provided.').optional(),
   studioId: z.string().min(1, 'Studio ID is required'),
@@ -60,6 +74,9 @@ export const OrderInstallmentSchema = z.object({
   amount: z.number().nonnegative(),
   date: z.string(),
   notes: z.string().optional(),
+  method: z.enum(['CASH', 'UPI', 'BANK_TRANSFER']).optional(),
+  referenceNumber: z.string().trim().max(200).optional(),
+  proofUrl: z.string().url().optional(),
   createdAt: z.string().optional(),
   recordedBy: z.string().optional(),
   recordedByRole: z.string().optional(),
