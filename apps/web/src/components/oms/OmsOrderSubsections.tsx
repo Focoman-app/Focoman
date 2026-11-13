@@ -16,6 +16,7 @@ export function OmsTurnaroundSlaBanner({
     order.orderStatus === "COMPLETED",
     order.updatedAt
   );
+  const upcomingReminder = aging.statusLabel === "Event upcoming in 3 days" ? aging.statusLabel : null;
 
   return (
     <div className="rounded-2xl border border-border-default bg-surface-app/40 p-4 space-y-3">
@@ -28,19 +29,21 @@ export function OmsTurnaroundSlaBanner({
             <span className="rounded-full bg-emerald-100 text-emerald-800 text-[9px] font-extrabold px-2 py-0.5 border border-emerald-200">
               Delivered
             </span>
-          ) : aging.isUpcoming ? (
+          ) : upcomingReminder ? (
             <span className="rounded-full bg-blue-100 text-brand-blue-primary text-[9px] font-extrabold px-2 py-0.5 border border-blue-200">
-              Event Scheduled
+              {upcomingReminder}
             </span>
-          ) : (
+          ) : !aging.isUpcoming ? (
             <span className="rounded-full bg-amber-100 text-amber-800 text-[9px] font-extrabold px-2 py-0.5 border border-amber-200">
               Active Production
             </span>
-          )}
+          ) : null}
         </div>
-        <span className="text-[10px] font-bold text-text-secondary">
-          {aging.statusLabel}
-        </span>
+        {!aging.isUpcoming && (
+          <span className="text-[10px] font-bold text-text-secondary">
+            {aging.statusLabel}
+          </span>
+        )}
       </div>
 
       <div className="grid grid-cols-3 gap-2.5">
@@ -101,48 +104,6 @@ export function OmsTurnaroundSlaBanner({
           </span>
         </div>
       </div>
-    </div>
-  );
-}
-
-export function OmsPreflightCheckSection({ order }: { order: Order }) {
-  if (!order.preflightReport) return null;
-
-  return (
-    <div className="rounded-2xl border border-amber-200 bg-amber-50/50 p-4 space-y-3">
-      <div className="flex items-center justify-between">
-        <h4 className="text-xs font-bold text-amber-950 uppercase tracking-wider">
-          Pre-flight Operational Check
-        </h4>
-        <span
-          className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-            order.preflightReport.hasConflicts
-              ? "bg-red-100 text-status-error"
-              : "bg-green-100 text-status-success"
-          }`}
-        >
-          {order.preflightReport.hasConflicts ? "Review Needed" : "Passed Clear"}
-        </span>
-      </div>
-
-      {order.preflightReport.eventDateConflicts.length > 0 && (
-        <div className="text-xs text-red-700 bg-red-50 p-2.5 rounded-xl border border-red-200">
-          <p className="font-bold">Overlapping Event Conflict:</p>
-          <p className="text-[11px] mt-0.5">
-            {order.preflightReport.eventDateConflicts.join(", ")}
-          </p>
-        </div>
-      )}
-
-      {order.preflightReport.warnings.length > 0 && (
-        <div className="space-y-1">
-          {order.preflightReport.warnings.map((w, idx) => (
-            <p key={idx} className="text-[11px] text-amber-900 flex items-center gap-1.5">
-              <span>•</span> {w}
-            </p>
-          ))}
-        </div>
-      )}
     </div>
   );
 }

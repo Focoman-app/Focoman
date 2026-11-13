@@ -63,6 +63,7 @@ export function OmsLeadsPanel({
 }: OmsLeadsPanelProps) {
   const [channelFilter, setChannelFilter] = useState<"ALL" | LeadChannel>("ALL");
   const [searchQuery, setSearchQuery] = useState("");
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [selectedLead, setSelectedLead] = useState<StudioLead | null>(null);
   const [showSetupModal, setShowSetupModal] = useState(false);
   const [showAddLeadModal, setShowAddLeadModal] = useState(false);
@@ -70,8 +71,6 @@ export function OmsLeadsPanel({
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [banner, setBanner] = useState<{ type: "success" | "error"; text: string } | null>(null);
-
-  const isMultiChannelEnabled = webhookConfig?.enabled !== false;
 
   const [configDraft, setConfigDraft] = useState({
     enabled: webhookConfig?.enabled !== false,
@@ -155,37 +154,6 @@ async function submitFocomanLead(formEl) {
       (l.message && l.message.toLowerCase().includes(q))
     );
   });
-
-  const handleToggleMultiChannel = async () => {
-    setBusy(true);
-    try {
-      const token = await getIdToken(true);
-      if (!token) return;
-      const nextEnabled = !isMultiChannelEnabled;
-      const res = await saveStudioLeadWebhookConfigAction({
-        studioId: studioSlug,
-        config: {
-          ...configDraft,
-          enabled: nextEnabled,
-        },
-        idToken: token,
-      });
-      if (res.success) {
-        setConfigDraft((prev) => ({ ...prev, enabled: nextEnabled }));
-        showNotice(
-          "success",
-          nextEnabled
-            ? "Multi-Channel Lead Capture enabled! Instagram, WhatsApp, and Website leads will flow into OMS."
-            : "External webhook lead capture paused."
-        );
-        await onRefreshAll();
-      } else {
-        showNotice("error", res.error || "Failed to update channel state.");
-      }
-    } finally {
-      setBusy(false);
-    }
-  };
 
   const handleSaveWebhookSetup = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -391,59 +359,33 @@ async function submitFocomanLead(formEl) {
         }`}
       >
         <header className="header-brand-blue">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-2 mb-1.5">
-                <span className="badge-brand-blue">
-                  <span className="h-1.5 w-1.5 rounded-full bg-brand-blue-primary" />
-                  OMS · Order Management
-                </span>
-                <span className="badge-status-neutral">
-                  Studio: <strong className="font-semibold text-text-primary">{studioSlug}</strong>
-                </span>
-              </div>
-              <h1 className="text-xl font-extrabold text-text-primary tracking-tight">
-                Order Management System
-              </h1>
-              <p className="text-xs text-text-secondary mt-0.5">
-                Multi-channel leads (Instagram, WhatsApp, Website, Direct) · {leads.length} Total Leads
-              </p>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setShowSetupModal(true)}
-                className="rounded-xl border border-border-default bg-white px-3.5 py-2 text-xs font-bold text-text-primary hover:bg-surface-app hover:border-brand-blue-primary transition inline-flex items-center gap-1.5 shadow-2xs cursor-pointer"
-              >
-                <SlidersHorizontal className="h-3.5 w-3.5 text-brand-blue-primary" />
-                <span>Enable &amp; Configure Channels</span>
-                <span
-                  className={`h-2 w-2 rounded-full ${
-                    isMultiChannelEnabled ? "bg-emerald-500" : "bg-amber-400"
-                  }`}
-                />
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowAddLeadModal(true)}
-                className="btn-brand-blue inline-flex items-center gap-1"
-              >
-                <Plus className="h-3.5 w-3.5" />
-                <span>Log Lead</span>
-              </button>
-            </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setShowAddLeadModal(true)}
+              className="btn-brand-blue inline-flex items-center gap-1"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              <span>Log Lead</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowSetupModal(true)}
+              className="rounded-xl border border-border-default bg-white px-3.5 py-2 text-xs font-bold text-text-primary hover:bg-surface-app hover:border-brand-blue-primary transition inline-flex items-center gap-1.5 shadow-2xs cursor-pointer"
+            >
+              <SlidersHorizontal className="h-3.5 w-3.5 text-brand-blue-primary" />
+              <span>Configure Channels</span>
+            </button>
           </div>
 
-          {/* 2-Section Switcher: Orders (Confirmed Orders) vs Leads */}
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border-default/70 pt-3.5">
+          <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-border-default/70 pt-3.5">
             <div className="inline-flex rounded-xl bg-surface-app p-1 border border-border-default">
               <button
                 type="button"
                 onClick={() => onSwitchToOrders()}
                 className="rounded-lg px-3.5 py-1.5 text-xs font-bold text-text-secondary hover:text-text-primary transition"
               >
-                Orders (Confirmed Orders) ({ordersCount})
+                Orders ({ordersCount})
               </button>
               <button
                 type="button"
@@ -453,56 +395,48 @@ async function submitFocomanLead(formEl) {
               </button>
             </div>
 
-            {/* Quick Enable/Disable Toggle for Multi-Channel Webhooks */}
-            <div className="flex items-center gap-2">
-              <span className="text-[11px] font-semibold text-text-secondary">
-                Instagram / WhatsApp / Website Capture:
-              </span>
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => void handleToggleMultiChannel()}
-                className={`rounded-full px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider transition border ${
-                  isMultiChannelEnabled
-                    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                    : "bg-gray-100 text-text-tertiary border-border-default"
-                }`}
-              >
-                {isMultiChannelEnabled ? "Enabled" : "Disabled"}
-              </button>
+            <button
+              type="button"
+              onClick={() => setFiltersOpen((open) => !open)}
+              aria-expanded={filtersOpen}
+              aria-controls="oms-lead-filters"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-border-default bg-white px-3 py-1.5 text-xs font-bold text-text-secondary hover:border-brand-blue-primary hover:text-text-primary transition"
+            >
+              <SlidersHorizontal className="h-3.5 w-3.5" />
+              Filters
+            </button>
+          </div>
+
+          {filtersOpen && (
+            <div id="oms-lead-filters" className="mt-3">
+              <input
+                suppressHydrationWarning
+                autoComplete="off"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search leads by client name, phone, Instagram handle, event..."
+                className="w-full rounded-xl border border-border-default bg-surface-app px-3.5 py-2 text-xs text-text-primary placeholder:text-text-tertiary focus:bg-white focus:outline-none focus:border-brand-blue-primary focus:ring-2 focus:ring-brand-blue-soft"
+              />
+              <div className="mt-3 flex flex-wrap items-center gap-1.5">
+                {(["ALL", "DIRECT", "INSTAGRAM", "WHATSAPP", "WEBSITE"] as const).map((ch) => (
+                  <button
+                    key={ch}
+                    type="button"
+                    onClick={() => setChannelFilter(ch)}
+                    className={`rounded-full px-3 py-1 text-[11px] font-bold transition ${
+                      channelFilter === ch
+                        ? "bg-text-primary text-white"
+                        : "border border-border-default bg-white text-text-secondary hover:text-text-primary"
+                    }`}
+                  >
+                    {ch === "ALL"
+                      ? `All Leads (${leads.length})`
+                      : `${CHANNEL_BADGES[ch].label} (${leads.filter((l) => l.channel === ch).length})`}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
-
-          {/* Search & Channel Filters */}
-          <div className="mt-3 flex flex-col sm:flex-row gap-2.5">
-            <input
-              suppressHydrationWarning
-              autoComplete="off"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search leads by client name, phone, Instagram handle, event..."
-              className="flex-1 rounded-xl border border-border-default bg-surface-app px-3.5 py-2 text-xs text-text-primary placeholder:text-text-tertiary focus:bg-white focus:outline-none focus:border-brand-blue-primary focus:ring-2 focus:ring-brand-blue-soft"
-            />
-          </div>
-
-          <div className="mt-3 flex flex-wrap items-center gap-1.5">
-            {(["ALL", "DIRECT", "INSTAGRAM", "WHATSAPP", "WEBSITE"] as const).map((ch) => (
-              <button
-                key={ch}
-                type="button"
-                onClick={() => setChannelFilter(ch)}
-                className={`rounded-full px-3 py-1 text-[11px] font-bold transition ${
-                  channelFilter === ch
-                    ? "bg-text-primary text-white"
-                    : "border border-border-default bg-white text-text-secondary hover:text-text-primary"
-                }`}
-              >
-                {ch === "ALL"
-                  ? `All Leads (${leads.length})`
-                  : `${CHANNEL_BADGES[ch].label} (${leads.filter((l) => l.channel === ch).length})`}
-              </button>
-            ))}
-          </div>
+          )}
         </header>
 
         {banner && (

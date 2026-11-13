@@ -8,12 +8,10 @@ import {
 import { CreateOrderSchema } from "@focoman/validation";
 import {
   generateResourceSuggestions,
-  performBasicPreflightCheck,
   generateWorkflowTasks,
   getStudioCalendarDate,
   getStudioTimestampIST,
   isContactMatch,
-  performPreflightCheck,
 } from "@focoman/domain";
 import {
   getCustomersByStudio,
@@ -95,9 +93,8 @@ export async function createOrderCore(rawInput: unknown): Promise<{
     const initialOrderStatus: OrderStatus =
       validated.eventDate < todayStr ? "POST_EVENT_IN_PROGRESS" : "AWAITING_EVENT";
 
-    const [existingCustomers, studioOrders, studioMembers, studio, hasErp] = await Promise.all([
+    const [existingCustomers, studioMembers, studio, hasErp] = await Promise.all([
       getCustomersByStudio(validated.studioId),
-      getOrdersByStudio(validated.studioId),
       getMembersByStudio(validated.studioId),
       getStudioBySlug(validated.studioId),
       hasStudioCapability(validated.studioId, "STUDIO_ERP"),
@@ -110,19 +107,6 @@ export async function createOrderCore(rawInput: unknown): Promise<{
     );
     const effectiveCustomerId = matchedCustomer ? matchedCustomer.id : customerId;
 
-    const preflight = hasErp
-      ? performPreflightCheck(
-          validated.eventDate,
-          validated.eventLocation || "",
-          validated.services,
-          studioOrders,
-          studioMembers
-        )
-      : performBasicPreflightCheck(
-          validated.eventDate,
-          validated.eventLocation || "",
-          studioOrders
-        );
     const suggestions = hasErp
       ? generateResourceSuggestions(
           validated.eventDate,
@@ -176,7 +160,6 @@ export async function createOrderCore(rawInput: unknown): Promise<{
       orderStatus: initialOrderStatus,
       assignedResources,
       resourceSuggestions: suggestions,
-      preflightReport: preflight,
       trackingPasskey: finalPasskey,
       passkeyPin,
       ...(validated.notifyWhatsApp !== undefined ? { notifyWhatsApp: validated.notifyWhatsApp } : {}),

@@ -85,7 +85,7 @@ export function DashboardTopNav({
   const pageTitle = (() => {
     if (!pathname) return "Dashboard";
     if (pathname.includes("/crm")) return "Customer CRM";
-    if (pathname.includes("/oms")) return "Order Management";
+    if (pathname.includes("/oms")) return "Order Management System";
     if (pathname.includes("/erp")) return "Studio ERP";
     if (pathname.includes("/whatsapp")) return "WhatsApp Operations";
     if (pathname.includes("/settings")) return "Studio Settings";

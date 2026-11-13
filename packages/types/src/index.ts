@@ -145,24 +145,6 @@ export interface EventLocationInfo {
   notes?: string;
 }
 
-export interface PreflightConflictReport {
-  hasConflicts: boolean;
-  eventDateConflicts: {
-    orderId: string;
-    orderNumber: string;
-    eventType: string;
-  }[];
-  resourceConflicts: {
-    memberId: string;
-    memberName: string;
-    role: string;
-    conflictingOrderId: string;
-  }[];
-  warnings: string[];
-  suggestions: string[];
-  evaluatedAt: string;
-}
-
 export interface ResourceSuggestion {
   memberId: string;
   memberName: string;
@@ -562,7 +544,6 @@ export interface Order extends SoftDeletable {
   orderStatus: OrderStatus;
   assignedResources: ResourceAssignment[];
   resourceSuggestions?: ResourceSuggestion[];
-  preflightReport?: PreflightConflictReport;
   cancellationInfo?: CancellationInfo;
   trackingPasskey: string;
   passkeyPin?: string;

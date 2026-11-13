@@ -10,8 +10,6 @@ import {
   getStudioCalendarDate,
   generateWorkflowTasks,
   canConfirmBooking,
-  performPreflightCheck,
-  performBasicPreflightCheck,
   generateResourceSuggestions,
   toCustomerOrderView,
   toCustomerTrackingView,
@@ -72,12 +70,6 @@ describe("ERP crew policy", () => {
     assert.strictEqual(getFreeWorkflowTaskAssignee(true, owner), undefined);
   });
 
-  test("keeps Free pre-flight free of crew warnings and suggestions", () => {
-    const report = performBasicPreflightCheck("2030-01-01", "Chennai", []);
-    assert.deepStrictEqual(report.warnings, []);
-    assert.deepStrictEqual(report.suggestions, []);
-    assert.deepStrictEqual(report.resourceConflicts, []);
-  });
 });
 
 describe("Firebase same-origin redirect auth domain", () => {
@@ -435,7 +427,7 @@ describe("3. Validation Schemas - CRUD Operations", () => {
   });
 });
 
-describe("4. Major Design Amendment - Preflight Checks & Booking Confirmation", () => {
+describe("4. Booking Confirmation", () => {
   test("canConfirmBooking requires verified payment", () => {
     const unverified = canConfirmBooking("PENDING", "PENDING_VERIFICATION");
     assert.strictEqual(unverified.canConfirm, false);
@@ -445,46 +437,6 @@ describe("4. Major Design Amendment - Preflight Checks & Booking Confirmation", 
 
     const rejected = canConfirmBooking("PAID", "REJECTED");
     assert.strictEqual(rejected.canConfirm, false);
-  });
-
-  test("performPreflightCheck detects date conflicts and matching skills", () => {
-    const existingOrders = [
-      {
-        id: "ORD-1",
-        studioId: "studio-1",
-        orderNumber: "ORD-101",
-        eventType: "Wedding",
-        eventDate: "2026-11-20",
-        orderStatus: "AWAITING_EVENT" as const,
-        isDeleted: false,
-      },
-    ];
-
-    const studioMembers = [
-      {
-        id: "MEM-1",
-        studioId: "studio-1",
-        name: "Rahul",
-        email: "rahul@studio.com",
-        skills: ["PHOTOGRAPHY"],
-        status: "ACTIVE" as const,
-        createdAt: "2026-01-01",
-        updatedAt: "2026-01-01",
-      },
-    ];
-
-    const report = performPreflightCheck(
-      "2026-11-20",
-      "123 Main St, Chennai",
-      ["Photography"],
-      existingOrders as any,
-      studioMembers as any
-    );
-
-    assert.strictEqual(report.hasConflicts, true);
-    assert.strictEqual(report.eventDateConflicts.length, 1);
-    assert.strictEqual(report.eventDateConflicts[0].orderNumber, "ORD-101");
-    assert.ok(report.suggestions.length > 0);
   });
 
   test("generateResourceSuggestions computes match scores correctly", () => {

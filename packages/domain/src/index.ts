@@ -7,7 +7,6 @@ import type {
   Order,
   Customer,
   StudioMember,
-  PreflightConflictReport,
   ResourceSuggestion,
   CustomerOrderView,
   CustomerTrackingView,
@@ -60,109 +59,6 @@ export function canConfirmBooking(
   return {
     canConfirm: false,
     reason: 'Advance payment must be submitted and verified before booking confirmation.'
-  };
-}
-
-/**
- * Evaluates operational pre-flight conflicts before confirming a booking or order.
- * Checks event date overlaps, location, and crew member skill/availability.
- */
-export function performPreflightCheck(
-  eventDateISO: string,
-  locationAddress: string,
-  requiredServices: string[],
-  existingStudioOrders: Order[],
-  studioMembers: StudioMember[]
-): PreflightConflictReport {
-  const warnings: string[] = [];
-  const suggestions: string[] = [];
-
-  // 1. Event Date Conflict Check
-  const eventDateConflicts = existingStudioOrders
-    .filter(o => !o.isDeleted && o.orderStatus !== 'CANCELLED' && o.eventDate === eventDateISO)
-    .map(o => ({
-      orderId: o.id,
-      orderNumber: o.orderNumber,
-      eventType: o.eventType,
-    }));
-
-  if (eventDateConflicts.length > 0) {
-    warnings.push(
-      `Studio already has ${eventDateConflicts.length} active event(s) booked on ${eventDateISO}.`
-    );
-  }
-
-  // 2. Resource/Skill match check
-  const requiredSkills: string[] = [];
-  for (const svc of requiredServices) {
-    const sLower = svc.toLowerCase();
-    if (sLower.includes('photo')) requiredSkills.push('PHOTOGRAPHY');
-    if (sLower.includes('video')) requiredSkills.push('VIDEOGRAPHY');
-    if (sLower.includes('album')) requiredSkills.push('ALBUM_DESIGN');
-  }
-
-  const matchingMembers = studioMembers.filter(m =>
-    !m.isDeleted &&
-    (m.status === 'ACTIVE' || !m.status) &&
-    requiredSkills.some(reqSkill => m.skills.includes(reqSkill))
-  );
-
-  if (matchingMembers.length === 0 && requiredSkills.length > 0) {
-    warnings.push('No active studio crew members match the required skills for this booking.');
-  } else if (matchingMembers.length > 0) {
-    suggestions.push(
-      `Found ${matchingMembers.length} available member(s) with matching skills (${matchingMembers.map(m => m.name).join(', ')}).`
-    );
-  }
-
-  if (!locationAddress || locationAddress.trim().length === 0) {
-    warnings.push('Event location address is incomplete.');
-  }
-
-  return {
-    hasConflicts: eventDateConflicts.length > 0 || warnings.length > 0,
-    eventDateConflicts,
-    resourceConflicts: [],
-    warnings,
-    suggestions,
-    evaluatedAt: new Date().toISOString(),
-  };
-}
-
-/**
- * Free OMS pre-flight retains real event-date and location checks without
- * introducing ERP crew terminology, matching, or resource suggestions.
- */
-export function performBasicPreflightCheck(
-  eventDateISO: string,
-  locationAddress: string,
-  existingStudioOrders: Order[]
-): PreflightConflictReport {
-  const warnings: string[] = [];
-  const eventDateConflicts = existingStudioOrders
-    .filter(o => !o.isDeleted && o.orderStatus !== 'CANCELLED' && o.eventDate === eventDateISO)
-    .map(o => ({
-      orderId: o.id,
-      orderNumber: o.orderNumber,
-      eventType: o.eventType,
-    }));
-
-  if (eventDateConflicts.length > 0) {
-    warnings.push(
-      `Studio already has ${eventDateConflicts.length} active event(s) booked on ${eventDateISO}.`
-    );
-  }
-  if (!locationAddress || locationAddress.trim().length === 0) {
-    warnings.push('Event location address is incomplete.');
-  }
-
-  return {
-    hasConflicts: eventDateConflicts.length > 0 || warnings.length > 0,
-    eventDateConflicts,
-    resourceConflicts: [],
-    warnings,
-    suggestions: [],
-    evaluatedAt: new Date().toISOString(),
   };
 }
 

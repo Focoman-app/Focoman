@@ -3,7 +3,6 @@ import { generateTimestampDigits, prefixLetters } from "@/lib/invitationPasscode
 import { UpdateTaskStatusSchema } from "@focoman/validation";
 import {
   canCompleteOrder,
-  getStudioCalendarDate,
   getStudioTimestampIST,
 } from "@focoman/domain";
 import {
@@ -113,9 +112,6 @@ export async function markTaskOfflineReviewReadyCore(input: {
     if (!order || !task || order.studioId.toLowerCase() !== input.studioId.toLowerCase() || task.orderId !== order.id) {
       return { success: false, error: "Task not found in authorized studio." };
     }
-    if (order.eventDate >= getStudioCalendarDate() && order.orderStatus === "AWAITING_EVENT") {
-      return { success: false, error: "Production tasks are locked until the event shoot date has completed." };
-    }
     if (task.status !== "IN_PROGRESS") {
       return { success: false, error: "Start the production task before confirming an offline customer handoff." };
     }
@@ -160,71 +156,6 @@ export async function updateTaskStatusCore(rawInput: unknown): Promise<{
     const linkedOrder = await getOrderById(validated.orderId);
     if (!linkedOrder || linkedOrder.studioId !== studioId.toLowerCase()) {
       return { success: false, error: "Order not found in authorized studio." };
-    }
-
-    const todayStr = getStudioCalendarDate();
-    const isEventUpcoming =
-      linkedOrder.eventDate > todayStr ||
-      (linkedOrder.eventDate >= todayStr &&
-        linkedOrder.orderStatus === "AWAITING_EVENT");
-    if (
-      isEventUpcoming &&
-      validated.status !== "ASSIGNED" &&
-      validated.status !== "AWAITING_EVENT"
-    ) {
-      return {
-        success: false,
-        error: `Production tasks are locked until the event shoot date (${linkedOrder.eventDate}) has completed.`,
-      };
-    }
-
-    if (validated.status && validated.status !== "ASSIGNED") {
-      const allOrderTasks = await getTasksByOrder(validated.orderId);
-      if (existingTask.title.toLowerCase().includes("photo editing")) {
-        const rawTask = allOrderTasks.find((t) =>
-          t.title.toLowerCase().includes("raw photo")
-        );
-        if (rawTask && rawTask.status !== "COMPLETED") {
-          return {
-            success: false,
-            error:
-              "Cannot proceed with Photo Editing until Raw Photo Selection is completed by the customer.",
-          };
-        }
-      }
-      const requiresCustomerProof = validated.status === "REVIEW" && (
-        existingTask.title.toLowerCase().includes("raw photo") ||
-        existingTask.title.toLowerCase().includes("photo editing")
-      );
-      if (requiresCustomerProof && !(linkedOrder.driveDeliverables || []).some((deliverable) => deliverable.linkedTaskId === existingTask.id)) {
-        return { success: false, error: "Add and link a Google Drive proof first, or use Confirm offline handoff for an offline review." };
-      }
-      if (
-        existingTask.serviceCategory === "ALBUM" ||
-        existingTask.title.toLowerCase().includes("album")
-      ) {
-        const photoEditTask = allOrderTasks.find((t) =>
-          t.title.toLowerCase().includes("photo editing")
-        );
-        if (photoEditTask && photoEditTask.status !== "COMPLETED") {
-          return {
-            success: false,
-            error:
-              "Cannot proceed with Album Design until Photo Editing is completed and approved.",
-          };
-        }
-      }
-      if (existingTask.title.toLowerCase().includes("final delivery")) {
-        const pendingOthers = allOrderTasks.filter(
-          (t) => t.id !== existingTask.id && t.status !== "COMPLETED"
-        );
-        if (pendingOthers.length > 0 && validated.status === "COMPLETED") {
-          return {
-            success: false,
-            error: `Cannot complete Final Delivery until all ${pendingOthers.length} preceding production task(s) are completed.`,
-          };
-        }
-      }
     }
 
     if (membership.role !== "STUDIO_OWNER") {

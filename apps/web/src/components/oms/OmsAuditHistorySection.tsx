@@ -75,24 +75,7 @@ export function OmsAuditHistorySection({
     });
   }
 
-  // 4. Synthesize Pre-Flight Operational Check
-  if (
-    order.preflightReport &&
-    !logEntries.some((e) => e.action.includes("Pre-Flight"))
-  ) {
-    logEntries.push({
-      id: "synth_preflight",
-      timestamp: formatAuditStamp(order.preflightReport.evaluatedAt || order.createdAt),
-      actorName: "Automated System",
-      actorRole: "System",
-      action: "Pre-Flight Check Evaluated",
-      details: order.preflightReport.hasConflicts
-        ? "Schedule conflict warning detected during pre-flight check"
-        : "All operational pre-flight checks clear (0 schedule conflicts)",
-    });
-  }
-
-  // 5. Synthesize Event Date Passed (System Action)
+  // 4. Synthesize Event Date Passed (System Action)
   const todayCalendar = getStudioCalendarDate();
   if (
     (order.eventDate < todayCalendar || order.orderStatus !== "AWAITING_EVENT") &&

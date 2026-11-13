@@ -1,7 +1,8 @@
 "use client";
 
 import type { Order, OrderStatus } from "@focoman/types";
-import { FileSpreadsheet } from "lucide-react";
+import { FileSpreadsheet, SlidersHorizontal } from "lucide-react";
+import { useState } from "react";
 import { FocomanSpinner } from "@/components/FocomanSpinner";
 import { getEventDaysRemaining } from "@/utils/dateUtils";
 import { STATUS_COLORS, STATUS_LABELS } from "./omsConstants";
@@ -29,7 +30,6 @@ interface OmsOrdersListPanelProps {
 }
 
 export function OmsOrdersListPanel({
-  studioSlug,
   orders,
   filtered,
   selected,
@@ -49,6 +49,8 @@ export function OmsOrdersListPanel({
   leadsCount = 0,
   onSwitchToLeads,
 }: OmsOrdersListPanelProps) {
+  const [filtersOpen, setFiltersOpen] = useState(false);
+
   return (
     <div
       className={`flex h-full flex-col ${
@@ -56,25 +58,16 @@ export function OmsOrdersListPanel({
       }`}
     >
       <header className="header-brand-blue">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2 mb-1.5">
-              <span className="badge-brand-blue">
-                <span className="h-1.5 w-1.5 rounded-full bg-brand-blue-primary" />
-                OMS · Order Management
-              </span>
-              <span className="badge-status-neutral">
-                Studio: <strong className="font-semibold text-text-primary">{studioSlug}</strong>
-              </span>
-            </div>
-            <h1 className="text-xl font-extrabold text-text-primary tracking-tight">
-              Order Management System
-            </h1>
-            <p className="text-xs text-text-secondary mt-0.5">
-              Production lifecycle workflows, delivery milestones, and client accounts · {orders.length} Confirmed Orders
-            </p>
-          </div>
+        <div className="flex flex-col gap-3">
+          <p className="text-xs text-text-secondary">Pending orders and open orders</p>
           <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={onOpenCreateModal}
+              className="btn-brand-blue"
+            >
+              + Register Confirmed Order
+            </button>
             <button
               type="button"
               onClick={onExportExcel}
@@ -85,80 +78,82 @@ export function OmsOrdersListPanel({
               <FileSpreadsheet className="h-3.5 w-3.5 text-brand-blue-primary" />
               <span>Export Excel</span>
             </button>
-            <button
-              onClick={onOpenCreateModal}
-              className="btn-brand-blue"
-            >
-              + Register Confirmed Order
-            </button>
           </div>
         </div>
 
-        {/* 2-Section Switcher: Orders (Confirmed Orders) vs Leads */}
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border-default pt-3.5">
+        <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-border-default pt-3.5">
           <div className="inline-flex rounded-xl border border-border-default bg-surface-app p-1">
             <button
               type="button"
               className="rounded-lg bg-brand-blue-primary px-3.5 py-1.5 text-xs font-extrabold text-white shadow-2xs transition cursor-pointer"
             >
-              Orders (Confirmed Orders) ({orders.length})
+              Orders ({orders.length})
             </button>
             <button
               type="button"
               onClick={onSwitchToLeads}
-              className="rounded-lg px-3.5 py-1.5 text-xs font-bold text-text-secondary hover:text-text-primary transition cursor-pointer flex items-center gap-1.5"
+              className="rounded-lg px-3.5 py-1.5 text-xs font-bold text-text-secondary hover:text-text-primary transition cursor-pointer"
             >
-              <span>Leads ({leadsCount})</span>
-              <span className="rounded-full bg-brand-blue-soft px-1.5 py-0.5 text-[10px] font-extrabold text-brand-blue-primary">
-                Orders
-              </span>
+              Leads ({leadsCount})
             </button>
           </div>
+          <button
+            type="button"
+            onClick={() => setFiltersOpen((open) => !open)}
+            aria-expanded={filtersOpen}
+            aria-controls="oms-order-filters"
+            className="inline-flex items-center gap-1.5 rounded-xl border border-border-default bg-white px-3 py-1.5 text-xs font-bold text-text-secondary hover:border-brand-blue-primary hover:text-text-primary transition"
+          >
+            <SlidersHorizontal className="h-3.5 w-3.5" />
+            Filters
+          </button>
         </div>
 
-        <div className="mt-3 flex flex-col sm:flex-row gap-2.5">
-          <input
-            suppressHydrationWarning
-            autoComplete="off"
-            value={query}
-            onChange={(e) => onChangeQuery(e.target.value)}
-            placeholder="Search by customer, order number, event..."
-            className="flex-1 rounded-xl border border-border-default bg-surface-app px-3.5 py-2 text-xs text-text-primary placeholder:text-text-tertiary focus:bg-white focus:outline-none focus:border-brand-blue-primary focus:ring-2 focus:ring-brand-blue-soft"
-          />
-          <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto">
-            <select
+        {filtersOpen && (
+          <div id="oms-order-filters" className="mt-3 flex flex-col sm:flex-row gap-2.5">
+            <input
               suppressHydrationWarning
-              value={statusFilter}
-              onChange={(e) =>
-                onChangeStatusFilter(e.target.value as "ALL" | OrderStatus)
-              }
-              className="min-w-0 w-full rounded-xl border border-border-default bg-surface-app px-3 py-2 text-xs font-semibold text-text-primary focus:bg-white focus:outline-none focus:border-brand-blue-primary focus:ring-2 focus:ring-brand-blue-soft sm:w-auto"
-            >
-              <option value="ALL">All States</option>
-              {(Object.keys(STATUS_LABELS) as OrderStatus[]).map((key) => (
-                <option key={key} value={key}>
-                  {STATUS_LABELS[key]}
-                </option>
-              ))}
-            </select>
-            <select
-              suppressHydrationWarning
-              value={sortBy}
-              onChange={(e) =>
-                onChangeSortBy(
-                  e.target.value as "DATE_ASC" | "DATE_DESC" | "PRICE_ASC" | "PRICE_DESC"
-                )
-              }
-              aria-label="Sort orders"
-              className="min-w-0 w-full rounded-xl border border-border-default bg-surface-app px-3 py-2 text-xs font-semibold text-text-primary focus:bg-white focus:outline-none focus:border-brand-blue-primary focus:ring-2 focus:ring-brand-blue-soft sm:w-auto"
-            >
-              <option value="DATE_ASC">Earliest Date First</option>
-              <option value="DATE_DESC">Latest Date First</option>
-              <option value="PRICE_DESC">Price: High to Low</option>
-              <option value="PRICE_ASC">Price: Low to High</option>
-            </select>
+              autoComplete="off"
+              value={query}
+              onChange={(e) => onChangeQuery(e.target.value)}
+              placeholder="Search by customer, order number, event..."
+              className="flex-1 rounded-xl border border-border-default bg-surface-app px-3.5 py-2 text-xs text-text-primary placeholder:text-text-tertiary focus:bg-white focus:outline-none focus:border-brand-blue-primary focus:ring-2 focus:ring-brand-blue-soft"
+            />
+            <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto">
+              <select
+                suppressHydrationWarning
+                value={statusFilter}
+                onChange={(e) =>
+                  onChangeStatusFilter(e.target.value as "ALL" | OrderStatus)
+                }
+                className="min-w-0 w-full rounded-xl border border-border-default bg-surface-app px-3 py-2 text-xs font-semibold text-text-primary focus:bg-white focus:outline-none focus:border-brand-blue-primary focus:ring-2 focus:ring-brand-blue-soft sm:w-auto"
+              >
+                <option value="ALL">All States</option>
+                {(Object.keys(STATUS_LABELS) as OrderStatus[]).map((key) => (
+                  <option key={key} value={key}>
+                    {STATUS_LABELS[key]}
+                  </option>
+                ))}
+              </select>
+              <select
+                suppressHydrationWarning
+                value={sortBy}
+                onChange={(e) =>
+                  onChangeSortBy(
+                    e.target.value as "DATE_ASC" | "DATE_DESC" | "PRICE_ASC" | "PRICE_DESC"
+                  )
+                }
+                aria-label="Sort orders"
+                className="min-w-0 w-full rounded-xl border border-border-default bg-surface-app px-3 py-2 text-xs font-semibold text-text-primary focus:bg-white focus:outline-none focus:border-brand-blue-primary focus:ring-2 focus:ring-brand-blue-soft sm:w-auto"
+              >
+                <option value="DATE_ASC">Earliest Date First</option>
+                <option value="DATE_DESC">Latest Date First</option>
+                <option value="PRICE_DESC">Price: High to Low</option>
+                <option value="PRICE_ASC">Price: Low to High</option>
+              </select>
+            </div>
           </div>
-        </div>
+        )}
       </header>
 
       <div className="flex-1 space-y-3 overflow-y-auto p-5">
@@ -190,9 +185,9 @@ export function OmsOrdersListPanel({
                   : "border-border-default bg-white hover:border-brand-blue-light hover:shadow-xs"
               }`}
             >
-              <div className="flex justify-between items-start">
-                <div>
-                  <div className="flex items-center gap-2">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
                     <span className="font-extrabold text-sm text-text-primary">
                       {order.customer.name}
                     </span>
@@ -202,13 +197,6 @@ export function OmsOrdersListPanel({
                     {order.paymentStatus === "PAID" && (
                       <span className="rounded-md bg-emerald-50 px-1.5 py-0.5 text-[10px] font-bold text-status-success border border-emerald-200">
                         PAID
-                      </span>
-                    )}
-                    {(order.paymentStatus === "ADVANCE_RECEIVED" ||
-                      (order.paymentStatus === "PARTIAL" &&
-                        (!order.pricing.installments || order.pricing.installments.length === 0))) && (
-                      <span className="rounded-md bg-sky-50 px-1.5 py-0.5 text-[10px] font-bold text-sky-700 border border-sky-200">
-                        ADVANCE RECEIVED
                       </span>
                     )}
                     {order.paymentStatus === "PARTIAL" && !!order.pricing.installments?.length && (
@@ -229,7 +217,7 @@ export function OmsOrdersListPanel({
                     Services: {order.services.join(", ")}
                   </p>
                 </div>
-                <div className="text-right">
+                <div className="flex items-center justify-between gap-3 sm:block sm:text-right">
                   <span className={STATUS_COLORS[order.orderStatus]}>
                     {STATUS_LABELS[order.orderStatus]}
                   </span>

@@ -20,7 +20,7 @@ export const metadata: Metadata = {
     canonical: baseUrl,
   },
   openGraph: {
-    title: "Focoman — Complete Business Operating System for Photography Studios",
+    title: "Focoman Complete Business Operating System for Photography Studios",
     description:
       "Eliminate scattered WhatsApp chats, spreadsheets, and paper notebooks. Focus beyond the frames with Focoman.",
     url: baseUrl,
@@ -30,7 +30,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Focoman — Business Operating System for Photography Studios",
+    title: "Focoman Business Operating System for Photography Studios",
     description:
       "Bring your studio's work, people, and orders together in one place and spend less time managing the work, more time creating.",
   },

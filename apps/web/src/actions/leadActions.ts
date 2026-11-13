@@ -7,7 +7,6 @@ import {
   updateStudioLead,
   getStudioBySlug,
   updateStudio,
-  getOrdersByStudio,
   getMembersByStudio,
   getCustomersByStudio,
   saveCustomer,
@@ -31,8 +30,6 @@ import {
   generateTimestampDigits,
 } from "@/lib/invitationPasscode";
 import {
-  performPreflightCheck,
-  performBasicPreflightCheck,
   generateResourceSuggestions,
   generateWorkflowTasks,
   getStudioTimestampIST,
@@ -259,8 +256,7 @@ export async function convertLeadToOrderAction(params: {
     const passkeyPin = generateSixDigitPasskeyPin();
     const studioPrefix = prefixLetters(cleanSlug);
 
-    const [studioOrders, studioMembers, existingCustomers, studio, hasErp] = await Promise.all([
-      getOrdersByStudio(cleanSlug),
+    const [studioMembers, existingCustomers, studio, hasErp] = await Promise.all([
       getMembersByStudio(cleanSlug),
       getCustomersByStudio(cleanSlug),
       getStudioBySlug(cleanSlug),
@@ -284,16 +280,6 @@ export async function convertLeadToOrderAction(params: {
 
     const eventDateVal = params.eventDate || lead.eventDate || now.split("T")[0];
     const locationVal = params.eventLocation || lead.location || studio?.city || "TBD";
-
-    const preflight = hasErp
-      ? performPreflightCheck(
-          eventDateVal,
-          locationVal,
-          servicesList,
-          studioOrders,
-          studioMembers
-        )
-      : performBasicPreflightCheck(eventDateVal, locationVal, studioOrders);
 
     const suggestions = hasErp
       ? generateResourceSuggestions(
@@ -359,7 +345,6 @@ export async function convertLeadToOrderAction(params: {
       orderStatus: "AWAITING_EVENT",
       assignedResources,
       resourceSuggestions: suggestions,
-      preflightReport: preflight,
       trackingPasskey: orderId,
       passkeyPin,
       isDeleted: false,

@@ -59,7 +59,6 @@ export function OrderVerticalWorkflow({
   const eventRem = useMemo(() => getEventDaysRemaining(order.eventDate), [order.eventDate]);
   const isFutureEvent = Boolean(eventRem && eventRem.diffDays > 0);
   const isTodayEvent = Boolean(eventRem && eventRem.diffDays === 0);
-  const isPastEvent = Boolean(eventRem && eventRem.diffDays < 0);
 
   const [editingSchedule, setEditingSchedule] = useState(false);
   const [scheduleDateDraft, setScheduleDateDraft] = useState(order.eventDate || "");
@@ -72,11 +71,6 @@ export function OrderVerticalWorkflow({
       setScheduleLocationDraft(order.eventLocation || "");
     }
   }, [order.eventDate, order.eventLocation, editingSchedule]);
-
-  // Event date locking: if event is in the future, post-event tasks are locked
-  const isEventLocked = Boolean(
-    eventRem && (eventRem.diffDays > 0 || (eventRem.diffDays === 0 && order.orderStatus === "AWAITING_EVENT"))
-  );
 
   // Group production tasks dynamically
   const photoTasks = useMemo(() => {
@@ -143,60 +137,6 @@ export function OrderVerticalWorkflow({
     );
   }, [fullTasks, photoTasks, videoTasks, deliveryTasks]);
 
-  // Task prerequisites checker (Preserves existing business logic)
-  const getPrerequisite = (task: Task): { isLocked: boolean; reason?: string } => {
-    if (isEventLocked) {
-      return {
-        isLocked: true,
-        reason: `Locked until post-event date (${order.eventDate})`,
-      };
-    }
-
-    const titleLower = (task.title || "").toLowerCase();
-
-    // Photo editing requires raw photo selection completed
-    if (
-      titleLower.includes("photo edit") ||
-      (titleLower.includes("edit") && task.serviceCategory === "PHOTOGRAPHY")
-    ) {
-      const rawTask = fullTasks.find((t) => (t.title || "").toLowerCase().includes("raw"));
-      if (rawTask && rawTask.status !== "COMPLETED") {
-        return {
-          isLocked: true,
-          reason: "Waiting for Raw Photo Selection completion",
-        };
-      }
-    }
-
-    // Album edit requires photo editing completed
-    if (task.serviceCategory === "ALBUM" || titleLower.includes("album")) {
-      const photoEdit = fullTasks.find(
-        (t) =>
-          (t.title || "").toLowerCase().includes("photo edit") ||
-          ((t.title || "").toLowerCase().includes("edit") && t.serviceCategory === "PHOTOGRAPHY")
-      );
-      if (photoEdit && photoEdit.status !== "COMPLETED") {
-        return {
-          isLocked: true,
-          reason: "Waiting for Photo Editing completion",
-        };
-      }
-    }
-
-    // Final delivery requires all preceding production tasks completed
-    if (task.serviceCategory === "GENERAL" || titleLower.includes("delivery")) {
-      const pending = fullTasks.filter((t) => t.id !== task.id && t.status !== "COMPLETED");
-      if (pending.length > 0) {
-        return {
-          isLocked: true,
-          reason: `Waiting for ${pending.length} preceding task(s) to complete`,
-        };
-      }
-    }
-
-    return { isLocked: false };
-  };
-
   // Phase Progress Calculations
   const services = useMemo(() => order.services || [], [order.services]);
   const assignedResources = useMemo(() => fullOrder?.assignedResources || [], [fullOrder?.assignedResources]);
@@ -209,7 +149,7 @@ export function OrderVerticalWorkflow({
     }).length;
   }, [services, assignedResources]);
 
-  const preEventCompleted = services.length > 0 ? assignedServicesCount === services.length : true;
+  const preEventCompleted = !hasErp || services.length === 0 || assignedServicesCount === services.length;
 
   const photoCompletedCount = photoTasks.filter((t) => t.status === "COMPLETED").length;
   const videoCompletedCount = videoTasks.filter((t) => t.status === "COMPLETED").length;
@@ -424,9 +364,9 @@ export function OrderVerticalWorkflow({
                         : "bg-blue-50 text-brand-blue-primary border-blue-200"
                     }`}
                   >
-                    {preEventCompleted ? "Preparation Ready" : "Crew Allocation In Progress"}
+                    {hasErp && !preEventCompleted ? "Crew Allocation In Progress" : "Preparation Ready"}
                   </span>
-                  {services.length > 0 && (
+                  {hasErp && services.length > 0 && (
                     <span className="text-[10px] font-mono font-semibold text-text-tertiary">
                       ({assignedServicesCount}/{services.length} services allocated)
                     </span>
@@ -434,7 +374,9 @@ export function OrderVerticalWorkflow({
                 </div>
                 <h3 className="text-sm font-bold text-text-primary mt-0.5">Pre-Event Preparation</h3>
                 <p className="text-xs text-text-secondary mt-0.5">
-                  Booked services mapping, shoot crew assignment, and preparation readiness
+                  {hasErp
+                    ? "Booked services mapping, shoot crew assignment, and preparation readiness"
+                    : "Booked services and event preparation"}
                 </p>
               </div>
               <button
@@ -486,7 +428,7 @@ export function OrderVerticalWorkflow({
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between text-[11px] font-bold text-text-tertiary uppercase tracking-wider">
                     <span>Booked Services</span>
-                    <span>{isOms && hasErp ? "Assigned Shoot Crew" : "Shoot Readiness"}</span>
+                    {isOms && hasErp && <span>Assigned Shoot Crew</span>}
                   </div>
 
                   {services.length === 0 ? (
@@ -739,9 +681,7 @@ export function OrderVerticalWorkflow({
                       ? "Shoot Completed"
                       : isTodayEvent
                       ? "Shoot Active Today"
-                      : isFutureEvent
-                      ? "Scheduled / Locked"
-                      : "Awaiting Post-Event Check-in"}
+                      : "Awaiting Event"}
                   </span>
                 </div>
                 <h3 className="text-sm font-bold text-text-primary mt-0.5">Event Day Execution</h3>
@@ -770,7 +710,7 @@ export function OrderVerticalWorkflow({
             {expandedPhases.has("phase_event_day") && (
               <div className="mt-4 pt-3.5 border-t border-border-default/60 space-y-2.5 text-xs">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-text-tertiary">Event schedule</span>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-text-tertiary">Event details</span>
                   {isOms && onSaveSchedule && !editingSchedule && <button type="button" onClick={() => setEditingSchedule(true)} className="rounded border border-border-default bg-white px-2 py-1 text-[10px] font-semibold text-brand-blue-primary hover:border-brand-blue-primary">Edit schedule</button>}
                 </div>
                 {editingSchedule ? (
@@ -805,20 +745,11 @@ export function OrderVerticalWorkflow({
                         ? "Shoot completed & wrapped up"
                         : isTodayEvent
                         ? "Event underway today"
-                        : `Scheduled for ${order.eventDate}`}
+                        : `Event date: ${order.eventDate}`}
                     </span>
                   </div>
                 </div>}
 
-                {isFutureEvent && (
-                  <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-2.5 text-amber-900 text-[11px] flex items-center gap-2">
-                    <span className="font-bold">Notice:</span>
-                    <span>
-                      Post-event editing and production tasks remain locked until the scheduled shoot date (
-                      {order.eventDate}).
-                    </span>
-                  </div>
-                )}
               </div>
             )}
           </div>
@@ -868,7 +799,7 @@ export function OrderVerticalWorkflow({
                       ? "Production Finished"
                       : order.orderStatus === "POST_EVENT_IN_PROGRESS"
                       ? "In Production"
-                      : "Pending Event"}
+                      : "Awaiting Event"}
                   </span>
                   {allTasksCount > 0 && (
                     <span className="text-[10px] font-mono font-semibold text-text-tertiary">
@@ -1178,15 +1109,10 @@ export function OrderVerticalWorkflow({
 
   // Helper renderer for individual task rows
   function renderTaskRow(task: Task) {
-    const prereq = getPrerequisite(task);
     const taskAge = calculateTaskAgeBadge(task);
     const displayTitle = (task.title || "").replace("&", "and");
 
-    const effectiveStatus: TaskStatus = isEventLocked
-      ? "AWAITING_EVENT"
-      : task.status === "AWAITING_EVENT"
-      ? "ASSIGNED"
-      : task.status;
+    const effectiveStatus: TaskStatus = task.status;
 
     const isDone = effectiveStatus === "COMPLETED";
     const isInProgress = effectiveStatus === "IN_PROGRESS";
@@ -1196,7 +1122,7 @@ export function OrderVerticalWorkflow({
     const isRawSelection = titleLower.includes("raw photo") || titleLower.includes("photo selection");
     const isPhotoEditing = titleLower.includes("photo editing") || titleLower.includes("retouch") || titleLower.includes("color grading");
 
-    const statusBadgeStyle = isEventLocked || effectiveStatus === "AWAITING_EVENT"
+    const statusBadgeStyle = effectiveStatus === "AWAITING_EVENT"
       ? "bg-slate-100 text-slate-600 border-slate-200"
       : isDone
       ? "bg-emerald-100 text-emerald-800 border-emerald-200"
@@ -1208,8 +1134,8 @@ export function OrderVerticalWorkflow({
       ? "bg-amber-100 text-amber-800 border-amber-200"
       : "bg-slate-100 text-slate-700 border-slate-200";
 
-    const statusLabel = isEventLocked || effectiveStatus === "AWAITING_EVENT"
-      ? (isRawSelection ? "Event not started" : "Awaiting Event")
+    const statusLabel = effectiveStatus === "AWAITING_EVENT"
+      ? "Awaiting Event"
       : isDone
       ? (isRawSelection ? "Selection confirmed" : "Completed")
       : isInProgress
@@ -1218,7 +1144,7 @@ export function OrderVerticalWorkflow({
       ? "Pending with customer"
       : isRework
       ? "Corrections requested"
-      : isRawSelection ? "Preparing photo selection" : "Assigned";
+      : isRawSelection ? "Preparing photo selection" : hasErp ? "Assigned" : "Awaiting Event";
     const nextActionOwner = isDone ? null : isReview ? "Customer" : "Studio";
 
     return (
@@ -1253,7 +1179,7 @@ export function OrderVerticalWorkflow({
                 Next action: {nextActionOwner}
               </span>
             )}
-            {isOms && (
+            {isOms && hasErp && (
               <span className={`rounded px-1.5 py-0.2 text-[9px] font-bold border ${taskAge.colorClass}`}>
                 {taskAge.label}
               </span>
@@ -1322,15 +1248,8 @@ export function OrderVerticalWorkflow({
         {/* Action Controls for OMS */}
         {isOms && onUpdateTaskStatus && (
           <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-center">
-            {isEventLocked ? (
-              <span className="text-[10px] text-slate-400 font-medium">Locked</span>
-            ) : prereq.isLocked ? (
-              <span className="text-[10px] text-slate-400 font-medium" title={prereq.reason}>
-                Waiting Preceding Task
-              </span>
-            ) : (
-              <>
-                {effectiveStatus === "ASSIGNED" && (
+            <>
+                {(effectiveStatus === "ASSIGNED" || effectiveStatus === "AWAITING_EVENT") && (
                   <button
                     type="button"
                     onClick={() => onUpdateTaskStatus(task.id, "IN_PROGRESS")}
@@ -1405,8 +1324,7 @@ export function OrderVerticalWorkflow({
                     <span>✓ Done</span>
                   </span>
                 )}
-              </>
-            )}
+            </>
           </div>
         )}
       </div>

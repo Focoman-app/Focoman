@@ -97,7 +97,7 @@ export function PricingTwoPanels({ hasMultiStudios = false }: PricingTwoPanelsPr
 
             <div>
               <h2 className="retro-serif-heading text-2xl sm:text-3xl font-black text-[#1C1917]">
-                Advanced OMS, CRM &amp; Studio Operations
+                Advanced OMS, CRM and Studio Operations
               </h2>
               <p className="mt-1.5 text-xs sm:text-sm text-[#57534E] leading-relaxed">
                 Includes everything in the Free plan, plus Google Drive preview and selection, customer management, studio operations, and Basic Business Dashboard.
@@ -126,7 +126,7 @@ export function PricingTwoPanels({ hasMultiStudios = false }: PricingTwoPanelsPr
                     ✓
                   </span>
                   <span className="text-[#1C1917] font-medium leading-tight">
-                    Google Drive Photo In-App Preview &amp; Selection
+                    Google Drive Photo In-App Preview and Selection
                   </span>
                 </div>
 
@@ -153,7 +153,7 @@ export function PricingTwoPanels({ hasMultiStudios = false }: PricingTwoPanelsPr
                     ✓
                   </span>
                   <span className="text-[#1C1917] font-medium leading-tight">
-                    Basic Business Dashboard — Order counts, revenue overview, and pending payment overview
+                    Basic Business Dashboard with order counts, revenue overview, and pending payment overview
                   </span>
                 </div>
               </div>
@@ -184,7 +184,7 @@ export function PricingTwoPanels({ hasMultiStudios = false }: PricingTwoPanelsPr
 
             <div>
               <h2 className="retro-serif-heading text-2xl sm:text-3xl font-black text-[#1C1917]">
-                WhatsApp Operations &amp; Business Reports
+                WhatsApp Operations and Business Reports
               </h2>
               <p className="mt-1.5 text-xs sm:text-sm text-[#57534E] leading-relaxed">
                 Includes everything in the ₹999 plan, plus WhatsApp operations, interactive studio bot, and exportable business reports.
@@ -213,7 +213,7 @@ export function PricingTwoPanels({ hasMultiStudios = false }: PricingTwoPanelsPr
                     ✓
                   </span>
                   <span className="text-[#1C1917] font-medium leading-tight">
-                    WhatsApp Operations &amp; Interactive Bot
+                    WhatsApp Operations and Interactive Bot
                   </span>
                 </div>
 
@@ -222,7 +222,7 @@ export function PricingTwoPanels({ hasMultiStudios = false }: PricingTwoPanelsPr
                     ✓
                   </span>
                   <span className="text-[#1C1917] font-medium leading-tight">
-                    Advanced Business Reports &amp; Analytics
+                    Advanced Business Reports and Analytics
                   </span>
                 </div>
 
@@ -236,7 +236,7 @@ export function PricingTwoPanels({ hasMultiStudios = false }: PricingTwoPanelsPr
                 </div>
                 <div className="flex items-start gap-2.5">
                   <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-[11px] font-extrabold text-emerald-700 mt-0.5 border border-emerald-300">✓</span>
-                  <span className="text-[#1C1917] font-medium leading-tight">Invoices &amp; Receipts</span>
+                  <span className="text-[#1C1917] font-medium leading-tight">Invoices and Receipts</span>
                 </div>
                 <div className="flex items-start gap-2.5">
                   <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-[11px] font-extrabold text-emerald-700 mt-0.5 border border-emerald-300">✓</span>

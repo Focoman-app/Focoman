@@ -19,8 +19,6 @@ interface OmsPaymentSummarySectionProps {
     advanceDate?: string
   ) => void;
   onSendPaymentReminder: () => void;
-  onOpenBillingModal: (tab: "INVOICE" | "RECEIPT", receiptId?: string) => void;
-  canManageBilling: boolean;
   editConfirmedPrice: string;
   onChangeEditConfirmedPrice: (value: string) => void;
   editAdvanceAmount: string;
@@ -59,8 +57,6 @@ export function OmsPaymentSummarySection({
   isSendingReminder,
   onUpdatePayment,
   onSendPaymentReminder,
-  onOpenBillingModal,
-  canManageBilling,
   editConfirmedPrice,
   onChangeEditConfirmedPrice,
   editAdvanceAmount,
@@ -135,19 +131,17 @@ export function OmsPaymentSummarySection({
                   className="rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-1 text-[11px] font-bold text-amber-900 hover:bg-amber-100 shadow-2xs transition disabled:opacity-50 flex items-center gap-1 cursor-pointer"
                   title="Send manual payment reminder email to customer"
                 >
-                  <span>✉</span>
                   <span>{isSendingReminder ? "Sending..." : "Send Reminder"}</span>
                 </button>
               )}
-              {canManageBilling && <button
+              <button
                 type="button"
-                onClick={() => onOpenBillingModal("INVOICE")}
-                className="rounded-lg border border-border-default bg-white px-2.5 py-1 text-[11px] font-semibold text-text-primary hover:text-brand-blue-primary hover:border-brand-blue-primary hover:bg-blue-50/50 shadow-2xs transition flex items-center gap-1 cursor-pointer"
-                title="Generate, print, or download Invoice & Payment Receipts (PDF)"
+                disabled
+                className="rounded-lg border border-border-default bg-white px-2.5 py-1 text-[11px] font-semibold text-text-secondary shadow-2xs transition flex items-center gap-1 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <FileText className="h-3 w-3 text-brand-blue-primary" />
-                <span>Invoice & Receipts</span>
-              </button>}
+                <span>Invoice and Receipts</span>
+              </button>
               <button
                 type="button"
                 disabled={isUpdatingPayment}
@@ -510,9 +504,8 @@ export function OmsPaymentSummarySection({
                     {breakdown.advanceAmount > 0 && (
                       <button
                         type="button"
-                        onClick={() => onOpenBillingModal("RECEIPT", "ADVANCE")}
-                        className="inline-flex items-center gap-1 rounded border border-border-default bg-white px-2 py-0.5 text-[10px] font-semibold text-text-secondary hover:border-brand-blue-primary hover:text-brand-blue-primary transition cursor-pointer"
-                        title="View / Download Advance Payment Receipt"
+                        disabled
+                        className="inline-flex items-center gap-1 rounded border border-border-default bg-white px-2 py-0.5 text-[10px] font-semibold text-text-secondary disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         <Receipt className="h-2.5 w-2.5" />
                         <span>Receipt</span>
@@ -545,11 +538,8 @@ export function OmsPaymentSummarySection({
                           <div className="flex items-center gap-2">
                             <button
                               type="button"
-                              onClick={() =>
-                                onOpenBillingModal("RECEIPT", instReceiptId)
-                              }
-                              className="inline-flex items-center gap-1 rounded border border-border-default bg-white px-2 py-0.5 text-[10px] font-semibold text-text-secondary hover:border-brand-blue-primary hover:text-brand-blue-primary transition cursor-pointer"
-                              title={`View / Download Installment #${idx + 1} Receipt`}
+                              disabled
+                              className="inline-flex items-center gap-1 rounded border border-border-default bg-white px-2 py-0.5 text-[10px] font-semibold text-text-secondary disabled:cursor-not-allowed disabled:opacity-50"
                             >
                               <Receipt className="h-2.5 w-2.5" />
                               <span>Receipt</span>

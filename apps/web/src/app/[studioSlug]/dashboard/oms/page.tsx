@@ -45,7 +45,6 @@ import { getEffectiveStudioFeatures } from "@/lib/proEntitlements";
 import { useStudioWorkspace } from "@/components/StudioWorkspaceProvider";
 import { AddCrewMemberModal } from "@/components/AddCrewMemberModal";
 import { OrderVerticalWorkflow } from "@/components/workflow/OrderVerticalWorkflow";
-import { OrderBillingPanel } from "@/components/billing/OrderBillingPanel";
 import { GoogleDriveDeliverablesSection } from "@/components/deliverables/GoogleDriveDeliverablesSection";
 import {
   DEFAULT_ORDER_FORM,
@@ -55,7 +54,6 @@ import { OmsOrdersListPanel } from "@/components/oms/OmsOrdersListPanel";
 import { OmsLeadsPanel } from "@/components/oms/OmsLeadsPanel";
 import {
   OmsCustomerAccessCard,
-  OmsPreflightCheckSection,
   OmsResourceSuggestionsSection,
   OmsTurnaroundSlaBanner,
 } from "@/components/oms/OmsOrderSubsections";
@@ -142,11 +140,6 @@ export default function OmsPage({
   // New Order Modal State
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [billingModalState, setBillingModalState] = useState<{
-    isOpen: boolean;
-    tab: "INVOICE" | "RECEIPT";
-    receiptId?: string;
-  }>({ isOpen: false, tab: "INVOICE" });
 
   useEffect(() => {
     const orderIdParam = searchParams.get("orderId");
@@ -1591,10 +1584,6 @@ export default function OmsPage({
             isSendingReminder={isSendingReminder}
             onUpdatePayment={(...args) => void handleUpdatePayment(...args)}
             onSendPaymentReminder={() => void handleSendPaymentReminder()}
-            onOpenBillingModal={(tab, receiptId) =>
-              setBillingModalState({ isOpen: true, tab, receiptId })
-            }
-            canManageBilling={effectiveFeatures.reports}
             editConfirmedPrice={editConfirmedPrice}
             onChangeEditConfirmedPrice={(val) => {
               setEditConfirmedPrice(val);
@@ -1645,10 +1634,7 @@ export default function OmsPage({
             onSavePricing={() => void handleSavePricing()}
           />
 
-          {/* 4. Pre-flight Operational Check Report */}
-          <OmsPreflightCheckSection order={selected} />
-
-          {/* 5. Automated Resource Suggestions (ERP only) */}
+          {/* 4. Automated Resource Suggestions (ERP only) */}
           {hasErp && (
             <OmsResourceSuggestionsSection
               order={selected}
@@ -1788,14 +1774,6 @@ export default function OmsPage({
         onSuccess={handleMemberCreated}
       />
 
-      {selected && billingModalState.isOpen && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/40 p-4" role="dialog" aria-modal="true" aria-label="Billing documents">
-          <div className="mx-auto my-8 max-w-2xl rounded-xl border border-border-default bg-white p-6 text-text-primary shadow-2xl">
-            <div className="mb-4 flex items-center justify-between gap-4"><h2 className="text-xl font-semibold">Billing documents</h2><button type="button" className="rounded border border-border-divider px-3 py-1" onClick={() => setBillingModalState(prev => ({ ...prev, isOpen: false }))}>Close</button></div>
-            <OrderBillingPanel studioId={studioSlug} orderId={selected.id} />
-          </div>
-        </div>
-      )}
     </div>
   );
 }
