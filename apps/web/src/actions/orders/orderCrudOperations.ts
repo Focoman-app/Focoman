@@ -62,6 +62,16 @@ export async function createOrderCore(rawInput: unknown): Promise<{
     const decoded = await requireVerifiedUser(validated.idToken);
     await requireStudioOwner(decoded.uid, validated.studioId);
 
+    if (
+      validated.notifyWhatsApp &&
+      !(await hasStudioCapability(validated.studioId, "WHATSAPP_OPERATIONS"))
+    ) {
+      return {
+        success: false,
+        error: "WhatsApp notifications require the ₹1,999 Professional plan.",
+      };
+    }
+
     const now = new Date();
     const { orderId, customerId } = generateOrderIdentifiers(validated.studioId, now);
     const nowIso = now.toISOString();

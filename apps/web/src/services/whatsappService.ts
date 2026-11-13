@@ -10,6 +10,7 @@ import {
 } from '@focoman/db';
 import { canCompleteOrder, getStudioTimestampIST } from '@focoman/domain';
 import type { Order, StudioMember, ResourceAssignment, TaskStatus, OrderAuditEntry } from '@focoman/types';
+import { hasStudioCapability } from '@/lib/entitlementAuth';
 
 /**
  * WhatsApp Premium Operational Layer & Bot Operations Engine
@@ -257,6 +258,8 @@ export async function dispatchOrderStageWhatsAppNotification(input: {
   newStatus: string;
 }): Promise<void> {
   try {
+    if (!(await hasStudioCapability(input.studioId, 'WHATSAPP_OPERATIONS'))) return;
+
     const studio = await getStudioBySlug(input.studioId);
     if (!studio) return;
 
@@ -353,6 +356,14 @@ export async function processWhatsAppBotMessage(
   _senderPhone?: string,
   callerContext?: BotCallerContext
 ): Promise<BotCommandResponse> {
+  if (!(await hasStudioCapability(studioSlug, 'WHATSAPP_OPERATIONS'))) {
+    return {
+      success: false,
+      commandRecognized: 'UNAVAILABLE',
+      message: 'WhatsApp Operations is available with the ₹1,999 Professional plan.',
+    };
+  }
+
   const studio = await getStudioBySlug(studioSlug);
   if (!studio) {
     return {

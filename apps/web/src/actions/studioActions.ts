@@ -18,6 +18,7 @@ import {
 } from "@focoman/db";
 import { Studio, StudioMembership, StudioPlan, StudioServiceConfig, StudioPackage } from "@focoman/types";
 import { requireVerifiedUser, requireStudioMember } from "@/lib/serverAuth";
+import { requireCapability } from "@/lib/entitlementAuth";
 import { DEFAULT_STUDIO_SERVICES, getDefaultStudioPackages } from "@/lib/studioServices";
 
 /**
@@ -259,6 +260,7 @@ export async function updateStudioWhatsappConfigAction(
   try {
     const decoded = await requireVerifiedUser(idToken);
     await requireStudioMember(decoded.uid, studioSlug, "STUDIO_OWNER");
+    await requireCapability(studioSlug, "WHATSAPP_OPERATIONS");
     
     await updateStudio(studioSlug, { whatsappConfig: config });
     return { success: true };
@@ -275,6 +277,7 @@ export async function resetStudioWhatsappConfigAction(
   try {
     const decoded = await requireVerifiedUser(idToken);
     await requireStudioMember(decoded.uid, studioSlug, "STUDIO_OWNER");
+    await requireCapability(studioSlug, "WHATSAPP_OPERATIONS");
 
     const defaultToggles: Record<string, boolean> = {
       master_operational: true,

@@ -121,7 +121,7 @@ export function getEffectiveStudioFeatures(
       oms: true,
       crm: true,
       erp: true,
-      whatsapp: caps.some((c) => ["WHATSAPP_OPERATIONS", "WHATSAPP_BOT", "WHATSAPP_NOTIFICATIONS", "WHATSAPP_ALERTS"].includes(c)),
+      whatsapp: false,
       reports: caps.some((c) => ["BUSINESS_REPORTS", "ANALYTICS_ADVANCED"].includes(c)),
       marketplace: true,
       driveReview: true,
@@ -135,14 +135,13 @@ export function getEffectiveStudioFeatures(
   const hasErp = caps.some((c) => ["STUDIO_ERP", "CREW_BASIC", "CREW_ADVANCED"].includes(c));
   const hasDrive = caps.some((c) => ["DRIVE_CLIENT_REVIEW", "OMS_ADVANCED", "GOOGLE_DRIVE"].includes(c));
   const hasDashboard = caps.some((c) => ["ANALYTICS_BASIC", "BUSINESS_REPORTS"].includes(c));
-  const hasWhatsapp = caps.some((c) => ["WHATSAPP_OPERATIONS", "WHATSAPP_BOT", "WHATSAPP_NOTIFICATIONS", "WHATSAPP_ALERTS"].includes(c));
   const hasReports = caps.some((c) => ["BUSINESS_REPORTS", "ANALYTICS_ADVANCED"].includes(c));
 
   return {
     oms: true,
     crm: hasCrm,
     erp: hasErp,
-    whatsapp: hasWhatsapp,
+    whatsapp: false,
     reports: hasReports,
     marketplace: true,
     driveReview: hasDrive,

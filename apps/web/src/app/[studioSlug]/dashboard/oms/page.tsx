@@ -78,12 +78,14 @@ export default function OmsPage({
     authLoading,
     getIdToken,
   } = useStudioWorkspace();
-  const hasCrm = Boolean(studio?.features?.crm);
-  const hasErp = getEffectiveStudioFeatures(
+  const effectiveFeatures = getEffectiveStudioFeatures(
     studio?.ownerEmail,
     studio?.features,
     studio?.planInfo
-  ).erp;
+  );
+  const hasCrm = Boolean(studio?.features?.crm);
+  const hasErp = effectiveFeatures.erp;
+  const hasWhatsAppOperations = effectiveFeatures.whatsapp;
   const hasDriveReview = Boolean(studio?.features?.driveReview);
   const [orders, setOrders] = useState<Order[]>([]);
   const [omsSection, setOmsSection] = useState<"ORDERS" | "LEADS">("ORDERS");
@@ -640,7 +642,9 @@ export default function OmsPage({
       customerPhone: resolvedPhone,
       customerEmail: newOrderForm.customerEmail || undefined,
       passkeyPin: newOrderForm.passkeyPin,
-      notifyWhatsApp: Boolean(newOrderForm.notifyWhatsApp && resolvedPhone),
+      notifyWhatsApp: Boolean(
+        hasWhatsAppOperations && newOrderForm.notifyWhatsApp && resolvedPhone
+      ),
       notifyEmail: Boolean(
         newOrderForm.notifyEmail && newOrderForm.customerEmail.trim()
       ),
@@ -1762,6 +1766,7 @@ export default function OmsPage({
           .map((order) => order.eventDate)
           .filter(Boolean)}
         hasCrm={hasCrm}
+        hasWhatsAppOperations={hasWhatsAppOperations}
       />
 
       {/* In-App Cancellation & Soft-Delete Dialogs */}

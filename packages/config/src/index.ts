@@ -148,25 +148,10 @@ export const PURCHASABLE_CAPABILITIES: CapabilityMetadata[] = [
     studioScoped: true,
   },
   {
-    id: 'WHATSAPP_NOTIFICATIONS',
-    name: 'WhatsApp Notifications - Alerts',
-    category: 'WHATSAPP',
-    price: 499,
-    description: 'Automated WhatsApp alerts for booking confirmations, shoot reminders, and gallery delivery links.',
-    valueProp: 'Keep clients and crew informed automatically on WhatsApp at key milestones.',
-    features: [
-      'Booking and order confirmation alerts sent to clients',
-      'Crew shoot reminders, call-times, and venue directions',
-      'Selection gallery ready notifications with direct tracking link',
-      'Final album delivery and dispatch notifications',
-    ],
-    studioScoped: true,
-  },
-  {
     id: 'WHATSAPP_OPERATIONS',
     name: 'WhatsApp Operations & Bot',
     category: 'WHATSAPP',
-    price: 999,
+    price: 1999,
     description: 'Interactive WhatsApp Bot for Studio Owners plus all automated notifications.',
     valueProp: 'Manage and query your studio operations directly via WhatsApp chat.',
     includedCapabilities: ['WHATSAPP_NOTIFICATIONS'],
@@ -235,11 +220,11 @@ export function calculateMonthlyTotal(selectedCapabilities: CapabilityId[]): num
     total += 299;
   }
 
-  // WhatsApp Category: Bot (₹999) includes Alerts (₹499)
+  // WhatsApp Operations, notifications, and bot access are a single ₹1,999 tier.
   if (selectedSet.has('WHATSAPP_OPERATIONS') || selectedSet.has('WHATSAPP_BOT')) {
-    total += 999;
+    total += 1999;
   } else if (selectedSet.has('WHATSAPP_NOTIFICATIONS') || selectedSet.has('WHATSAPP_ALERTS')) {
-    total += 499;
+    total += 1999;
   }
 
   // Studio Marketplace - Free for everyone (₹0)

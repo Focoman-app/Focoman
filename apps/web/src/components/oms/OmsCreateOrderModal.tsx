@@ -34,6 +34,7 @@ interface OmsCreateOrderModalProps {
   calculateOrderPrice: (selectedServices: string[], packageId?: string) => number;
   busyEventDates: string[];
   hasCrm?: boolean;
+  hasWhatsAppOperations?: boolean;
 }
 
 export function OmsCreateOrderModal({
@@ -61,6 +62,7 @@ export function OmsCreateOrderModal({
   calculateOrderPrice,
   busyEventDates,
   hasCrm = true,
+  hasWhatsAppOperations = false,
 }: OmsCreateOrderModalProps) {
   const [calendarMonth, setCalendarMonth] = useState(() => {
     const base = newOrderForm.eventDate ? new Date(`${newOrderForm.eventDate}T00:00:00`) : new Date();
@@ -277,8 +279,8 @@ export function OmsCreateOrderModal({
             )}
 
             {/* Dynamic Automated Customer Notifications */}
-            {(Boolean(newOrderForm.customerPhone.trim()) ||
-              Boolean(newOrderForm.customerEmail.trim())) && (
+            {(Boolean(newOrderForm.customerEmail.trim()) ||
+              (hasWhatsAppOperations && Boolean(newOrderForm.customerPhone.trim()))) && (
               <div className="rounded-2xl border border-blue-200/80 bg-blue-50/50 p-3.5 space-y-2.5 animate-in fade-in duration-150">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-blue-950">
@@ -287,7 +289,7 @@ export function OmsCreateOrderModal({
                 </div>
 
                 <div className="space-y-2 pt-0.5">
-                  {Boolean(newOrderForm.customerPhone.trim()) && (
+                  {hasWhatsAppOperations && Boolean(newOrderForm.customerPhone.trim()) && (
                     <label className="flex items-center gap-2.5 select-none cursor-pointer">
                       <input
                         type="checkbox"
@@ -410,11 +412,11 @@ export function OmsCreateOrderModal({
                         const selected = newOrderForm.eventDate === value;
                         const isToday = todayValue === value;
                         return <button key={value} type="button" disabled={isSubmitting} onClick={() => { setNewOrderForm({ ...newOrderForm, eventDate: value }); setIsEventDatePickerOpen(false); }} title={busy ? "This studio already has an event on this date" : isToday ? "Today" : "Select event date"} className={`relative flex h-9 flex-col items-center justify-center rounded text-[10px] font-semibold transition ${selected ? "bg-brand-blue-primary text-white" : isToday ? "bg-brand-blue-50 text-brand-blue-primary ring-1 ring-brand-blue-soft hover:bg-brand-blue-100" : busy ? "bg-amber-50 text-amber-900 ring-1 ring-amber-200 hover:bg-amber-100" : "text-text-primary hover:bg-surface-app"}`}>
-                          <span>{day}</span>{isToday && <span className="text-[7px] leading-none">Today</span>}{busy && <span className="absolute right-0.5 top-0 text-[8px] leading-none" aria-label="Existing studio event">★</span>}
+                          <span>{day}</span>{isToday && <span className="text-[7px] leading-none">Today</span>}{busy && <span className="absolute right-1 top-1 h-1 w-1 rounded-full bg-amber-500" aria-label="Existing studio event" />}
                         </button>;
                       })())}
                     </div>
-                    <p className="mt-2 text-[9px] text-text-tertiary"><span className="mr-1 text-amber-600">★</span>Existing studio event — dates remain selectable after review.</p>
+                    <p className="mt-2 text-[9px] text-text-tertiary"><span className="mr-1 inline-block h-1 w-1 rounded-full bg-amber-500 align-middle" />Existing studio event</p>
                   </div>
                 )}
               </div>

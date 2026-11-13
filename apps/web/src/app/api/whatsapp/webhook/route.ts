@@ -6,6 +6,7 @@ import {
   recordWhatsAppLog,
 } from '@/services/whatsappService';
 import { getFirestoreServerInstance } from '@focoman/db';
+import { hasStudioCapability } from '@/lib/entitlementAuth';
 
 /**
  * Meta WhatsApp Business Cloud API Webhook
@@ -82,6 +83,9 @@ export async function POST(req: NextRequest) {
       }
 
       const orderData = orderDoc.data();
+      if (!(await hasStudioCapability(orderData.studioId, 'WHATSAPP_OPERATIONS'))) {
+        return NextResponse.json({ status: 'whatsapp_unavailable_for_studio' }, { status: 200 });
+      }
       if (orderData.passkeyPin && orderData.passkeyPin !== passkeyArg) {
         const invalidPinMsg = `🔒 Invalid 6-digit passkey for Order *${orderIdArg}*. Please check your booking confirmation.`;
         await sendWhatsAppMessageOrFallback(fromPhone, invalidPinMsg);
@@ -156,6 +160,10 @@ export async function POST(req: NextRequest) {
       // A webhook has no trustworthy target studio for unknown senders. Do not attach
       // private customer messages to an arbitrary studio or expose an operations reply.
       return NextResponse.json({ status: 'ignored_unrecognized_sender' }, { status: 200 });
+    }
+
+    if (!(await hasStudioCapability(matchedStudioSlug, 'WHATSAPP_OPERATIONS'))) {
+      return NextResponse.json({ status: 'whatsapp_unavailable_for_studio' }, { status: 200 });
     }
 
     const botResponse = await processWhatsAppBotMessage(matchedStudioSlug, textBody, fromPhone, {

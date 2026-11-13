@@ -10,6 +10,7 @@ import {
   WhatsAppDispatchLog,
 } from '@/services/whatsappService';
 import { getStudioBySlug, getOrderById } from '@focoman/db';
+import { requireCapability } from '@/lib/entitlementAuth';
 
 /**
  * Server Actions for WhatsApp Operations Hub & Bot Simulator
@@ -22,6 +23,7 @@ export async function getStudioWhatsappLogsAction(
   try {
     const decoded = await requireVerifiedUser(idToken);
     await requireStudioMember(decoded.uid, studioSlug, 'STUDIO_OWNER');
+    await requireCapability(studioSlug, 'WHATSAPP_OPERATIONS');
     return await getStudioWhatsAppLogs(studioSlug, 30);
   } catch {
     return [];
@@ -37,6 +39,7 @@ export async function simulateWhatsappBotQueryAction(
     const decoded = await requireVerifiedUser(idToken);
     // WhatsApp Operations Bot is accessible to STUDIO_OWNER in dashboard simulator
     await requireStudioMember(decoded.uid, studioSlug, 'STUDIO_OWNER');
+    await requireCapability(studioSlug, 'WHATSAPP_OPERATIONS');
 
     const response = await processWhatsAppBotMessage(studioSlug, query, undefined, {
       role: 'STUDIO_OWNER',
@@ -70,6 +73,7 @@ export async function getWhatsappTemplatePreviewAction(
   try {
     const actor = await requireVerifiedUser(idToken);
     await requireStudioMember(actor.uid, studioSlug, 'STUDIO_OWNER');
+    await requireCapability(studioSlug, 'WHATSAPP_OPERATIONS');
     const templateDef = WHATSAPP_TEMPLATES[templateId];
     if (!templateDef) {
       return { success: false, error: `Template [${templateId}] does not exist.` };
