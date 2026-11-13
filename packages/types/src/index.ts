@@ -18,24 +18,18 @@ export type CapabilityId =
   | 'STUDIO_ERP'             // Studio Operations - ERP (₹299/mo)
   | 'WHATSAPP_ALERTS'        // WhatsApp Notifications (Alerts) (₹499/mo)
   | 'WHATSAPP_BOT'           // WhatsApp Operations & Bot (₹999/mo)
-  | 'STUDIO_MARKETPLACE'     // Studio Marketplace (₹0 - 100% Free for Everyone)
   | 'BUSINESS_REPORTS'       // Business Reports & Analytics (₹299/mo)
   // Backward compatibility legacy aliases
   | 'CUSTOMER_BASIC'         // Alias to Customer CRM
   | 'CUSTOMER_ADVANCED'      // Alias to Customer CRM
   | 'CREW_BASIC'             // Alias to Studio Operations - ERP
   | 'CREW_ADVANCED'          // Alias to Studio Operations - ERP
-  | 'MARKETPLACE'            // Alias to Studio Marketplace
   | 'DRIVE_CLIENT_REVIEW'    // Alias to OMS Advanced
   | 'WHATSAPP_NOTIFICATIONS' // Alias to WhatsApp Alerts
   | 'WHATSAPP_OPERATIONS'    // Alias to WhatsApp Operations & Bot
   | 'OMS_CORE'
   | 'TEAM_MANAGEMENT'
   | 'MANUAL_ASSIGNMENT'
-  | 'MARKETPLACE_CONFIGURATION'
-  | 'MARKETPLACE_PUBLIC'
-  | 'BOOKING_REQUESTS'
-  | 'NEGOTIATION'
   | 'PAYMENT_RECORDING'
   | 'PAYMENT_VERIFICATION'
   | 'ERP_BASIC'
@@ -60,7 +54,6 @@ export interface CapabilityMetadata {
     | 'FREE_CORE'
     | 'CUSTOMER_MANAGEMENT'
     | 'CREW_MANAGEMENT'
-    | 'STUDIO_MARKETPLACE'
     | 'DRIVE_CLIENT_REVIEW'
     | 'WHATSAPP'
     | 'BUSINESS_REPORTS';
@@ -84,15 +77,6 @@ export interface StudioPlan {
   updatedAt: string;
 }
 
-
-export type BookingStatus =
-  | 'BOOKING_REQUEST'
-  | 'OPEN_FOR_NEGOTIATION'
-  | 'AWAITING_PAYMENT'
-  | 'PAYMENT_VERIFICATION'
-  | 'BOOKING_CONFIRMED'
-  | 'CANCELLED'
-  | 'COMPLETED';
 
 export type OrderStatus = 'AWAITING_EVENT' | 'POST_EVENT_IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
 
@@ -124,8 +108,7 @@ export interface StudioPackage extends SoftDeletable {
   description?: string;
   services: string[]; // Category or service names
   price: number;
-  isNegotiable: boolean;
-  isPublished: boolean;
+  isEnabled: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -140,7 +123,6 @@ export interface PaymentProof {
 export interface PaymentRecord extends SoftDeletable {
   id: string;
   orderId?: string;
-  bookingRequestId?: string;
   studioId: string;
   customerId: string;
   amount: number;
@@ -192,33 +174,6 @@ export interface ResourceSuggestion {
   status: 'SUGGESTED' | 'CONFIRMED' | 'REJECTED';
 }
 
-export interface BookingRequest extends SoftDeletable {
-  id: string;
-  studioId: string;
-  customerId: string;
-  customerName: string;
-  customerEmail?: string;
-  customerPhone?: string;
-  packageId?: string;
-  packageName?: string;
-  eventType: string;
-  eventDate: string; // YYYY-MM-DD
-  location: EventLocationInfo;
-  notes?: string;
-  originalPrice: number;
-  negotiatedPrice?: number;
-  agreedPrice: number;
-  advanceRequested: number;
-  isNegotiable: boolean;
-  bookingStatus: BookingStatus;
-  orderId?: string;
-  cancellationReason?: string;
-  cancelledBy?: string;
-  cancelledAt?: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
 export interface CancellationInfo {
   cancellationReason: string;
   cancelledBy: string;
@@ -241,7 +196,6 @@ export interface CustomerOrderView {
   remainingAmount: number;
   paymentStatus: PaymentStatus;
   orderStatus: OrderStatus;
-  bookingStatus?: BookingStatus;
   trackingPasskey: string;
   passkeyPin?: string;
   createdAt: string;
@@ -296,7 +250,6 @@ export interface CustomerTrackingView {
     studioOwnerId?: string;
     studioOwnerEmail?: string;
     orderNumber: string;
-    bookingRequestId?: string;
     trackingPasskey: string;
     passkeyPin?: string;
     studioName: string;
@@ -381,7 +334,7 @@ export interface StudioServiceConfig {
   priceDisabled?: boolean;
 }
 
-export type LeadChannel = 'INSTAGRAM' | 'WHATSAPP' | 'WEBSITE' | 'MARKETPLACE' | 'DIRECT';
+export type LeadChannel = 'INSTAGRAM' | 'WHATSAPP' | 'WEBSITE' | 'DIRECT';
 
 export type LeadStage = 'NEW' | 'CONTACTED' | 'QUOTED' | 'CONVERTED' | 'ARCHIVED';
 
@@ -400,7 +353,6 @@ export interface StudioLeadWebhookConfig {
 export interface StudioLead extends SoftDeletable {
   id: string;
   studioId: string;
-  bookingRequestId?: string;
   name: string;
   phone?: string;
   email?: string;
@@ -443,33 +395,12 @@ export interface Studio extends SoftDeletable {
     crm: boolean;
     erp: boolean;
     whatsapp: boolean;
-    marketplace: boolean;
     reports?: boolean;
     driveReview?: boolean;
     basicDashboard?: boolean;
     autoAssignCrew?: boolean;
   };
   billingProfile?: StudioBillingProfile;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface MarketplaceProfile extends SoftDeletable {
-  id: string; // Typically matches studioId
-  studioId: string;
-  name: string;
-  slug: string;
-  city: string;
-  description?: string;
-  logoUrl?: string;
-  tags: string[]; // e.g. ['WEDDING', 'PORTRAIT', 'CORPORATE']
-  coverImageUrl?: string;
-  isVisible: boolean;
-  verifiedMetrics: {
-    onTimeDeliveryPercentage: number;
-    completedOrdersCount: number;
-    lastCalculatedAt: string;
-  };
   createdAt: string;
   updatedAt: string;
 }
@@ -612,7 +543,6 @@ export interface Order extends SoftDeletable {
   id: string;
   studioId: string;
   orderNumber: string; // e.g. ORD-1024
-  bookingRequestId?: string;
   customer: {
     id: string;
     name: string;
@@ -630,7 +560,6 @@ export interface Order extends SoftDeletable {
   pricing: OrderPricing;
   paymentStatus: PaymentStatus;
   orderStatus: OrderStatus;
-  bookingStatus?: BookingStatus;
   assignedResources: ResourceAssignment[];
   resourceSuggestions?: ResourceSuggestion[];
   preflightReport?: PreflightConflictReport;

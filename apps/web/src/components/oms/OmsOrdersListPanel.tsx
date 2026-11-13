@@ -18,8 +18,8 @@ interface OmsOrdersListPanelProps {
   refreshError?: string | null;
   query: string;
   onChangeQuery: (query: string) => void;
-  statusFilter: "ALL" | "MARKETPLACE" | OrderStatus;
-  onChangeStatusFilter: (status: "ALL" | "MARKETPLACE" | OrderStatus) => void;
+  statusFilter: "ALL" | OrderStatus;
+  onChangeStatusFilter: (status: "ALL" | OrderStatus) => void;
   sortBy: "DATE_ASC" | "DATE_DESC" | "PRICE_ASC" | "PRICE_DESC";
   onChangeSortBy: (sort: "DATE_ASC" | "DATE_DESC" | "PRICE_ASC" | "PRICE_DESC") => void;
   onExportExcel: () => void;
@@ -110,7 +110,7 @@ export function OmsOrdersListPanel({
             >
               <span>Leads ({leadsCount})</span>
               <span className="rounded-full bg-brand-blue-soft px-1.5 py-0.5 text-[10px] font-extrabold text-brand-blue-primary">
-                Marketplace + Channels
+                Orders
               </span>
             </button>
           </div>
@@ -130,12 +130,11 @@ export function OmsOrdersListPanel({
               suppressHydrationWarning
               value={statusFilter}
               onChange={(e) =>
-                onChangeStatusFilter(e.target.value as "ALL" | "MARKETPLACE" | OrderStatus)
+                onChangeStatusFilter(e.target.value as "ALL" | OrderStatus)
               }
               className="min-w-0 w-full rounded-xl border border-border-default bg-surface-app px-3 py-2 text-xs font-semibold text-text-primary focus:bg-white focus:outline-none focus:border-brand-blue-primary focus:ring-2 focus:ring-brand-blue-soft sm:w-auto"
             >
               <option value="ALL">All States</option>
-              <option value="MARKETPLACE">Studio Marketplace Orders</option>
               {(Object.keys(STATUS_LABELS) as OrderStatus[]).map((key) => (
                 <option key={key} value={key}>
                   {STATUS_LABELS[key]}
@@ -200,11 +199,6 @@ export function OmsOrdersListPanel({
                     <span className="font-mono text-xs font-bold text-brand-blue-primary">
                       {order.orderNumber}
                     </span>
-                    {order.bookingRequestId && (
-                      <span className="rounded-md bg-purple-50 px-1.5 py-0.5 text-[10px] font-bold text-purple-700 border border-purple-200">
-                        Marketplace
-                      </span>
-                    )}
                     {order.paymentStatus === "PAID" && (
                       <span className="rounded-md bg-emerald-50 px-1.5 py-0.5 text-[10px] font-bold text-status-success border border-emerald-200">
                         PAID

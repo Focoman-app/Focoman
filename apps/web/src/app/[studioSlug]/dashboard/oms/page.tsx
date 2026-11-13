@@ -98,9 +98,7 @@ export default function OmsPage({
     [orders, selectedId]
   );
   const [selectedTasks, setSelectedTasks] = useState<Task[]>([]);
-  const [statusFilter, setStatusFilter] = useState<
-    "ALL" | "MARKETPLACE" | OrderStatus
-  >("ALL");
+  const [statusFilter, setStatusFilter] = useState<"ALL" | OrderStatus>("ALL");
   const [sortBy, setSortBy] = useState<
     "DATE_ASC" | "DATE_DESC" | "PRICE_ASC" | "PRICE_DESC"
   >("DATE_ASC");
@@ -220,7 +218,7 @@ export default function OmsPage({
 
   const activeStudioPackages = useMemo(() => {
     return studioPackagesList.filter(
-      (pkg) => pkg.isPublished !== false && !pkg.isDeleted
+      (pkg) => pkg.isEnabled !== false && !pkg.isDeleted
     );
   }, [studioPackagesList]);
 
@@ -1378,10 +1376,7 @@ export default function OmsPage({
   const filtered = useMemo(() => {
     const list = orders.filter(
       (order) =>
-        (statusFilter === "ALL" ||
-          (statusFilter === "MARKETPLACE"
-            ? Boolean(order.bookingRequestId)
-            : order.orderStatus === statusFilter)) &&
+        (statusFilter === "ALL" || order.orderStatus === statusFilter) &&
         (!query ||
           `${order.customer.name} ${order.orderNumber} ${order.eventType}`
             .toLowerCase()
@@ -1546,11 +1541,6 @@ export default function OmsPage({
                   <span className="font-mono text-xs font-bold text-brand-blue-primary block">
                     {selected.orderNumber}
                   </span>
-                  {selected.bookingRequestId && (
-                    <span className="rounded-md bg-purple-50 px-2 py-0.5 text-[10px] font-bold text-purple-700 border border-purple-200">
-                      Marketplace Booking: {selected.bookingRequestId}
-                    </span>
-                  )}
                 </div>
                 <h2 className="text-lg font-extrabold text-text-primary truncate">
                   {selected.customer.name}
@@ -1604,6 +1594,7 @@ export default function OmsPage({
             onOpenBillingModal={(tab, receiptId) =>
               setBillingModalState({ isOpen: true, tab, receiptId })
             }
+            canManageBilling={effectiveFeatures.reports}
             editConfirmedPrice={editConfirmedPrice}
             onChangeEditConfirmedPrice={(val) => {
               setEditConfirmedPrice(val);

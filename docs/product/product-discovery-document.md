@@ -176,29 +176,4 @@ Focoman is built using a **100% JavaScript / TypeScript full-stack architecture*
 * **Database**: Google Cloud Firestore (Document Database) with strict server-only Admin SDK boundaries (`packages/db`).
 * **Deployment**: Google Cloud Run running containerized Next.js standalone server.
 
----
-
-## 8. Product Discovery Amendment vNext — Product Evolution & Marketplace Direction
-
-**Date:** 2026-09-14
-**Reason for Amendment:** Evolve Focoman from the MVP foundation into a more professional, flexible, and configurable business operating system, introducing modular capabilities and a public Studio Marketplace, while preserving historical Phase 1 decisions.
-
-### 8.1 Amendment Philosophy
-The core Focoman platform remains unified, but capabilities will be modular and configurable. Professional studio operations must be simple, transparent, and flexible. A small studio can use essential OMS capabilities without being forced to configure a full ERP. Expanding studios can enable deeper CRM/ERP modules, WhatsApp, or the Studio Marketplace based on their maturity.
-
-### 8.2 Affected Product Areas & Directions
-* **Core OMS**: Remains the operational core and absolute starting point (Confirmed Order → Awaiting Event → Post-Event In Progress → Completed). No changes to the existing foundational lifecycle.
-* **Flexible CRM**: Preserved as a modular capability providing customer directory and order history. Deep pre-event features (lead/quotation tracking) remain excluded from default workflows unless explicitly authorized as a future separate module.
-* **Configurable ERP**: Focuses on crew directory, roles, and resource availability. Advanced capabilities (payroll, PF, compensation) are planned future features and must NOT be marketed or claimed as existing functionality until explicitly implemented.
-* **Optional WhatsApp**: Functions as a configurable, premium communication layer. The core application must function completely without it.
-* **Studio Marketplace (New Capability)**: A new, opt-in public discovery layer. Allows customers to search for studios based on location and view public studio profiles, approved tags, and verified operational performance metrics (e.g., On-Time Delivery).
-* **Website Integration (VAS)**: Clarified strictly as an API integration capability bridging a studio's external website to Focoman, NOT a built-in website builder or pre-event CRM pipeline.
-
-### 8.3 Implementation & Security Implications
-* **Data Privacy Boundaries**: Strict server-side separation must be enforced between Public Marketplace profiles and Private Studio operational data. Private orders, revenue, customer details, and internal tasks must never be exposed publicly.
-* **Verified Metrics**: Ratings and Marketplace performance metrics must be derived from actual Focoman operational data. Fake data, mock ratings, and arbitrary manual metric overrides are strictly prohibited.
-* **Marketplace vs. Guest Portal**: The public Studio Marketplace is distinctly separate from the passkey-protected Guest Order tracking portal.
-* **Provisional Pricing**: Pricing tiers are provisional during the Phase 1 Pilot program. Future commercial packaging will evaluate modular enablement (OMS Core + CRM/ERP/WhatsApp/Marketplace Add-ons).
-
-### 8.4 Documentation Implications
-All marketing copy, landing pages, and technical specifications must accurately distinguish between **Implemented**, **Approved Direction**, **Planned**, and **Not Yet Implemented** features. Unsupported claims (e.g., payroll integration or pre-event CRM) must be removed from user-facing copy.
+Focoman's product scope ends at OMS-first confirmed-order operations and private studio workflows.

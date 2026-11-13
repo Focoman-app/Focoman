@@ -15,6 +15,7 @@ import {
   setUserDefaultStudio,
   getStudioPackages,
   saveStudioPackage,
+  softDeleteStudioPackage,
 } from "@focoman/db";
 import { Studio, StudioMembership, StudioPlan, StudioServiceConfig, StudioPackage } from "@focoman/types";
 import { requireVerifiedUser, requireStudioMember } from "@/lib/serverAuth";
@@ -95,7 +96,6 @@ export async function registerStudioAction(input: {
         crm: true,
         erp: true,
         whatsapp: true,
-        marketplace: true,
       },
       isDeleted: false,
       createdAt: now,
@@ -249,6 +249,37 @@ export async function saveStudioPackagesAction(
   } catch (err: unknown) {
     console.error("[saveStudioPackagesAction] Error:", err);
     return { success: false, error: err instanceof Error ? err.message : "Failed to save packages." };
+  }
+}
+
+export async function createStudioPackageAction(input: unknown, idToken: string) {
+  try {
+    const { CreatePackageSchema } = await import("@focoman/validation");
+    const parsed = CreatePackageSchema.parse(input);
+    const actor = await requireVerifiedUser(idToken);
+    await requireStudioMember(actor.uid, parsed.studioId, "STUDIO_OWNER");
+    const now = new Date().toISOString();
+    const packageDoc: StudioPackage = { ...parsed, id: `PKG-${crypto.randomUUID().replace(/-/g, "").slice(0, 8).toUpperCase()}`, studioId: parsed.studioId.toLowerCase(), createdAt: now, updatedAt: now };
+    await saveStudioPackage(packageDoc);
+    return { success: true, package: packageDoc };
+  } catch (err: unknown) {
+    return { success: false, error: err instanceof Error ? err.message : "Failed to create package." };
+  }
+}
+
+export async function deleteStudioPackageAction(packageId: string, studioSlug: string, idToken: string) {
+  try {
+    const actor = await requireVerifiedUser(idToken);
+    await requireStudioMember(actor.uid, studioSlug, "STUDIO_OWNER");
+    const packages = await getStudioPackages(studioSlug);
+    if (!packages.some((studioPackage) => studioPackage.id === packageId)) {
+      return { success: false, error: "Package not found in the authorized studio." };
+    }
+    const deleted = await softDeleteStudioPackage(packageId, actor.uid);
+    if (!deleted) return { success: false, error: "Package not found." };
+    return { success: true };
+  } catch (err: unknown) {
+    return { success: false, error: err instanceof Error ? err.message : "Failed to delete package." };
   }
 }
 

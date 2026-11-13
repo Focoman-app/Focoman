@@ -150,7 +150,6 @@ export function CheckoutBuilder() {
     else if (upgradeParam === "erp" || upgradeParam === "crew") initial.push("STUDIO_ERP");
     else if (upgradeParam === "reports" || upgradeParam === "analytics") initial.push("BUSINESS_REPORTS");
     else if (upgradeParam === "whatsapp") initial.push("WHATSAPP_NOTIFICATIONS");
-    else if (upgradeParam === "marketplace") initial.push("MARKETPLACE");
     else if (upgradeParam === "drive") initial.push("DRIVE_CLIENT_REVIEW");
     return initial;
   });
@@ -415,7 +414,7 @@ export function CheckoutBuilder() {
                   <span className="rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider">
                     Free Plan
                   </span>
-                  <h4 className="text-base font-extrabold text-text-primary mt-1.5">Basic OMS &amp; Marketplace</h4>
+                  <h4 className="text-base font-extrabold text-text-primary mt-1.5">Basic OMS</h4>
                 </div>
                 <div className="text-right">
                   <span className="text-xl font-black text-text-primary">₹0</span>
@@ -423,7 +422,7 @@ export function CheckoutBuilder() {
                 </div>
               </div>
               <p className="text-xs text-text-secondary leading-relaxed">
-                Core Order Management System (OMS) and Studio Marketplace profile. Directs straight to OMS workspace.
+                Core Order Management System (OMS). Directs straight to OMS workspace.
               </p>
             </div>
             <div className="grid gap-1.5 text-[11px] text-text-secondary pt-2 border-t border-slate-200/50">
@@ -433,7 +432,6 @@ export function CheckoutBuilder() {
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-emerald-600 font-black">✓</span>
-                <span>Studio Marketplace</span>
               </div>
             </div>
           </div>
@@ -480,7 +478,7 @@ export function CheckoutBuilder() {
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-emerald-600 font-black">✓</span>
-                <span>Basic Business Dashboard (Orders, Revenue, Pending)</span>
+                <span>Basic Business Dashboard — Orders, Revenue, Pending</span>
               </div>
             </div>
           </div>
@@ -523,6 +521,14 @@ export function CheckoutBuilder() {
               <div className="flex items-center gap-2">
                 <span className="text-emerald-600 font-black">✓</span>
                 <span>Excel Report Exports</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-emerald-600 font-black">✓</span>
+                <span>Invoices &amp; Receipts</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-emerald-600 font-black">✓</span>
+                <span>Multi-Channel Leads</span>
               </div>
             </div>
           </div>

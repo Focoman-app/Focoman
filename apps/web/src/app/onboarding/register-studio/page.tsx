@@ -254,7 +254,7 @@ export default function RegisterStudioPage() {
                 Studio Logo (Optional)
               </label>
               <p className="text-xs text-text-muted mb-3">
-                Appears next to your studio name across your dashboard and marketplace listings.
+                Appears next to your studio name across your workspace.
               </p>
 
               <div className="flex flex-wrap items-center gap-4">

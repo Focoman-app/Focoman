@@ -51,13 +51,10 @@ export default async function DashboardPage({ params }: { params: Promise<{ stud
     redirect(`/${studioSlug}/dashboard/oms`);
   }
 
-  const hasMarketplace = true;
-
   return (
     <DashboardHomeView
       studioSlug={studioSlug}
       initialOrders={orders}
-      hasMarketplace={hasMarketplace}
       planTier={effectiveTier}
     />
   );

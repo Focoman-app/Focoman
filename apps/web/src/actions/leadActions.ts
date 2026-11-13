@@ -14,8 +14,6 @@ import {
   updateCustomer,
   saveOrder,
   saveTasks,
-  getBookingRequestsByStudio,
-  updateBookingRequest,
 } from "@focoman/db";
 import {
   StudioLead,
@@ -45,7 +43,7 @@ import {
   requireStudioMember,
   requireStudioOwner,
 } from "@/lib/serverAuth";
-import { hasStudioCapability } from "@/lib/entitlementAuth";
+import { hasStudioCapability, requireCapability } from "@/lib/entitlementAuth";
 import { getFreeWorkflowTaskAssignee } from "@/lib/erpCrewPolicy";
 
 function generateStudioLeadId(studioId: string, now = new Date()): string {
@@ -90,61 +88,16 @@ export async function getStudioLeadsAction(studioSlug: string, idToken?: string)
   const decoded = await requireVerifiedUser(idToken);
   await requireStudioMember(decoded.uid, cleanSlug);
 
-  const [existingLeads, bookingRequests, webhookConfig] = await Promise.all([
+  const [existingLeads, webhookConfig] = await Promise.all([
     getLeadsByStudio(cleanSlug),
-    getBookingRequestsByStudio(cleanSlug).catch(() => []),
     ensureStudioWebhookConfig(cleanSlug),
   ]);
 
-  // Ensure all Studio Marketplace booking inquiries are unified in the Leads stream
-  const syncedLeads = [...existingLeads];
-  const existingBookingIds = new Set(
-    existingLeads.map((l) => l.bookingRequestId).filter(Boolean)
-  );
-
-  for (const bkg of bookingRequests) {
-    if (!existingBookingIds.has(bkg.id)) {
-      const mktStage: LeadStage =
-        bkg.bookingStatus === "BOOKING_CONFIRMED" || bkg.orderId
-          ? "CONVERTED"
-          : bkg.bookingStatus === "AWAITING_PAYMENT" || bkg.bookingStatus === "PAYMENT_VERIFICATION"
-          ? "QUOTED"
-          : bkg.bookingStatus === "OPEN_FOR_NEGOTIATION"
-          ? "CONTACTED"
-          : "NEW";
-
-      const mktLead: StudioLead = {
-        id: `LED-MKT-${bkg.id.replace(/^BKG-/, "").slice(0, 10)}`,
-        studioId: cleanSlug,
-        bookingRequestId: bkg.id,
-        name: bkg.customerName,
-        ...(bkg.customerPhone ? { phone: bkg.customerPhone } : {}),
-        ...(bkg.customerEmail ? { email: bkg.customerEmail } : {}),
-        channel: "MARKETPLACE",
-        stage: mktStage,
-        eventType: bkg.packageName ? `${bkg.eventType} (${bkg.packageName})` : bkg.eventType,
-        eventDate: bkg.eventDate,
-        location: bkg.location?.address,
-        estimatedBudget: bkg.agreedPrice || bkg.originalPrice,
-        message:
-          bkg.notes ||
-          `Studio Marketplace inquiry (${bkg.id})${bkg.packageName ? ` for package ${bkg.packageName}` : ""}`,
-        ...(bkg.orderId ? { convertedOrderId: bkg.orderId } : {}),
-        isDeleted: false,
-        createdAt: bkg.createdAt,
-        updatedAt: bkg.updatedAt,
-      };
-
-      await saveStudioLead(mktLead);
-      syncedLeads.push(mktLead);
-    }
-  }
-
-  syncedLeads.sort(
+  existingLeads.sort(
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
   );
 
-  return { leads: syncedLeads, webhookConfig };
+  return { leads: existingLeads, webhookConfig };
 }
 
 export async function saveStudioLeadWebhookConfigAction(params: {
@@ -156,6 +109,7 @@ export async function saveStudioLeadWebhookConfigAction(params: {
     const cleanSlug = params.studioId.toLowerCase();
     const decoded = await requireVerifiedUser(params.idToken);
     await requireStudioOwner(decoded.uid, cleanSlug);
+    await requireCapability(cleanSlug, "BUSINESS_REPORTS");
 
     const existing = await ensureStudioWebhookConfig(cleanSlug);
     const updatedConfig: StudioLeadWebhookConfig = {
@@ -193,6 +147,9 @@ export async function createStudioLeadAction(params: {
     const cleanSlug = params.studioId.toLowerCase();
     const decoded = await requireVerifiedUser(params.idToken);
     await requireStudioMember(decoded.uid, cleanSlug);
+    if (["INSTAGRAM", "WHATSAPP", "WEBSITE"].includes(params.channel)) {
+      await requireCapability(cleanSlug, "BUSINESS_REPORTS");
+    }
 
     const nowDate = new Date();
     const now = nowDate.toISOString();
@@ -373,7 +330,6 @@ export async function convertLeadToOrderAction(params: {
       id: orderId,
       studioId: cleanSlug,
       orderNumber: orderId,
-      ...(lead.bookingRequestId ? { bookingRequestId: lead.bookingRequestId } : {}),
       customer: {
         id: effectiveCustomerId,
         name: lead.name,
@@ -401,7 +357,6 @@ export async function convertLeadToOrderAction(params: {
           ? "ADVANCE_RECEIVED"
           : "PENDING",
       orderStatus: "AWAITING_EVENT",
-      bookingStatus: "BOOKING_CONFIRMED",
       assignedResources,
       resourceSuggestions: suggestions,
       preflightReport: preflight,
@@ -477,14 +432,6 @@ export async function convertLeadToOrderAction(params: {
         location: locationVal,
         estimatedBudget: confirmedPrice,
       }),
-      ...(lead.bookingRequestId
-        ? [
-            updateBookingRequest(lead.bookingRequestId, {
-              bookingStatus: "BOOKING_CONFIRMED",
-              orderId,
-            }),
-          ]
-        : []),
     ]);
 
     return {

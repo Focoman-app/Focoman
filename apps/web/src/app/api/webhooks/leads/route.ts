@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getStudioBySlug, saveStudioLead, getFirestoreServerInstance } from "@focoman/db";
 import { prefixLetters, generateTimestampDigits } from "@/lib/invitationPasscode";
 import { LeadChannel, StudioLead } from "@focoman/types";
+import { hasStudioCapability } from "@/lib/entitlementAuth";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -140,6 +141,13 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    if (!(await hasStudioCapability(studioSlug, "BUSINESS_REPORTS"))) {
+      return NextResponse.json(
+        { error: "Multi-channel lead capture requires the ₹1,999 Professional plan." },
+        { status: 403, headers: CORS_HEADERS }
+      );
+    }
+
     if (studio.leadWebhookConfig?.enabled === false) {
       return NextResponse.json(
         { error: "Multi-channel lead capture is currently disabled for this studio." },
@@ -247,7 +255,7 @@ export async function POST(req: NextRequest) {
 
     // Case 3: Studio Website Form / Direct Webhook JSON Submission
     const rawChannel = String(body.channel || "WEBSITE").toUpperCase();
-    const channel: LeadChannel = ["INSTAGRAM", "WHATSAPP", "WEBSITE", "MARKETPLACE", "DIRECT"].includes(rawChannel)
+    const channel: LeadChannel = ["INSTAGRAM", "WHATSAPP", "WEBSITE", "DIRECT"].includes(rawChannel)
       ? (rawChannel as LeadChannel)
       : "WEBSITE";
 

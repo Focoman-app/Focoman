@@ -40,7 +40,7 @@ export default function FeaturesPage() {
             {[
               {
                 title: "Order Creation & Management",
-                desc: "Register and manage confirmed orders from both direct studio bookings and Studio Marketplace bookings in one centralized system.",
+                desc: "Register and manage confirmed orders from your studio in one centralized system.",
               },
               {
                 title: "End-to-End Production Workflow",
@@ -150,7 +150,7 @@ export default function FeaturesPage() {
               },
               {
                 title: "Automated Workflow & Task Assignment",
-                desc: "Configure studio workflows to automatically assign crew members and initiate production tasks when a new order is confirmed, including Marketplace bookings. Assignments follow predefined workflow rules, with manual assignment available when automation is not configured.",
+                desc: "Configure studio workflows to automatically assign crew members and initiate production tasks when a new order is confirmed. Assignments follow predefined workflow rules, with manual assignment available when automation is not configured.",
               },
               {
                 title: "Invoices & Receipts Management",
@@ -216,57 +216,6 @@ export default function FeaturesPage() {
               ][i % 4];
               return (
               <div key={f.title} className={`rounded-2xl border border-border-default bg-white p-5 transition ${colors.border} hover:shadow-sm`}>
-                <div className={`h-1.5 w-8 rounded-full mb-4 ${colors.bg}`} />
-                <h3 className="text-sm font-bold text-text-primary">{f.title}</h3>
-                <p className="mt-2 text-xs leading-relaxed text-text-secondary">{f.desc}</p>
-              </div>
-            )})}
-          </div>
-        </div>
-      </section>
-
-      {/* Module 5: Marketplace */}
-      <section className="mx-auto max-w-7xl px-4 pb-14 sm:px-6 lg:px-8">
-        <div className="rounded-3xl border border-border-default bg-white p-8 shadow-sm sm:p-12">
-          <div className="flex flex-col gap-2">
-            <span className="inline-block w-fit rounded-full bg-pink-50 px-3 py-1 text-xs font-bold tracking-widest text-pink-600 uppercase">
-              Module 05: Studio Marketplace
-            </span>
-            <h2 className="text-2xl font-extrabold tracking-tight text-text-primary sm:text-3xl">
-              Studio Marketplace
-            </h2>
-            <p className="max-w-3xl text-sm text-text-secondary sm:text-base">
-              Discover verified photography and videography studios near you with authentic performance metrics, on-time delivery track records, and client reviews, while studio owners retain complete control over visibility and profile settings.
-            </p>
-          </div>
-
-          <div className="mt-10 grid gap-6 sm:grid-cols-2">
-            {[
-              {
-                title: "Public Studio Profile & Direct Inquiries",
-                desc: "Showcase your studio profile with business information, location, services, and approved public details through a unique profile URL. Allow prospective customers to discover your studio and submit booking inquiries with their event requirements.",
-              },
-              {
-                title: "Configurable Service Packages",
-                desc: "Create and publish customized photography and videography packages with pricing, service details, and deliverables. Configure optional price negotiation for individual packages based on studio preferences.",
-              },
-              {
-                title: "Booking Requests & Confirmation",
-                desc: "Allow customers to submit booking requests with event details and selected packages. Review inquiries, confirm the agreed booking amount, request advance payments, and convert verified bookings into studio orders.",
-              },
-              {
-                title: "Privacy Protected Operations",
-                desc: "Public visitors can view only the studio’s approved profile information, services, and packages, while internal customer records, financial details, orders, and crew operations remain private and protected.",
-              },
-            ].map((f, i) => {
-              const colors = [
-                { border: "hover:border-brand-blue-light", bg: "bg-brand-blue-primary" },
-                { border: "hover:border-brand-orange-light", bg: "bg-brand-orange-primary" },
-                { border: "hover:border-brand-purple-light", bg: "bg-brand-purple-primary" },
-                { border: "hover:border-green-300", bg: "bg-green-500" },
-              ][i % 4];
-              return (
-              <div key={f.title} className={`rounded-2xl border border-border-default bg-surface-app p-5 transition ${colors.border} hover:shadow-sm`}>
                 <div className={`h-1.5 w-8 rounded-full mb-4 ${colors.bg}`} />
                 <h3 className="text-sm font-bold text-text-primary">{f.title}</h3>
                 <p className="mt-2 text-xs leading-relaxed text-text-secondary">{f.desc}</p>

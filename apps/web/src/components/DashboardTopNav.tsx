@@ -90,7 +90,6 @@ export function DashboardTopNav({
     if (pathname.includes("/whatsapp")) return "WhatsApp Operations";
     if (pathname.includes("/settings")) return "Studio Settings";
     if (pathname.includes("/reports")) return "Business Reports";
-    if (pathname.includes("/marketplace")) return "Marketplace Profile";
     if (pathname.includes("/dev-portal")) return "Developer Portal";
     return "Dashboard";
   })();
@@ -102,7 +101,6 @@ export function DashboardTopNav({
   const hasERP = isLifetimePro || selectedCaps.includes("STUDIO_ERP");
   const hasReports = isLifetimePro || selectedCaps.includes("BUSINESS_REPORTS");
   const hasDrive = isLifetimePro || selectedCaps.includes("DRIVE_CLIENT_REVIEW");
-  const hasMarketplace = true; // Free for all studios
   const hasWhatsApp =
     isLifetimePro ||
     selectedCaps.includes("WHATSAPP_NOTIFICATIONS") || selectedCaps.includes("WHATSAPP_OPERATIONS");

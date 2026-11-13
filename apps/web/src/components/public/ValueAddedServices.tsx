@@ -188,7 +188,7 @@ export function ValueAddedServices() {
           onClick={handleInquiryClick}
           className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#1C1917] px-6 py-3.5 text-xs sm:text-sm font-bold text-white shadow-[0_3px_0_#0F172A] active:translate-y-[2px] active:shadow-none transition hover:bg-[#2C2825]"
         >
-          <span>Send Inquiry on WhatsApp ({VAS_DISPLAY_NUMBER})</span>
+          <span>Send Inquiry on WhatsApp</span>
           <span>→</span>
         </a>
       </div>

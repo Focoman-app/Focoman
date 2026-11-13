@@ -6,16 +6,6 @@ import type { CapabilityId, CapabilityMetadata } from '@focoman/types';
 export const APP_NAME = 'Focoman';
 export const APP_DESCRIPTION = 'Order Management System for Photographic Studios';
 
-export const BOOKING_STATUSES = [
-  'BOOKING_REQUEST',
-  'OPEN_FOR_NEGOTIATION',
-  'AWAITING_PAYMENT',
-  'PAYMENT_VERIFICATION',
-  'BOOKING_CONFIRMED',
-  'CANCELLED',
-  'COMPLETED'
-] as const;
-
 export const ORDER_STATUSES = ['AWAITING_EVENT', 'POST_EVENT_IN_PROGRESS', 'COMPLETED', 'CANCELLED'] as const;
 
 export const TASK_STATUSES = ['ASSIGNED', 'IN_PROGRESS', 'REVIEW', 'REWORK', 'COMPLETED'] as const;
@@ -59,27 +49,8 @@ export const FREE_CORE_CAPABILITY: CapabilityMetadata = {
   valueProp: 'Always ₹0 forever. No order volume caps or retention fees.',
   features: [
     'Basic OMS (Order Management System)',
-    'Studio Marketplace',
     'Create, view, and edit confirmed orders',
     'Order workflow status tracker for real-time progress updates',
-  ],
-  isFreeCore: true,
-  studioScoped: true,
-};
-
-export const FREE_MARKETPLACE_CAPABILITY: CapabilityMetadata = {
-  id: 'MARKETPLACE',
-  name: 'Studio Marketplace',
-  category: 'STUDIO_MARKETPLACE',
-  price: 0,
-  description: 'Public studio showcase profile, service packages, and direct booking inquiries.',
-  valueProp: '100% Free for all studios. Get discovered by new clients in your city and receive direct booking inquiries.',
-  features: [
-    'Public studio showcase page on a unique web URL with portfolio photos',
-    'Publish customizable service packages, pricing, and deliverables',
-    'Receive direct booking inquiries from prospective clients in your city',
-    'Optional price negotiation and custom quote confirmation flow',
-    'Strict operational privacy: internal CRM, notes, and finances remain 100% private',
   ],
   isFreeCore: true,
   studioScoped: true,
@@ -170,7 +141,7 @@ export const PURCHASABLE_CAPABILITIES: CapabilityMetadata[] = [
   },
 ];
 
-export const ALL_CAPABILITIES = [FREE_CORE_CAPABILITY, FREE_MARKETPLACE_CAPABILITY, ...PURCHASABLE_CAPABILITIES];
+export const ALL_CAPABILITIES = [FREE_CORE_CAPABILITY, ...PURCHASABLE_CAPABILITIES];
 
 export const WHATSAPP_OPERATIONS_BOT_MONTHLY_LIMIT = 499;
 
@@ -227,9 +198,6 @@ export function calculateMonthlyTotal(selectedCapabilities: CapabilityId[]): num
     total += 1999;
   }
 
-  // Studio Marketplace - Free for everyone (₹0)
-  // No subscription charge applied
-
   return total;
 }
 
@@ -240,15 +208,9 @@ export function calculateMonthlyTotal(selectedCapabilities: CapabilityId[]): num
 export function getEffectiveCapabilities(selectedCapabilities: CapabilityId[] = []): CapabilityId[] {
   const effective = new Set<CapabilityId>();
   
-  // Free core and Studio Marketplace are always included for every studio
+  // Free core is always included for every studio.
   effective.add('OMS_BASIC');
   effective.add('OMS_CORE');
-  effective.add('MARKETPLACE');
-  effective.add('STUDIO_MARKETPLACE');
-  effective.add('MARKETPLACE_CONFIGURATION');
-  effective.add('MARKETPLACE_PUBLIC');
-  effective.add('BOOKING_REQUESTS');
-  effective.add('NEGOTIATION');
 
   for (const capId of selectedCapabilities) {
     effective.add(capId);
@@ -277,15 +239,6 @@ export function getEffectiveCapabilities(selectedCapabilities: CapabilityId[] = 
       effective.add('BUSINESS_REPORTS');
       effective.add('ANALYTICS_BASIC');
       effective.add('ANALYTICS_ADVANCED');
-    }
-
-    if (capId === 'MARKETPLACE' || capId === 'STUDIO_MARKETPLACE' || capId === 'MARKETPLACE_PUBLIC') {
-      effective.add('MARKETPLACE');
-      effective.add('STUDIO_MARKETPLACE');
-      effective.add('MARKETPLACE_CONFIGURATION');
-      effective.add('MARKETPLACE_PUBLIC');
-      effective.add('BOOKING_REQUESTS');
-      effective.add('NEGOTIATION');
     }
 
     if (capId === 'DRIVE_CLIENT_REVIEW' || capId === 'OMS_ADVANCED' || capId === 'GOOGLE_DRIVE') {
@@ -323,12 +276,10 @@ export const PLAN_PRICES: Record<string, number> = {
 export const TRIAL_DURATION_DAYS = 30;
 
 export const PLAN_CAPABILITIES: Record<string, CapabilityId[]> = {
-  FREE: ['OMS_BASIC', 'OMS_CORE', 'MARKETPLACE', 'STUDIO_MARKETPLACE'],
+  FREE: ['OMS_BASIC', 'OMS_CORE'],
   STARTER: [
     'OMS_BASIC',
     'OMS_CORE',
-    'MARKETPLACE',
-    'STUDIO_MARKETPLACE',
     'DRIVE_CLIENT_REVIEW',
     'OMS_ADVANCED',
     'CUSTOMER_CRM',
@@ -342,8 +293,6 @@ export const PLAN_CAPABILITIES: Record<string, CapabilityId[]> = {
   PROFESSIONAL: [
     'OMS_BASIC',
     'OMS_CORE',
-    'MARKETPLACE',
-    'STUDIO_MARKETPLACE',
     'DRIVE_CLIENT_REVIEW',
     'OMS_ADVANCED',
     'CUSTOMER_CRM',
@@ -360,7 +309,7 @@ export const PLAN_CAPABILITIES: Record<string, CapabilityId[]> = {
     'ANALYTICS_ADVANCED',
   ],
   COMPLETE: [
-    'OMS_BASIC', 'OMS_CORE', 'MARKETPLACE', 'STUDIO_MARKETPLACE',
+    'OMS_BASIC', 'OMS_CORE',
     'DRIVE_CLIENT_REVIEW', 'OMS_ADVANCED', 'CUSTOMER_CRM', 'CUSTOMER_BASIC',
     'CUSTOMER_ADVANCED', 'STUDIO_ERP', 'CREW_BASIC', 'CREW_ADVANCED',
     'ANALYTICS_BASIC', 'WHATSAPP_NOTIFICATIONS', 'WHATSAPP_OPERATIONS',

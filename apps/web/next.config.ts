@@ -31,16 +31,6 @@ const nextConfig: NextConfig = {
         destination: "/#pricing",
         permanent: true,
       },
-      {
-        source: "/marketplace",
-        destination: "/studios",
-        permanent: true,
-      },
-      {
-        source: "/marketplace/:slug",
-        destination: "/studio/:slug",
-        permanent: true,
-      },
     ];
   },
   async rewrites() {

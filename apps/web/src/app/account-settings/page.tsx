@@ -7,8 +7,7 @@ import { Navbar } from "@/components/Navbar";
 import { FocomanLoadingState } from "@/components/FocomanSpinner";
 import { subscribeToAuthState, signOutUser } from "@/lib/firebaseAuth";
 import { getCustomerAuthorizedOrdersHistoryAction } from "@/actions/customerActions";
-import { getCustomerBookingRequestsAction } from "@/actions/marketplaceActions";
-import { CustomerOrderView, BookingRequest, StudioMembership, Studio } from "@focoman/types";
+import { CustomerOrderView, StudioMembership, Studio } from "@focoman/types";
 import { User, updateProfile } from "firebase/auth";
 import { getUserWorkspacesAction, getStudioAction, deleteUserAccountAction } from "@/actions/studioActions";
 import {
@@ -23,7 +22,6 @@ export default function AccountSettingsPage() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [orders, setOrders] = useState<CustomerOrderView[]>([]);
-  const [bookings, setBookings] = useState<BookingRequest[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [defaultStudio, setDefaultStudio] = useState<string | null>(null);
   const [workspaces, setWorkspaces] = useState<StudioMembership[]>([]);
@@ -60,17 +58,13 @@ export default function AccountSettingsPage() {
       setHistoryLoading(true);
       try {
         const token = await currentUser.getIdToken();
-        const [ordersRes, bookingsRes, workspacesData] = await Promise.all([
+        const [ordersRes, workspacesData] = await Promise.all([
           getCustomerAuthorizedOrdersHistoryAction(token),
-          getCustomerBookingRequestsAction(token),
           getUserWorkspacesAction(token),
         ]);
 
         if (ordersRes.success && ordersRes.history) {
           setOrders(ordersRes.history);
-        }
-        if (bookingsRes.success && bookingsRes.bookingRequests) {
-          setBookings(bookingsRes.bookingRequests);
         }
         if (workspacesData) {
           setWorkspaces(workspacesData);
@@ -492,33 +486,26 @@ export default function AccountSettingsPage() {
           </div>
         )}
 
-        {/* Panel 2: Leads and Orders as customer */}
+        {/* Panel 2: Confirmed orders as customer */}
         <div className="rounded-3xl border border-border-default bg-white p-6 shadow-sm sm:p-8 space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border-divider pb-4">
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-lg font-bold text-text-primary">Leads and Orders as customer</h2>
+                <h2 className="text-lg font-bold text-text-primary">Orders as customer</h2>
               </div>
               <p className="text-xs text-text-secondary mt-0.5">
-                History of leads and orders you placed as a customer.
+                Confirmed orders associated with your account.
               </p>
             </div>
-            <Link
-              href="/studios"
-              className="text-xs font-bold text-brand-blue-primary hover:underline shrink-0 inline-flex items-center gap-1"
-            >
-              <span>Browse Studios</span>
-              <span>→</span>
-            </Link>
           </div>
 
           {historyLoading ? (
             <div className="text-xs text-text-secondary py-4 text-center">Loading your customer orders...</div>
-          ) : orders.length === 0 && bookings.length === 0 ? (
+          ) : orders.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-border-default p-5 text-center bg-surface-app/50">
-              <p className="text-xs font-bold text-text-primary">No personal customer bookings found</p>
+              <p className="text-xs font-bold text-text-primary">No personal customer orders found</p>
               <p className="text-[11px] text-text-tertiary mt-0.5 max-w-sm mx-auto">
-                When you send an inquiry via studio marketplace or a studio adds you as part of a confirmed order, they will appear here.
+                Confirmed orders associated with your account will appear here.
               </p>
             </div>
           ) : (
@@ -576,35 +563,6 @@ export default function AccountSettingsPage() {
                 </div>
               ))}
 
-              {/* Pending Booking Requests */}
-              {bookings.map((b) => (
-                <div
-                  key={b.id}
-                  className="rounded-2xl border border-border-default bg-white p-4 text-xs space-y-2 border-l-4 border-l-brand-blue-primary"
-                >
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <span className="font-mono text-[10px] font-bold text-brand-blue-primary">{b.id}</span>
-                      <h3 className="text-xs font-bold text-text-primary mt-0.5">
-                        {b.packageName || b.eventType} (Booking Request)
-                      </h3>
-                      <p className="text-text-secondary text-[11px] mt-0.5">Event Date: {b.eventDate}</p>
-                    </div>
-                    <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[9px] font-bold uppercase text-brand-blue-primary border border-blue-200">
-                      {b.bookingStatus}
-                    </span>
-                  </div>
-
-                  <div className="flex justify-between items-center pt-1.5 border-t border-border-divider text-[11px] text-text-secondary">
-                    <span>Requested: ₹{b.agreedPrice.toLocaleString("en-IN")}</span>
-                    <span className="text-[10px] text-text-tertiary">
-                      {b.bookingStatus === "OPEN_FOR_NEGOTIATION"
-                        ? "Under review with studio owner"
-                        : "Awaiting studio confirmation"}
-                    </span>
-                  </div>
-                </div>
-              ))}
             </div>
           )}
         </div>

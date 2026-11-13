@@ -92,7 +92,7 @@ export interface StarterPackageTemplate {
   description: string;
   services: string[];
   price: number;
-  isPublished: boolean;
+  isEnabled: boolean;
 }
 
 export const STARTER_STUDIO_COMBOS: StarterPackageTemplate[] = [
@@ -101,14 +101,14 @@ export const STARTER_STUDIO_COMBOS: StarterPackageTemplate[] = [
     description: "Essential coverage with Traditional Photography, Traditional Videography, and 40-sheet Photobook Album for ceremonies, family events, and celebrations.",
     services: ["Traditional Photography", "Traditional Videography", "Premium Photobook Album"],
     price: 45000,
-    isPublished: true,
+    isEnabled: true,
   },
   {
     name: "Premium Cinematic Combo",
     description: "Modern visual experience featuring Candid Photography, Cinematic Video Teaser, Drone coverage, and Photobook.",
     services: ["Candid Photography", "Cinematic Video / Teaser", "Drone Aerial Shoots", "Premium Photobook Album"],
     price: 80000,
-    isPublished: true,
+    isEnabled: true,
   },
   {
     name: "Grand Complete Wedding Combo",
@@ -123,7 +123,7 @@ export const STARTER_STUDIO_COMBOS: StarterPackageTemplate[] = [
       "Premium Photobook Album",
     ],
     price: 130000,
-    isPublished: true,
+    isEnabled: true,
   },
 ];
 
@@ -136,8 +136,7 @@ export function getDefaultStudioPackages(studioSlug: string): StudioPackage[] {
     description: combo.description,
     services: combo.services,
     price: combo.price,
-    isNegotiable: false,
-    isPublished: true,
+    isEnabled: true,
     createdAt: now,
     updatedAt: now,
   }));

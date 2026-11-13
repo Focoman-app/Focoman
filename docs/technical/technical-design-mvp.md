@@ -85,16 +85,6 @@ Firebase Services (Firestore & Firebase Authentication)
 
 ---
 
-## 6. Amendment: Modular Evolution & Studio Marketplace (Planned)
-
-In accordance with the Product Discovery Document Amendment (2026-09-14), the core technical design is being evolved to support a **Modular Architecture** and a public **Studio Marketplace**.
-
-### 6.1 Modular Feature Flags (CRM, ERP, WhatsApp)
+## 6. Modular Feature Flags (CRM, ERP, WhatsApp)
 * **Configuration Gating**: The core OMS is mandatory. Advanced CRM, ERP (crew allocation), and WhatsApp capabilities will be gated via server-side feature enablement flags attached to the Studio document or a dedicated configuration collection.
 * **UI Adaptation**: The frontend Next.js application will dynamically render or hide sidebar navigation and workflow sections based on the studio's enabled modules, preventing overwhelming UX for basic users.
-
-### 6.2 Studio Marketplace Architecture (Planned)
-* **Data Privacy Boundary**: A strict server-side boundary will isolate public Marketplace Data from private Studio Operational Data. A new `marketplace_profiles` (or similar) collection must be introduced. Internal CRM data, revenue, unassigned tasks, and customer information will **never** be copied to or queryable from the public marketplace collection.
-* **Opt-In Model**: Studios will have explicit "Visibility" toggles that provision their public profile.
-* **Location-Based Search**: Future iterations will define a search/indexing strategy (e.g., Geo-queries in Firestore or external indexing) to support scalable geographic queries by customers without querying private studio collections.
-* **Separation of Guest Access**: The public Studio Marketplace is architecturally distinct from the passkey-protected Guest Order Tracker (`/track/[passkey]`), which relies on separate authorization logic.

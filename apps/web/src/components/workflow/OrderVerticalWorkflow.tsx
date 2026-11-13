@@ -352,9 +352,6 @@ export function OrderVerticalWorkflow({
     return null;
   };
 
-  // Origin path distinction
-  const hasLeadOrigin = Boolean(order.bookingRequestId);
-
   return (
     <div className="w-full space-y-4">
       {/* 1. Terminal State: Cancelled Order Banner (if applicable) */}
@@ -387,83 +384,6 @@ export function OrderVerticalWorkflow({
 
       {/* 2. Unified Vertical Workflow Timeline */}
       <div className="relative pl-6 sm:pl-8 space-y-6 before:absolute before:left-3 sm:before:left-4 before:top-4 before:bottom-4 before:w-0.5 before:bg-slate-200/80">
-        {/* PHASE 0: Lead / Inquiry & Advance Booking (Rendered ONLY if order originated from lead/booking) */}
-        {hasLeadOrigin && (
-          <div className="relative group">
-            {/* Timeline Marker */}
-            <div className="absolute -left-6 sm:-left-8 top-0.5 flex h-6 w-6 sm:h-7 sm:w-7 items-center justify-center rounded-full bg-emerald-500 text-white font-bold text-xs ring-4 ring-white shadow-2xs">
-              ✓
-            </div>
-
-            <div className="rounded-2xl border border-border-default bg-white p-4 shadow-2xs transition hover:border-slate-300">
-              <div
-                className="flex items-center justify-between cursor-pointer select-none"
-                onClick={() => togglePhase("phase_lead")}
-              >
-                <div className="min-w-0 pr-2">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-text-tertiary">
-                      Origin Pipeline
-                    </span>
-                    <span className="inline-flex items-center rounded-md bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-800 border border-emerald-200">
-                      Booking Confirmed
-                    </span>
-                  </div>
-                  <h3 className="text-sm font-bold text-text-primary mt-0.5">
-                    Lead Inquiry &amp; Advance Booking
-                  </h3>
-                  <p className="text-xs text-text-secondary mt-0.5">
-                    Original marketplace inquiry, price agreement, and advance payment verification
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  aria-label="Toggle Lead Phase"
-                  className="rounded-lg p-1 text-text-tertiary hover:bg-slate-100 transition shrink-0"
-                >
-                  <svg
-                    className={`h-4 w-4 transition-transform duration-200 ${
-                      expandedPhases.has("phase_lead") ? "rotate-180" : ""
-                    }`}
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-                  </svg>
-                </button>
-              </div>
-
-              {expandedPhases.has("phase_lead") && (
-                <div className="mt-3.5 pt-3.5 border-t border-border-default/60 space-y-2 text-xs">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-text-secondary">
-                    <div className="rounded-xl bg-slate-50 p-2.5 border border-border-default/60">
-                      <span className="text-[10px] uppercase font-bold text-text-tertiary block">
-                        Booking Request ID
-                      </span>
-                      <span className="font-mono text-xs font-bold text-text-primary">
-                        {order.bookingRequestId}
-                      </span>
-                    </div>
-                    <div className="rounded-xl bg-slate-50 p-2.5 border border-border-default/60">
-                      <span className="text-[10px] uppercase font-bold text-text-tertiary block">
-                        Transition Status
-                      </span>
-                      <span className="font-semibold text-emerald-800">
-                        Converted to Confirmed Production Order
-                      </span>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1.5 text-[11px] text-text-tertiary pt-1">
-                    <span className="text-emerald-600 font-bold">✓</span>
-                    <span>Client inquiry received → terms agreed → advance verified → order created.</span>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
         {/* PHASE 1: Pre-Event Preparation */}
         <div className="relative group">
           {/* Timeline Marker */}

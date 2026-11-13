@@ -10,11 +10,9 @@ import {
   updateStudioServicesAction,
   getStudioServicesAction,
   saveStudioPackagesAction,
-} from "@/actions/studioActions";
-import {
   createStudioPackageAction,
   deleteStudioPackageAction,
-} from "@/actions/marketplaceActions";
+} from "@/actions/studioActions";
 import { DEFAULT_STUDIO_SERVICES, getDefaultStudioPackages } from "@/lib/studioServices";
 
 function ServicesContent() {
@@ -72,7 +70,6 @@ function ServicesContent() {
   const [packageDesc, setPackageDesc] = useState("");
   const [packagePrice, setPackagePrice] = useState<number | "">(50000);
   const [packageServices, setPackageServices] = useState<string[]>([]);
-  const [packagePublished, setPackagePublished] = useState(true);
   const [creatingPackage, setCreatingPackage] = useState(false);
 
   // Load initial services & packages from server
@@ -133,11 +130,11 @@ function ServicesContent() {
     );
   };
 
-  // Toggle package enabled / disabled (same as services)
+  // Toggle package enabled / disabled.
   const handleTogglePackage = (pkgId: string) => {
     setIsDirty(true);
     setPackages((prev) =>
-      prev.map((p) => (p.id === pkgId ? { ...p, isPublished: !p.isPublished } : p))
+      prev.map((p) => (p.id === pkgId ? { ...p, isEnabled: !p.isEnabled } : p))
     );
   };
 
@@ -235,8 +232,7 @@ function ServicesContent() {
           description: packageDesc.trim() || undefined,
           services: packageServices,
           price: typeof packagePrice === "number" ? packagePrice : 0,
-          isNegotiable: false,
-          isPublished: packagePublished,
+          isEnabled: true,
         },
         token
       );
@@ -295,13 +291,13 @@ function ServicesContent() {
   };
 
   const enabledServices = services.filter((s) => s.enabled);
-  const enabledPackages = packages.filter((p) => p.isPublished);
+  const enabledPackages = packages.filter((p) => p.isEnabled && !p.isDeleted);
   const categories = Array.from(new Set(services.map((s) => s.category)));
 
   const isDeletingItemEnabled = deleteConfirmItem
     ? deleteConfirmItem.type === "service"
       ? services.find((s) => s.id === deleteConfirmItem.id)?.enabled !== false
-      : packages.find((p) => p.id === deleteConfirmItem.id)?.isPublished !== false
+      : packages.find((p) => p.id === deleteConfirmItem.id)?.isEnabled !== false
     : false;
 
   return (
@@ -531,7 +527,7 @@ function ServicesContent() {
                 <div
                   key={pkg.id}
                   className={`rounded-xl sm:rounded-2xl border p-3.5 sm:p-5 transition flex flex-col justify-between space-y-2.5 sm:space-y-3 ${
-                    pkg.isPublished
+                    pkg.isEnabled
                       ? "border-border-default bg-white shadow-2xs hover:border-brand-blue-primary/40"
                       : "border-border-divider bg-slate-50/70 opacity-60"
                   }`}
@@ -545,7 +541,7 @@ function ServicesContent() {
                           onClick={() => handleTogglePackage(pkg.id)}
                           disabled={!isOwner}
                           className={`relative inline-flex h-5 w-10 sm:h-6 sm:w-11 shrink-0 cursor-pointer rounded-full p-0.5 transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:cursor-not-allowed ${
-                            pkg.isPublished
+                          pkg.isEnabled
                               ? "bg-brand-blue-primary shadow-[inset_0_1px_3px_rgba(0,0,0,0.25)] focus:ring-brand-blue-primary"
                               : "bg-slate-200 shadow-[inset_0_1px_2px_rgba(0,0,0,0.12)] border border-slate-300/80 focus:ring-slate-400"
                           }`}
@@ -553,7 +549,7 @@ function ServicesContent() {
                         >
                           <span
                             className={`pointer-events-none inline-block h-4 w-4 sm:h-5 sm:w-5 transform rounded-full transition duration-200 ease-in-out shadow-[0_2px_4px_rgba(0,0,0,0.18)] ${
-                              pkg.isPublished
+                              pkg.isEnabled
                                 ? "translate-x-5 bg-white border border-brand-blue-soft"
                                 : "translate-x-0 bg-slate-100 border border-slate-300/80"
                             }`}
@@ -577,7 +573,7 @@ function ServicesContent() {
                             type="number"
                             min="0"
                             step="500"
-                            disabled={!pkg.isPublished || !isOwner}
+                            disabled={!pkg.isEnabled || !isOwner}
                             value={pkg.price === 0 ? "" : pkg.price}
                             onChange={(e) => handlePackagePriceChange(pkg.id, Number(e.target.value))}
                             placeholder="0"
@@ -728,7 +724,7 @@ function ServicesContent() {
                   ? "This service will be permanently removed from your catalog and active order booking forms."
                   : "This service is currently disabled and will be permanently removed from your catalog."
                 : isDeletingItemEnabled
-                  ? "This package combo will be permanently removed from your catalog, active order booking forms, and marketplace listings."
+                  ? "This package combo will be permanently removed from your catalog and active order forms."
                   : "This package combo is currently disabled and will be permanently removed from your catalog."}
             </div>
 

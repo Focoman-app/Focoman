@@ -206,8 +206,7 @@ export const UpdateStudioSchema = z.object({
     oms: z.boolean().optional(),
     crm: z.boolean().optional(),
     erp: z.boolean().optional(),
-    whatsapp: z.boolean().optional(),
-    marketplace: z.boolean().optional()
+    whatsapp: z.boolean().optional()
   }).optional()
 });
 
@@ -219,8 +218,7 @@ export const CreatePackageSchema = z.object({
   description: z.string().optional(),
   services: z.array(z.string()).min(1, 'At least one service is required'),
   price: z.number().nonnegative('Price must be non-negative'),
-  isNegotiable: z.boolean().default(false),
-  isPublished: z.boolean().default(true),
+  isEnabled: z.boolean().default(true),
 });
 
 export type CreatePackageInput = z.infer<typeof CreatePackageSchema>;
@@ -232,44 +230,15 @@ export const UpdatePackageSchema = z.object({
   description: z.string().optional(),
   services: z.array(z.string()).min(1).optional(),
   price: z.number().nonnegative().optional(),
-  isNegotiable: z.boolean().optional(),
-  isPublished: z.boolean().optional(),
+  isEnabled: z.boolean().optional(),
 });
 
 export type UpdatePackageInput = z.infer<typeof UpdatePackageSchema>;
-
-export const BookingRequestSchema = z.object({
-  studioId: z.string().min(1, 'Studio ID is required'),
-  customerName: z.string().min(1, 'Customer name is required'),
-  customerEmail: z.string().email().optional().or(z.literal('')),
-  customerPhone: z.string().optional(),
-  packageId: z.string().optional(),
-  packageName: z.string().optional(),
-  eventType: z.string().min(1, 'Event type is required'),
-  eventDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Event date must be YYYY-MM-DD'),
-  address: z.string().min(1, 'Event location address is required'),
-  mapsUrl: z.string().optional(),
-  notes: z.string().optional(),
-  price: z.number().nonnegative('Price must be non-negative'),
-  requestNegotiation: z.boolean().optional(),
-});
-
-export type BookingRequestInput = z.infer<typeof BookingRequestSchema>;
-
-export const NegotiateBookingSchema = z.object({
-  bookingRequestId: z.string().min(1, 'Booking request ID is required'),
-  studioId: z.string().min(1, 'Studio ID is required'),
-  agreedPrice: z.number().positive('Agreed price must be positive'),
-  advanceRequested: z.number().nonnegative('Advance requested must be non-negative'),
-});
-
-export type NegotiateBookingInput = z.infer<typeof NegotiateBookingSchema>;
 
 export const RecordPaymentSchema = z.object({
   studioId: z.string().min(1, 'Studio ID is required'),
   customerId: z.string().min(1, 'Customer ID is required'),
   orderId: z.string().optional(),
-  bookingRequestId: z.string().optional(),
   amount: z.number().positive('Payment amount must be positive'),
   method: z.enum(['CASH', 'UPI', 'BANK_TRANSFER', 'ONLINE_GATEWAY', 'OTHER']),
   proofUrl: z.string().optional(),

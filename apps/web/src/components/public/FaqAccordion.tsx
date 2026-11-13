@@ -30,11 +30,6 @@ const FAQS: FaqItem[] = [
     a: "Only the verified studio owner's phone number can chat with the WhatsApp Bot to query active orders, upcoming shoots, and pending tasks. Automated event reminders and gallery links are delivered to clients and crew.",
   },
   {
-    category: "Marketplace Privacy",
-    q: "Can marketplace visitors see my private customer records or finances?",
-    a: "Never. Public visitors only see the packages, photos, and studio bio you choose to publish. Your customer database, internal order notes, payment records, crew rates, and earnings are 100% private to your workspace.",
-  },
-  {
     category: "Business Growth",
     q: "How do Business Reports help my studio earn more?",
     a: "Business Reports give you clear monthly and yearly revenue charts, list all pending client balances so you never hand over albums without full payment, and show your most profitable photoshoot packages.",

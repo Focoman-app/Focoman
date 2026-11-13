@@ -272,7 +272,7 @@ export default function WorkspacesPage() {
                   Your personal profile is active. Choose how you would like to use Focoman:
                 </p>
 
-                <div className="mt-8 grid gap-4 sm:grid-cols-3 max-w-3xl mx-auto text-left">
+                <div className="mt-8 grid gap-4 sm:grid-cols-2 max-w-2xl mx-auto text-left">
                   {/* Option 1: Studio Owner (Primary Target) */}
                   <Link
                     href="/onboarding/register-studio"
@@ -309,23 +309,6 @@ export default function WorkspacesPage() {
                     </span>
                   </Link>
 
-                  {/* Option 3: Customer */}
-                  <Link
-                    href="/studios"
-                    className="flex flex-col justify-between rounded-2xl border-2 border-emerald-500/30 bg-emerald-50/40 p-6 transition hover:border-emerald-500 hover:bg-emerald-50/80 shadow-2xs group"
-                  >
-                    <div>
-                      <h3 className="text-sm font-bold text-emerald-950 group-hover:text-emerald-700">
-                        I&apos;m a Customer
-                      </h3>
-                      <p className="mt-1 text-xs text-emerald-900/80 leading-relaxed">
-                        Browse verified studios, explore event packages &amp; track your bookings.
-                      </p>
-                    </div>
-                    <span className="mt-4 inline-flex items-center text-xs font-bold text-emerald-700 group-hover:underline">
-                      Explore Studios →
-                    </span>
-                  </Link>
                 </div>
               </div>
             ) : (
@@ -407,7 +390,7 @@ export default function WorkspacesPage() {
                   <div>
                     <h4 className="text-sm font-bold text-text-primary">Need something else?</h4>
                     <p className="text-xs text-text-secondary">
-                      Explore studios as a customer, register another studio, accept a crew invite, or track an existing order anytime.
+                      Register another studio, accept a crew invite, or track an existing order anytime.
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2.5 shrink-0">
@@ -422,12 +405,6 @@ export default function WorkspacesPage() {
                       className="rounded-xl border border-brand-purple-primary bg-white px-3.5 py-2 text-xs font-bold text-brand-purple-primary hover:bg-purple-50 transition"
                     >
                       + Join Studio
-                    </Link>
-                    <Link
-                      href="/studios"
-                      className="rounded-xl border border-emerald-600 bg-white px-3.5 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-50 transition"
-                    >
-                      Explore Studios
                     </Link>
                     <Link
                       href="/track"

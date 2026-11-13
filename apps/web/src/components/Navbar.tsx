@@ -116,7 +116,6 @@ export function Navbar() {
     { label: "Home", href: "/#home" },
     { label: "Modules", href: "/#modules" },
     { label: "How It Works", href: "/#how-it-works" },
-    { label: "Studio Marketplace", href: "/#studios" },
     { label: "Pricing", href: "/#pricing" },
     { label: "FAQ", href: "/#faq" },
   ];

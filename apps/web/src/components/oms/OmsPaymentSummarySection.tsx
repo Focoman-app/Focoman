@@ -20,6 +20,7 @@ interface OmsPaymentSummarySectionProps {
   ) => void;
   onSendPaymentReminder: () => void;
   onOpenBillingModal: (tab: "INVOICE" | "RECEIPT", receiptId?: string) => void;
+  canManageBilling: boolean;
   editConfirmedPrice: string;
   onChangeEditConfirmedPrice: (value: string) => void;
   editAdvanceAmount: string;
@@ -59,6 +60,7 @@ export function OmsPaymentSummarySection({
   onUpdatePayment,
   onSendPaymentReminder,
   onOpenBillingModal,
+  canManageBilling,
   editConfirmedPrice,
   onChangeEditConfirmedPrice,
   editAdvanceAmount,
@@ -137,7 +139,7 @@ export function OmsPaymentSummarySection({
                   <span>{isSendingReminder ? "Sending..." : "Send Reminder"}</span>
                 </button>
               )}
-              <button
+              {canManageBilling && <button
                 type="button"
                 onClick={() => onOpenBillingModal("INVOICE")}
                 className="rounded-lg border border-border-default bg-white px-2.5 py-1 text-[11px] font-semibold text-text-primary hover:text-brand-blue-primary hover:border-brand-blue-primary hover:bg-blue-50/50 shadow-2xs transition flex items-center gap-1 cursor-pointer"
@@ -145,7 +147,7 @@ export function OmsPaymentSummarySection({
               >
                 <FileText className="h-3 w-3 text-brand-blue-primary" />
                 <span>Invoice & Receipts</span>
-              </button>
+              </button>}
               <button
                 type="button"
                 disabled={isUpdatingPayment}

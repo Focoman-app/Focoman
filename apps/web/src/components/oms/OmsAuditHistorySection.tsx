@@ -45,10 +45,8 @@ export function OmsAuditHistorySection({
     logEntries.push({
       id: "synth_reg",
       timestamp: formatAuditStamp(order.createdAt),
-      actorName: order.bookingRequestId
-        ? order.customer.name
-        : order.createdBy || studio?.ownerName || "Studio Owner",
-      actorRole: order.bookingRequestId ? "Customer" : "Owner",
+      actorName: order.createdBy || studio?.ownerName || "Studio Owner",
+      actorRole: "Owner",
       action: "Order Registered",
       details: `Registered confirmed order for ${order.eventType} · Confirmed Price: ₹${order.pricing.finalConfirmedPrice.toLocaleString()}`,
     });

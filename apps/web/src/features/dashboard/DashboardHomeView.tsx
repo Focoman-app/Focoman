@@ -18,13 +18,11 @@ interface CustomRange {
 interface PanelCollapseState {
   businessReports: boolean;
   orders: boolean;
-  marketplaceLeads: boolean;
 }
 
 interface DashboardHomeViewProps {
   studioSlug: string;
   initialOrders: Order[];
-  hasMarketplace: boolean;
   userId?: string;
   planTier?: "FREE" | "PROFESSIONAL" | "COMPLETE";
 }
@@ -261,7 +259,6 @@ function MetricChart({
 export function DashboardHomeView({
   studioSlug,
   initialOrders,
-  hasMarketplace,
   userId,
   planTier = "COMPLETE",
 }: DashboardHomeViewProps) {
@@ -300,7 +297,6 @@ export function DashboardHomeView({
   const [collapsed, setCollapsed] = useState<PanelCollapseState>({
     businessReports: false,
     orders: false,
-    marketplaceLeads: false,
   });
   const [collapseLoaded, setCollapseLoaded] = useState(false);
 
@@ -1202,60 +1198,6 @@ export function DashboardHomeView({
         )}
       </section>
 
-      {/* ══════════════════════════════════════
-          PANEL 4: MARKETPLACE LEADS (conditional)
-      ══════════════════════════════════════ */}
-      {hasMarketplace && (
-        <section className="rounded-2xl border border-border-default bg-white shadow-xs overflow-hidden">
-          <div className="px-5 py-4 border-b border-border-divider">
-            <PanelHeader
-              title="Studio Marketplace Leads"
-              collapsed={collapsed.marketplaceLeads}
-              onToggle={() => togglePanel("marketplaceLeads")}
-            >
-              <Link
-                href={`/${studioSlug}/dashboard/marketplace`}
-                className="text-[11px] font-semibold text-brand-blue-primary hover:underline"
-              >
-                Manage →
-              </Link>
-            </PanelHeader>
-          </div>
-
-          {!collapsed.marketplaceLeads && (
-            <div className="p-5">
-              <div className="rounded-xl border border-dashed border-border-default p-6 text-center">
-                <svg
-                  className="h-8 w-8 text-text-tertiary mx-auto mb-2"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={1.5}
-                    d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
-                  />
-                </svg>
-                <p className="text-xs font-semibold text-text-primary">
-                  Marketplace Active
-                </p>
-                <p className="text-[11px] text-text-secondary mt-1">
-                  View and manage incoming booking leads from the Studio
-                  Marketplace.
-                </p>
-                <Link
-                  href={`/${studioSlug}/dashboard/marketplace`}
-                  className="mt-3 inline-flex items-center gap-1 rounded-lg border border-border-default bg-white px-3 py-1.5 text-xs font-bold text-text-primary shadow-2xs hover:border-brand-blue-primary hover:text-brand-blue-primary transition"
-                >
-                  Open Marketplace Profile →
-                </Link>
-              </div>
-            </div>
-          )}
-        </section>
-      )}
     </div>
   );
 }

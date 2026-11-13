@@ -9,9 +9,7 @@ import type {
   Customer,
   Order,
   Task,
-  MarketplaceProfile,
   StudioPackage,
-  BookingRequest,
   PaymentRecord,
   StudioLead,
 } from '@focoman/types';
@@ -176,23 +174,6 @@ export async function updateStudio(studioId: string, updates: Partial<Studio>): 
   const ref = firestore.collection('studios').doc(studioId);
   await ref.update({ ...updates, updatedAt: new Date().toISOString() });
 
-  // Sync studio details to marketplace profile if it exists
-  try {
-    if (updates.logoUrl !== undefined || updates.name || updates.city) {
-      const mpRef = firestore.collection('marketplace_profiles').doc(studioId);
-      const mpSnap = await mpRef.get();
-      if (mpSnap.exists) {
-        const mpUpdates: Record<string, any> = { updatedAt: new Date().toISOString() };
-        if (updates.logoUrl !== undefined) mpUpdates.logoUrl = updates.logoUrl;
-        if (updates.name) mpUpdates.name = updates.name;
-        if (updates.city) mpUpdates.city = updates.city;
-        await mpRef.update(mpUpdates);
-      }
-    }
-  } catch (err) {
-    console.warn('[updateStudio] Error syncing with marketplace profile:', err);
-  }
-
   const snap = await ref.get();
   return snap.exists ? (snap.data() as Studio) : null;
 }
@@ -308,7 +289,7 @@ export async function archiveStudioToHeadless(studioId: string): Promise<boolean
   }
 
   // 5. Clean up ephemeral studio operational collections: memberships, invitations, studio_packages
-  const ephemeralCols = ['memberships', 'invitations', 'studio_packages', 'booking_requests', 'members'];
+  const ephemeralCols = ['memberships', 'invitations', 'studio_packages', 'members'];
   for (const colName of ephemeralCols) {
     try {
       const snap = await firestore.collection(colName).where('studioId', '==', sid).get();
@@ -324,13 +305,6 @@ export async function archiveStudioToHeadless(studioId: string): Promise<boolean
     } catch (err) {
       console.warn(`[archiveStudioToHeadless] Error deleting from ${colName} for studio ${sid}:`, err);
     }
-  }
-
-  // 6. Delete marketplace profile if exists
-  try {
-    await firestore.collection('marketplace_profiles').doc(sid).delete();
-  } catch (err) {
-    console.warn(`[archiveStudioToHeadless] Error deleting marketplace_profile for studio ${sid}:`, err);
   }
 
   // 7. Delete the active studio document so the slug `sid` is immediately freed up for new registration!
@@ -1309,144 +1283,6 @@ export async function acceptInvitationTransaction(input: {
 }
 
 // ============================================================================
-// 7. MARKETPLACE PROFILES
-// ============================================================================
-
-export async function getMarketplaceProfile(studioId: string): Promise<MarketplaceProfile | null> {
-  const db = getFirestoreServerInstance();
-  const doc = await db.collection('marketplace_profiles').doc(studioId).get();
-  if (!doc.exists) return null;
-  const profile = doc.data() as MarketplaceProfile;
-  if (profile.isDeleted) return null;
-  return profile;
-}
-
-export async function getMarketplaceProfileBySlug(slug: string): Promise<MarketplaceProfile | null> {
-  const db = getFirestoreServerInstance();
-  const snapshot = await db
-    .collection('marketplace_profiles')
-    .where('slug', '==', slug)
-    .where('isVisible', '==', true)
-    .limit(1)
-    .get();
-  if (snapshot.empty) return null;
-  const profile = snapshot.docs[0].data() as MarketplaceProfile;
-  if (profile.isDeleted) return null;
-  return profile;
-}
-
-export async function upsertMarketplaceProfile(
-  studioId: string,
-  profileData: Partial<Omit<MarketplaceProfile, 'id' | 'studioId' | 'verifiedMetrics' | 'createdAt' | 'updatedAt'>>
-): Promise<MarketplaceProfile> {
-  const db = getFirestoreServerInstance();
-  const docRef = db.collection('marketplace_profiles').doc(studioId);
-
-  return db.runTransaction(async (transaction) => {
-    const doc = await transaction.get(docRef);
-    const now = new Date().toISOString();
-
-    if (doc.exists) {
-      const existing = doc.data() as MarketplaceProfile;
-      const updated: MarketplaceProfile = {
-        ...existing,
-        ...profileData,
-        isDeleted: false,
-        updatedAt: now,
-      };
-      transaction.update(docRef, { ...updated });
-      return updated;
-    } else {
-      const studioDoc = await transaction.get(db.collection('studios').doc(studioId));
-      if (!studioDoc.exists) throw new Error('Studio not found');
-      const studioData = studioDoc.data() as Studio;
-
-      const newProfile: MarketplaceProfile = {
-        id: studioId,
-        studioId,
-        name: profileData.name || studioData.name,
-        slug: studioData.id,
-        city: profileData.city || studioData.city,
-        description: profileData.description || '',
-        tags: profileData.tags || [],
-        coverImageUrl: profileData.coverImageUrl || '',
-        logoUrl: profileData.logoUrl || studioData.logoUrl || '',
-        isVisible: profileData.isVisible ?? false,
-        isDeleted: false,
-        verifiedMetrics: {
-          onTimeDeliveryPercentage: 100,
-          completedOrdersCount: 0,
-          lastCalculatedAt: now,
-        },
-        createdAt: now,
-        updatedAt: now,
-      };
-      transaction.set(docRef, newProfile);
-      return newProfile;
-    }
-  });
-}
-
-export async function softDeleteMarketplaceProfile(studioId: string, deletedByUid: string): Promise<boolean> {
-  const db = getFirestoreServerInstance();
-  const now = new Date().toISOString();
-  await db.collection('marketplace_profiles').doc(studioId).update({
-    isVisible: false,
-    isDeleted: true,
-    deletedAt: now,
-    deletedBy: deletedByUid,
-    updatedAt: now,
-  });
-  return true;
-}
-
-export async function restoreMarketplaceProfile(studioId: string): Promise<boolean> {
-  const db = getFirestoreServerInstance();
-  const docRef = db.collection('marketplace_profiles').doc(studioId);
-  const doc = await docRef.get();
-  if (!doc.exists) return false;
-  const profile = doc.data() as MarketplaceProfile;
-  if (!isWithinRecoveryWindow(profile.deletedAt)) {
-    throw new Error(`Cannot restore marketplace profile: ${RECOVERY_WINDOW_DAYS}-day recovery window expired.`);
-  }
-  const now = new Date().toISOString();
-  await docRef.update({
-    isVisible: true,
-    isDeleted: false,
-    deletedAt: null,
-    deletedBy: null,
-    updatedAt: now,
-  });
-  return true;
-}
-
-export async function searchMarketplaceProfiles(
-  filters: { city?: string; tags?: string[] },
-  limitCount = 50
-): Promise<MarketplaceProfile[]> {
-  const db = getFirestoreServerInstance();
-  let query: FirebaseFirestore.Query = db
-    .collection('marketplace_profiles')
-    .where('isVisible', '==', true);
-
-  if (filters.tags && filters.tags.length > 0) {
-    query = query.where('tags', 'array-contains-any', filters.tags);
-  }
-
-  const snapshot = await query.limit(limitCount).get();
-  const searchCity = filters.city?.trim().toLowerCase();
-
-  return snapshot.docs
-    .map((doc) => doc.data() as MarketplaceProfile)
-    .filter((profile) => !profile.isDeleted)
-    .filter((profile) => {
-      if (!searchCity) return true;
-      const profileCity = (profile.city || "").trim().toLowerCase();
-      return profileCity.includes(searchCity) || searchCity.includes(profileCity);
-    });
-}
-
-// ============================================================================
 // 8. STUDIO PACKAGES
 // ============================================================================
 
@@ -1455,19 +1291,6 @@ export async function getStudioPackages(studioId: string): Promise<StudioPackage
   const snapshot = await db
     .collection('studio_packages')
     .where('studioId', '==', studioId.toLowerCase())
-    .get();
-
-  return snapshot.docs
-    .map(d => d.data() as StudioPackage)
-    .filter(p => !p.isDeleted);
-}
-
-export async function getPublishedStudioPackages(studioId: string): Promise<StudioPackage[]> {
-  const db = getFirestoreServerInstance();
-  const snapshot = await db
-    .collection('studio_packages')
-    .where('studioId', '==', studioId.toLowerCase())
-    .where('isPublished', '==', true)
     .get();
 
   return snapshot.docs
@@ -1505,76 +1328,11 @@ export async function softDeleteStudioPackage(packageId: string, deletedByUid: s
   const now = new Date().toISOString();
   await db.collection('studio_packages').doc(packageId).update({
     isDeleted: true,
-    isPublished: false,
     deletedAt: now,
     deletedBy: deletedByUid,
     updatedAt: now,
   });
   return true;
-}
-
-// ============================================================================
-// 9. BOOKING REQUESTS & LEADS
-// ============================================================================
-
-export async function createBookingRequest(req: BookingRequest): Promise<void> {
-  const db = getFirestoreServerInstance();
-  await db.collection('booking_requests').doc(req.id).set(req);
-}
-
-export async function getBookingRequestById(id: string): Promise<BookingRequest | null> {
-  const db = getFirestoreServerInstance();
-  const doc = await db.collection('booking_requests').doc(id).get();
-  if (!doc.exists) return null;
-  const req = doc.data() as BookingRequest;
-  if (req.isDeleted) return null;
-  return req;
-}
-
-export async function getBookingRequestsByStudio(studioId: string): Promise<BookingRequest[]> {
-  const db = getFirestoreServerInstance();
-  const snapshot = await db
-    .collection('booking_requests')
-    .where('studioId', '==', studioId.toLowerCase())
-    .get();
-
-  return snapshot.docs
-    .map(d => d.data() as BookingRequest)
-    .filter(r => !r.isDeleted)
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-}
-
-export async function getBookingRequestsByCustomer(customerId: string): Promise<BookingRequest[]> {
-  const db = getFirestoreServerInstance();
-  const snapshot = await db
-    .collection('booking_requests')
-    .where('customerId', '==', customerId)
-    .get();
-
-  return snapshot.docs
-    .map(d => d.data() as BookingRequest)
-    .filter(r => !r.isDeleted)
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-}
-
-export async function updateBookingRequest(
-  id: string,
-  updates: Partial<Omit<BookingRequest, 'id' | 'studioId' | 'createdAt'>>
-): Promise<BookingRequest | null> {
-  const db = getFirestoreServerInstance();
-  const ref = db.collection('booking_requests').doc(id);
-  const doc = await ref.get();
-  if (!doc.exists) return null;
-
-  const existing = doc.data() as BookingRequest;
-  const updated: BookingRequest = {
-    ...existing,
-    ...updates,
-    updatedAt: new Date().toISOString(),
-  };
-
-  await ref.update({ ...updated });
-  return updated;
 }
 
 // ============================================================================
@@ -1675,42 +1433,8 @@ export * from './studioPlan';
 // 13. PLATFORM PUBLIC STATS
 // ============================================================================
 
-export interface PlatformPublicStats {
-  marketplaceStudiosCount: number;
-  marketplaceLeadsCount: number;
-  activeStudiosCount: number;
-  registeredOrdersCount: number;
-}
-
-export async function getPlatformPublicStats(): Promise<PlatformPublicStats> {
-  try {
-    const db = getFirestoreServerInstance();
-    const [marketplaceSnap, leadsSnap, studiosSnap, ordersSnap] = await Promise.all([
-      db.collection('marketplace_profiles').where('isVisible', '==', true).count().get().catch(() => ({ data: () => ({ count: 0 }) })),
-      db.collection('booking_requests').count().get().catch(() => ({ data: () => ({ count: 0 }) })),
-      db.collection('studios').where('isDeleted', '==', false).count().get().catch(() => ({ data: () => ({ count: 0 }) })),
-      db.collection('orders').where('isDeleted', '==', false).count().get().catch(() => ({ data: () => ({ count: 0 }) })),
-    ]);
-
-    return {
-      marketplaceStudiosCount: marketplaceSnap.data().count,
-      marketplaceLeadsCount: leadsSnap.data().count,
-      activeStudiosCount: studiosSnap.data().count,
-      registeredOrdersCount: ordersSnap.data().count,
-    };
-  } catch (err) {
-    console.warn('[getPlatformPublicStats] Error querying stats:', err);
-    return {
-      marketplaceStudiosCount: 0,
-      marketplaceLeadsCount: 0,
-      activeStudiosCount: 0,
-      registeredOrdersCount: 0,
-    };
-  }
-}
-
 // ============================================================================
-// 14. OMNICHANNEL STUDIO LEADS (INSTAGRAM, WHATSAPP, WEBSITE, MARKETPLACE)
+// 14. OMNICHANNEL STUDIO LEADS
 // ============================================================================
 
 export async function saveStudioLead(lead: StudioLead): Promise<StudioLead> {

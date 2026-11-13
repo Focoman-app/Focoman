@@ -190,7 +190,7 @@ export default function ErpPage({ params }: { params: Promise<{ studioSlug: stri
         studioSlug,
         updates: {
           features: {
-            ...(studio?.features || { oms: true, crm: true, erp: true, whatsapp: true, marketplace: true }),
+            ...(studio?.features || { oms: true, crm: true, erp: true, whatsapp: true }),
             autoAssignCrew: nextVal,
           },
         },

@@ -21,15 +21,15 @@ const MODULES: ModuleData[] = [
     cards: [
       {
         title: "Order Creation & Management",
-        desc: "Register and manage confirmed orders from both direct studio bookings and Studio Marketplace bookings in one centralized system.",
+        desc: "Register and manage confirmed orders from direct studio bookings in one centralized system.",
       },
       {
         title: "End-to-End Production Workflow",
         desc: "Manage the complete order production lifecycle, including pre-event preparation, crew and task assignments, event execution, post-event editing, customer reviews, rework, and final delivery.",
       },
       {
-        title: "Studio-Wide Order Overview",
-        desc: "Get a centralized overview of all orders, track their current statuses, monitor pending payments and SLA status, and stay informed about ongoing, pending, and completed orders to keep every order on schedule.",
+        title: "Multi-Channel Leads & Order Conversion",
+        desc: "Capture leads from Instagram, WhatsApp Business, and your website through webhooks, and convert qualified leads into confirmed orders.",
       },
       {
         title: "Google Drive Integration & Client Review",
@@ -79,7 +79,7 @@ const MODULES: ModuleData[] = [
       },
       {
         title: "Automated Workflow & Task Assignment",
-        desc: "Configure studio workflows to automatically assign crew members and initiate production tasks when a new order is confirmed, including Marketplace bookings. Assignments follow predefined workflow rules, with manual assignment available when automation is not configured.",
+        desc: "Configure studio workflows, assign crew members, and initiate production tasks when a new order is confirmed.",
       },
       {
         title: "Invoices & Receipts Management",
@@ -109,31 +109,6 @@ const MODULES: ModuleData[] = [
       {
         title: "Crew Reminders & Call Times",
         desc: "Send scheduled reminders to assigned crew members with event date, call time, venue location, and required shoot information.",
-      },
-    ],
-  },
-  {
-    number: "05",
-    name: "Studio Marketplace",
-    shortDesc: "Independent public studio profile allowing customers to discover your studio near them, view verified operational performance metrics, and submit booking inquiries directly.",
-    tag: "Studio Marketplace · 100% Free For Everyone",
-    tagColor: "bg-emerald-50 text-emerald-800 border-emerald-200",
-    cards: [
-      {
-        title: "Public Studio Profile & Direct Inquiries",
-        desc: "Showcase your studio profile with business information, location, services, and approved public details through a unique profile URL. Allow prospective customers to discover your studio and submit booking inquiries with their event requirements.",
-      },
-      {
-        title: "Configurable Service Packages",
-        desc: "Create and publish customized photography and videography packages with pricing, service details, and deliverables. Configure optional price negotiation for individual packages based on studio preferences.",
-      },
-      {
-        title: "Booking Requests & Confirmation",
-        desc: "Allow customers to submit booking requests with event details and selected packages. Review inquiries, confirm the agreed booking amount, request advance payments, and convert verified bookings into studio orders.",
-      },
-      {
-        title: "Privacy Protected Operations",
-        desc: "Public visitors can view only the studio’s approved profile information, services, and packages, while internal customer records, financial details, orders, and crew operations remain private and protected.",
       },
     ],
   },

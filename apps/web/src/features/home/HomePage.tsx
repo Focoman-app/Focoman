@@ -100,19 +100,6 @@ export function HomePage() {
               </p>
             </div>
             
-            {/* Studio Marketplace Panel */}
-            <div className="rounded-2xl border border-border-default bg-white p-6 hover:shadow-md transition">
-              <span className="inline-block rounded-full bg-pink-50 px-3 py-1 text-[10px] font-bold text-pink-600 uppercase tracking-wider">
-                Discovery & Search
-              </span>
-              <h3 className="mt-4 text-lg font-bold text-text-primary">
-                Studio Marketplace
-              </h3>
-              <p className="mt-2 text-xs leading-relaxed text-text-secondary">
-                Discover top photography and videography studios near you with verified operational performance metrics, on-time delivery track records, and authentic reviews and ratings. Studio owners maintain full control over their public visibility and profile details, while internal orders, financials, and CRM records remain strictly private.
-              </p>
-            </div>
-
             {/* Business Reports & Analytics Panel */}
             <div className="rounded-2xl border border-border-default bg-white p-6 hover:shadow-md transition">
               <span className="inline-block rounded-full bg-amber-50 px-3 py-1 text-[10px] font-bold text-amber-800 uppercase tracking-wider">
@@ -201,7 +188,7 @@ export function HomePage() {
             Build Your Plan Around Your Studio Needs
           </h2>
           <p className="mx-auto mt-3 text-sm leading-relaxed text-text-secondary sm:text-base">
-            Basic Order Management &amp; Studio Marketplace are 100% Free for everyone. Selectively add CRM, Crew, Drive Review, or WhatsApp capabilities as you grow.
+            Basic Order Management is free for everyone. Selectively add CRM, Crew, Drive Review, or WhatsApp capabilities as you grow.
           </p>
         </div>
 

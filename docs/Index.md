@@ -18,9 +18,7 @@ Before making project decisions, agents **MUST** consult `Index.md` to identify 
 
 When evaluating specifications and implementation guidelines:
 
-1. **Latest Commercial & Landing Page Amendment:** **[Commercial Packaging & Landing Page Amendment](product/major-design-amendment-final-packaging-and-landing-page.md)** (30-Day Trial, Lifecycle WhatsApp Tiering, Studio Marketplace Separation, Final Landing Page).
-2. **Product Lifecycle Amendment:** **[Marketplace & Booking Amendment](product/major-design-amendment-marketplace-booking.md)** (Marketplace → Booking Request → Optional Negotiation → Payment & Verification → Confirmed Order → Pre-flight Check → OMS Lifecycle).
-3. **Primary Product Source of Truth:** **[Focoman Product Discovery Document](product/product-discovery-document.md)** (OMS-First, Confirmed Order Model).
+1. **Primary Product Source of Truth:** **[Focoman Product Discovery Document](product/product-discovery-document.md)** (OMS-First, Confirmed Order Model).
 3. **Target Technical Architecture Specifications:** `technical/tech-stack.md`, `technical/identity-and-auth-architecture.md`, `technical/recommended-architecture.md`, `technical/technical-design-mvp.md`, `technical/deployment-guide.md`.
 3. **Agent Governance & Workflow Specification:** `../Agents.md`.
 4. **Operational & Setup Guides:** `QUICK_SETUP_GUIDE.md`, `ISSUE_ANALYSIS.md`.

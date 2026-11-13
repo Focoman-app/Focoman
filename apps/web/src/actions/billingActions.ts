@@ -5,6 +5,7 @@ import { getBillingDocument, getOrderByIdIncludeDeleted, getStudioBySlug, getFir
 import { assertBillingTextSupported, getBillingProfile, getBillingSourceFingerprint, getOrderFinancials, getReceiptSources, isBillingDate } from '@focoman/domain';
 import type { BillingKind, BillingOptionalFields, BillingProfile, ReceiptConfirmation, ReceiptSource } from '@focoman/types';
 import { requireVerifiedUser, requireStudioOwner } from '@/lib/serverAuth';
+import { requireCapability } from '@/lib/entitlementAuth';
 
 const id = z.string().trim().min(1).max(160).regex(/^[a-zA-Z0-9_-]+$/);
 const text = (max: number) => z.string().trim().max(max).refine(value => { try { assertBillingTextSupported(value); return true; } catch { return false; } }, 'Only Latin and Tamil text is currently supported in billing PDFs.');
@@ -20,6 +21,7 @@ async function authorize(studioId: string, idToken?: string) {
   id.parse(studioId);
   const actor = await requireVerifiedUser(idToken);
   await requireStudioOwner(actor.uid, studioId);
+  await requireCapability(studioId, 'BUSINESS_REPORTS');
   return actor;
 }
 

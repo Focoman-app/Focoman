@@ -5,7 +5,6 @@
 > 
 > **Key Architecture & Workflow Alignments:**
 > - **Modular Evolution:** The core is OMS-First. CRM, ERP, and WhatsApp are optional modules that scale with studio maturity (See Product Discovery Amendment vNext).
-> - **Studio Marketplace (Planned):** A new public discovery layer separated strictly from private studio operational data.
 > - **Confirmed Order as Starting Point (OMS-First):** Phase 1 begins strictly upon a Confirmed Order with deposit received.
 > - **Pre-Event Leads & Quotations Excluded:** CRM lead prospecting, quotation drafting, and sales negotiations are out of scope for Phase 1 unless explicitly introduced as a future separate module.
 > - **Three Macro Stages:** `Awaiting Event` → `Post-Event In Progress` → `Completed`.
@@ -311,7 +310,6 @@ Future phases may include iOS and additional platform integrations.
 The following features are intentionally excluded from the MVP:
 
 - Pre-event sales leads, enquiries, quotations, and negotiations
-- Public Studio Marketplace
 - Review & Rating System
 - Native Gallery Platform
 - Payroll Management

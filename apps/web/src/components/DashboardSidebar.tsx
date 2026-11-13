@@ -29,7 +29,6 @@ export interface DashboardSidebarProps {
     crm: boolean;
     erp: boolean;
     whatsapp: boolean;
-    marketplace: boolean;
     reports?: boolean;
     basicDashboard?: boolean;
   };
@@ -177,18 +176,6 @@ export function DashboardSidebar({ studioSlug, role, plan, studioName, studioLog
       ),
     },
     {
-      label: "Studio Marketplace",
-      sublabel: "Public Profile",
-      key: "marketplace",
-      href: (slug: string) => `/${slug}/dashboard/marketplace`,
-      module: "marketplace" as const,
-      icon: (
-        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-        </svg>
-      ),
-    },
-    {
       label: "Business Reports",
       sublabel: "Analytics",
       key: "reports",
@@ -237,7 +224,7 @@ export function DashboardSidebar({ studioSlug, role, plan, studioName, studioLog
             return Boolean(features[item.module]);
           }
           if (plan === "basic") {
-            return item.module === "oms" || item.module === "marketplace";
+            return item.module === "oms";
           }
           if (plan === "professional") {
             return item.module !== "whatsapp" && item.module !== "reports";

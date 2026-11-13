@@ -2,7 +2,7 @@
  * Focoman Pro Entitlements & Three-Tier Subscription Resolution
  *
  * Tiers:
- * 1. FREE (₹0): Basic OMS + Studio Marketplace (No Business Dashboard; redirects to OMS).
+ * 1. FREE (₹0): Basic OMS (No Business Dashboard; redirects to OMS).
  * 2. STARTER (₹999/month): Free + Advanced OMS (Drive Preview & Selection + Client Review) + CRM + ERP + Basic Business Dashboard (Order counts, Revenue overview, Pending payment overview).
  * 3. PROFESSIONAL (₹1,999/month): Everything in Starter + WhatsApp Operations & Interactive Bot + Advanced Business Reports & Analytics + Excel Report Exports.
  * COMPLETE remains an internal legacy value for older records.
@@ -75,9 +75,9 @@ export function isStudioProEntitled(
 
 /**
  * Returns effective features for a studio across the 3-tier pricing model:
- * - FREE (₹0): oms, marketplace (basicDashboard = false)
- * - PROFESSIONAL (₹999/mo): oms, marketplace, crm, erp, driveReview, basicDashboard (whatsapp = false, reports = false)
- * - COMPLETE (₹1,999/mo): oms, marketplace, crm, erp, driveReview, basicDashboard, whatsapp, reports
+ * - FREE (₹0): oms (basicDashboard = false)
+ * - PROFESSIONAL (₹999/mo): oms, crm, erp, driveReview, basicDashboard (whatsapp = false, reports = false)
+ * - COMPLETE (₹1,999/mo): oms, crm, erp, driveReview, basicDashboard, whatsapp, reports
  */
 export function getEffectiveStudioFeatures(
   ownerEmail?: string | null,
@@ -87,7 +87,6 @@ export function getEffectiveStudioFeatures(
     erp?: boolean;
     whatsapp?: boolean;
     reports?: boolean;
-    marketplace?: boolean;
     driveReview?: boolean;
     basicDashboard?: boolean;
     autoAssignCrew?: boolean;
@@ -109,7 +108,6 @@ export function getEffectiveStudioFeatures(
       erp: true,
       whatsapp: true,
       reports: true,
-      marketplace: true,
       driveReview: true,
       basicDashboard: true,
       autoAssignCrew: configuredFeatures?.autoAssignCrew ?? true,
@@ -123,7 +121,6 @@ export function getEffectiveStudioFeatures(
       erp: true,
       whatsapp: false,
       reports: caps.some((c) => ["BUSINESS_REPORTS", "ANALYTICS_ADVANCED"].includes(c)),
-      marketplace: true,
       driveReview: true,
       basicDashboard: true,
       autoAssignCrew: configuredFeatures?.autoAssignCrew ?? true,
@@ -143,7 +140,6 @@ export function getEffectiveStudioFeatures(
     erp: hasErp,
     whatsapp: false,
     reports: hasReports,
-    marketplace: true,
     driveReview: hasDrive,
     basicDashboard: hasDashboard,
     autoAssignCrew: hasErp ? (configuredFeatures?.autoAssignCrew ?? true) : false,

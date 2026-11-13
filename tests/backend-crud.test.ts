@@ -31,7 +31,6 @@ import {
   UpdateTaskStatusSchema,
   UpdatePaymentSchema,
   CreatePackageSchema,
-  BookingRequestSchema,
   RecordPaymentSchema,
   CancelOrderSchema,
   SaveServiceCrewAssignmentsSchema,
@@ -403,39 +402,24 @@ describe("3. Validation Schemas - CRUD Operations", () => {
       studioId: "studio-alpha",
       name: "Studio Alpha Pro",
       city: "Bangalore",
-      features: {
-        marketplace: true,
-      },
+      features: { oms: true },
     });
     assert.strictEqual(validStudioUpdate.success, true);
   });
 
-  test("CreatePackageSchema and BookingRequestSchema validation", () => {
+  test("CreatePackageSchema validation", () => {
     const validPackage = CreatePackageSchema.safeParse({
       studioId: "studio-1",
       name: "Standard Wedding Package",
       services: ["Photography", "Videography"],
       price: 45000,
-      isNegotiable: true,
+      isEnabled: true,
     });
     assert.strictEqual(validPackage.success, true);
-
-    const validBooking = BookingRequestSchema.safeParse({
-      studioId: "studio-1",
-      customerName: "Siddharth Verma",
-      customerEmail: "siddharth@example.com",
-      eventType: "Wedding",
-      eventDate: "2026-11-25",
-      address: "Hotel Leela, Bangalore",
-      price: 45000,
-      requestNegotiation: true,
-    });
-    assert.strictEqual(validBooking.success, true);
 
     const validPayment = RecordPaymentSchema.safeParse({
       studioId: "studio-1",
       customerId: "CUS-101",
-      bookingRequestId: "BKG-101",
       amount: 15000,
       method: "UPI",
       referenceNumber: "UPI-9876543210",

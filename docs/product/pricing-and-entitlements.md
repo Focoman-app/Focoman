@@ -23,11 +23,10 @@ Focoman uses a **flexible capability-based pricing model**. Rigid fixed plans (S
 | Capability ID | Capability Name | Price | Dependency / Included In | Description & Features |
 |--------------|-----------------|-------|--------------------------|------------------------|
 | `OMS_BASIC` | **Basic Order Management (Free Core)** | **₹0/mo** | Included for every studio | Create, view, edit, cancel orders; status workflow tracking; passkey tracking link; basic operational dashboard. |
-| `CUSTOMER_BASIC` | **Customer Management Basic** | **₹199/mo** | Standalone | Searchable customer directory, profiles, order & payment history, booking history. |
+| `CUSTOMER_BASIC` | **Customer Management Basic** | **₹199/mo** | Standalone | Searchable customer directory, profiles, and order & payment history. |
 | `CUSTOMER_ADVANCED` | **Customer Management Advanced** | **₹299/mo** | Includes `CUSTOMER_BASIC` | Anniversary reminders, customer milestone alerts, repeat booking re-engagement outreach. |
 | `CREW_BASIC` | **Crew Management Basic** | **₹199/mo** | Standalone | Crew profiles, roles, skills database, manual assignment to events, basic availability calendar. |
 | `CREW_ADVANCED` | **Crew Management Advanced** | **₹299/mo** | Includes `CREW_BASIC` | Workload tracking, double-booking conflict detection, workload-aware resource suggestions. |
-| `MARKETPLACE` | **Studio Marketplace** | **₹499/mo** | Standalone | Public studio profile, customizable packages & pricing, booking inquiries, negotiation flow, confirmed order sync. |
 | `DRIVE_CLIENT_REVIEW` | **Google Drive + Client Review** | **₹299/mo** | Standalone | In-app Google Drive photo previews, client photo selection comments, review status tracking in production. |
 | `WHATSAPP_NOTIFICATIONS` | **WhatsApp Notifications** | **₹199/mo** | Standalone | Fixed operational event alerts (order confirmation, crew dispatch, gallery ready, milestone updates, delivery alerts). |
 | `WHATSAPP_OPERATIONS` | **WhatsApp Operations** | **₹499/mo** | Includes `WHATSAPP_NOTIFICATIONS` | Studio Owner interactive WhatsApp Operations Bot (order queries, event status, crew call-time lookup; 499 msgs/mo limit). |
@@ -40,11 +39,10 @@ Focoman uses a **flexible capability-based pricing model**. Rigid fixed plans (S
 2. **Category Max Rule:**
    - Customer Management: ₹0, ₹199 (Basic), or ₹299 (Advanced).
    - Crew Management: ₹0, ₹199 (Basic), or ₹299 (Advanced).
-   - Studio Marketplace: ₹0 or ₹499.
    - Google Drive + Client Review: ₹0 or ₹299.
    - WhatsApp: ₹0, ₹199 (Notifications), or ₹499 (Operations Bot).
 3. **Combined Monthly Rate Formula:**
-   $$\text{Total Price} = \text{Cost}(\text{Customer}) + \text{Cost}(\text{Crew}) + \text{Cost}(\text{Marketplace}) + \text{Cost}(\text{Drive}) + \text{Cost}(\text{WhatsApp})$$
+   $$\text{Total Price} = \text{Cost}(\text{Customer}) + \text{Cost}(\text{Crew}) + \text{Cost}(\text{Drive}) + \text{Cost}(\text{WhatsApp})$$
 
 ---
 

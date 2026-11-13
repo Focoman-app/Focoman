@@ -37,10 +37,10 @@ export function PricingTwoPanels({ hasMultiStudios = false }: PricingTwoPanelsPr
 
             <div>
               <h2 className="retro-serif-heading text-2xl sm:text-3xl font-black text-[#1C1917]">
-                Basic Order Management &amp; Studio Marketplace
+                Basic Order Management
               </h2>
               <p className="mt-1.5 text-xs sm:text-sm text-[#57534E] leading-relaxed">
-                Essential Order Management System &amp; Public Studio Marketplace for photography and videography studios.
+                Essential Order Management System for photography and videography studios.
               </p>
             </div>
 
@@ -100,7 +100,7 @@ export function PricingTwoPanels({ hasMultiStudios = false }: PricingTwoPanelsPr
                 Advanced OMS, CRM &amp; Studio Operations
               </h2>
               <p className="mt-1.5 text-xs sm:text-sm text-[#57534E] leading-relaxed">
-                Includes everything in the Free plan, plus client photo review, customer management, studio operations, and Basic Business Dashboard.
+                Includes everything in the Free plan, plus Google Drive preview and selection, customer management, studio operations, and Basic Business Dashboard.
               </p>
             </div>
 
@@ -126,7 +126,7 @@ export function PricingTwoPanels({ hasMultiStudios = false }: PricingTwoPanelsPr
                     ✓
                   </span>
                   <span className="text-[#1C1917] font-medium leading-tight">
-                    Advanced OMS with Google Drive Photo Preview &amp; Selection, including supported customer review functionality
+                    Google Drive Photo In-App Preview &amp; Selection
                   </span>
                 </div>
 
@@ -153,7 +153,7 @@ export function PricingTwoPanels({ hasMultiStudios = false }: PricingTwoPanelsPr
                     ✓
                   </span>
                   <span className="text-[#1C1917] font-medium leading-tight">
-                    Basic Business Dashboard (Order counts, Revenue overview, and Pending payment overview)
+                    Basic Business Dashboard — Order counts, revenue overview, and pending payment overview
                   </span>
                 </div>
               </div>
@@ -233,6 +233,14 @@ export function PricingTwoPanels({ hasMultiStudios = false }: PricingTwoPanelsPr
                   <span className="text-[#1C1917] font-medium leading-tight">
                     Excel Report Exports
                   </span>
+                </div>
+                <div className="flex items-start gap-2.5">
+                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-[11px] font-extrabold text-emerald-700 mt-0.5 border border-emerald-300">✓</span>
+                  <span className="text-[#1C1917] font-medium leading-tight">Invoices &amp; Receipts</span>
+                </div>
+                <div className="flex items-start gap-2.5">
+                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-[11px] font-extrabold text-emerald-700 mt-0.5 border border-emerald-300">✓</span>
+                  <span className="text-[#1C1917] font-medium leading-tight">Multi-Channel Leads</span>
                 </div>
               </div>
             </div>

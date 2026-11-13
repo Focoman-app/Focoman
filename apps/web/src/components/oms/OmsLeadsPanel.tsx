@@ -28,7 +28,6 @@ import {
 } from "lucide-react";
 
 const CHANNEL_BADGES: Record<LeadChannel, { label: string; badgeClass: string }> = {
-  MARKETPLACE: { label: "Studio Marketplace", badgeClass: "badge-brand-orange" },
   INSTAGRAM: { label: "Instagram", badgeClass: "badge-brand-purple" },
   WHATSAPP: { label: "WhatsApp", badgeClass: "badge-status-success" },
   WEBSITE: { label: "Website", badgeClass: "badge-brand-blue" },
@@ -90,7 +89,7 @@ export function OmsLeadsPanel({
     phone: "",
     email: "",
     instagramHandle: "",
-    channel: "MARKETPLACE" as LeadChannel,
+    channel: "DIRECT" as LeadChannel,
     eventType: "Wedding Photography",
     eventDate: "",
     location: "Coimbatore",
@@ -177,7 +176,7 @@ async function submitFocomanLead(formEl) {
           "success",
           nextEnabled
             ? "Multi-Channel Lead Capture enabled! Instagram, WhatsApp, and Website leads will flow into OMS."
-            : "External webhook lead capture paused. Studio Marketplace leads remain active."
+            : "External webhook lead capture paused."
         );
         await onRefreshAll();
       } else {
@@ -202,7 +201,7 @@ async function submitFocomanLead(formEl) {
       if (res.success) {
         showNotice(
           "success",
-          "Channel configuration saved! Marketplace, Instagram, WhatsApp & Website leads are unified here."
+          "Channel configuration saved! Instagram, WhatsApp & Website leads are unified here."
         );
         setShowSetupModal(false);
         await onRefreshAll();
@@ -407,7 +406,7 @@ async function submitFocomanLead(formEl) {
                 Order Management System
               </h1>
               <p className="text-xs text-text-secondary mt-0.5">
-                Studio Marketplace inquiries &amp; multi-channel leads (Instagram, WhatsApp, Website) · {leads.length} Total Leads
+                Multi-channel leads (Instagram, WhatsApp, Website, Direct) · {leads.length} Total Leads
               </p>
             </div>
 
@@ -487,7 +486,7 @@ async function submitFocomanLead(formEl) {
           </div>
 
           <div className="mt-3 flex flex-wrap items-center gap-1.5">
-            {(["ALL", "MARKETPLACE", "INSTAGRAM", "WHATSAPP", "WEBSITE"] as const).map((ch) => (
+            {(["ALL", "DIRECT", "INSTAGRAM", "WHATSAPP", "WEBSITE"] as const).map((ch) => (
               <button
                 key={ch}
                 type="button"
@@ -529,7 +528,7 @@ async function submitFocomanLead(formEl) {
                 No {channelFilter === "ALL" ? "" : CHANNEL_BADGES[channelFilter].label} leads found
               </p>
               <p className="text-xs text-text-tertiary max-w-md mx-auto">
-                All Studio Marketplace inquiries and leads from Instagram, WhatsApp, and your Studio Website appear here before being confirmed as orders.
+                Leads from Instagram, WhatsApp, your Studio Website, and direct enquiries appear here before being converted into confirmed orders.
               </p>
               <div className="flex flex-wrap justify-center gap-2 pt-1">
                 <button
@@ -811,7 +810,7 @@ async function submitFocomanLead(formEl) {
                   Enable &amp; Configure Multi-Channel Leads
                 </h3>
                 <p className="text-xs text-text-secondary mt-0.5">
-                  Unify Studio Marketplace inquiries with leads from Instagram Business, WhatsApp Business, and your Studio Website inside OMS.
+                  Unify leads from Instagram Business, WhatsApp Business, and your Studio Website inside OMS.
                 </p>
               </div>
               <button
@@ -831,7 +830,7 @@ async function submitFocomanLead(formEl) {
                     Enable Multi-Channel Lead Capture (Instagram, WhatsApp &amp; Website)
                   </p>
                   <p className="text-xs text-text-secondary mt-0.5">
-                    When enabled, inquiries sent to your connected channels automatically appear in the OMS Leads tab alongside Studio Marketplace inquiries.
+                    When enabled, inquiries sent to your connected channels automatically appear in the OMS Leads tab.
                   </p>
                 </div>
                 <label className="relative inline-flex cursor-pointer items-center shrink-0">
@@ -1054,7 +1053,6 @@ async function submitFocomanLead(formEl) {
                     }
                     className="w-full rounded-xl border border-border-default px-3 py-2 text-xs"
                   >
-                    <option value="MARKETPLACE">Studio Marketplace</option>
                     <option value="INSTAGRAM">Instagram</option>
                     <option value="WHATSAPP">WhatsApp</option>
                     <option value="WEBSITE">Studio Website</option>

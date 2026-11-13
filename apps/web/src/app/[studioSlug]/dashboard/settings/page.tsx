@@ -75,7 +75,6 @@ function SettingsPageContent() {
     crm: true,
     erp: true,
     whatsapp: true,
-    marketplace: false,
     reports: true,
   });
 
@@ -485,7 +484,7 @@ function SettingsPageContent() {
             </div>
           </div>
 
-          {/* 2. Services & Packages Catalog Section (OMS & Marketplace badge removed) */}
+          {/* 2. Services & Packages Catalog Section */}
           <div className="rounded-3xl border border-border-default bg-white p-6 shadow-sm sm:p-8 space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div>
@@ -524,7 +523,7 @@ function SettingsPageContent() {
                   Studio Logo (Optional)
                 </label>
                 <p className="text-[11px] text-text-secondary mb-3">
-                  Displayed near your studio name in the dashboard panel and public marketplace listings.
+                  Displayed near your studio name in the dashboard.
                 </p>
 
                 <div className="flex flex-wrap items-center gap-4">
@@ -634,7 +633,7 @@ function SettingsPageContent() {
                 </div>
               </div>
 
-              {/* Operational Modules & Capabilities (Including Studio Marketplace) */}
+              {/* Operational Modules & Capabilities */}
               <div className="pt-4 border-t border-border-divider space-y-3">
                 <h3 className="text-xs font-bold text-text-primary uppercase tracking-wider">
                   Operational Modules &amp; Capabilities
@@ -646,7 +645,6 @@ function SettingsPageContent() {
                     { key: "erp", label: "ERP (Crew Operations)", desc: "Crew scheduling, equipment, tasks" },
                     { key: "whatsapp", label: "WhatsApp Alerts", desc: "Automated event alerts & updates" },
                     { key: "reports", label: "Business Reports", desc: "Financial analytics and trends" },
-                    { key: "marketplace", label: "Studio Marketplace", desc: "Public profile, portfolio packages & inquiries" },
                   ].map((mod) => (
                     <label
                       key={mod.key}
