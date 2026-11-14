@@ -111,12 +111,14 @@ export async function createOrderCore(rawInput: unknown): Promise<{
     const initialOrderStatus: OrderStatus =
       finalInitialDate < todayStr ? "POST_EVENT_IN_PROGRESS" : "AWAITING_EVENT";
 
-    const [existingCustomers, studioMembers, studio, hasErp] = await Promise.all([
-      getCustomersByStudio(validated.studioId),
-      getMembersByStudio(validated.studioId),
-      getStudioBySlug(validated.studioId),
-      hasStudioCapability(validated.studioId, "STUDIO_ERP"),
-    ]);
+    const [existingCustomers, studioMembers, studio, hasErp, hasDriveReviewEntitlement] =
+      await Promise.all([
+        getCustomersByStudio(validated.studioId),
+        getMembersByStudio(validated.studioId),
+        getStudioBySlug(validated.studioId),
+        hasStudioCapability(validated.studioId, "STUDIO_ERP"),
+        hasStudioCapability(validated.studioId, "DRIVE_CLIENT_REVIEW"),
+      ]);
     const matchedCustomer = existingCustomers.find((c) =>
       isContactMatch(
         { phone: customerPhone, email: customerEmail },
@@ -175,6 +177,22 @@ export async function createOrderCore(rawInput: unknown): Promise<{
         finalConfirmedPrice: validated.finalConfirmedPrice,
         advanceAmount: validated.advanceAmount,
         advanceDate: nowIso.split("T")[0],
+        ...(validated.advanceAmount > 0 && validated.advanceMethod
+          ? { advanceMethod: validated.advanceMethod }
+          : {}),
+        ...(validated.advanceAmount > 0 &&
+        validated.advanceMethod === "UPI" &&
+        validated.advanceReference?.trim()
+          ? { advanceReference: validated.advanceReference.trim() }
+          : {}),
+        ...(validated.advanceAmount > 0 &&
+        validated.advanceMethod === "UPI" &&
+        validated.advanceProofUrl?.trim()
+          ? { advanceProofUrl: validated.advanceProofUrl.trim() }
+          : {}),
+        ...(validated.advanceAmount > 0 && validated.advanceNotes?.trim()
+          ? { advanceNotes: validated.advanceNotes.trim() }
+          : {}),
         installments: [],
         remainingAmount,
       },
@@ -187,6 +205,7 @@ export async function createOrderCore(rawInput: unknown): Promise<{
       ...(validated.notifyWhatsApp !== undefined ? { notifyWhatsApp: validated.notifyWhatsApp } : {}),
       ...(validated.notifySms !== undefined ? { notifySms: validated.notifySms } : {}),
       ...(validated.notifyEmail !== undefined ? { notifyEmail: validated.notifyEmail } : {}),
+      hasDriveReviewEntitlement: Boolean(hasDriveReviewEntitlement),
       isDeleted: false,
       createdBy: decoded.name || decoded.email || "Studio Owner",
       createdByRole: "Owner",
@@ -207,7 +226,13 @@ export async function createOrderCore(rawInput: unknown): Promise<{
                 actorName: decoded.name || decoded.email || "Studio Owner",
                 actorRole: "Owner" as const,
                 action: "Advance Payment Recorded",
-                details: `Recorded advance payment of ₹${validated.advanceAmount.toLocaleString()}`,
+                details: `Recorded advance payment of ₹${validated.advanceAmount.toLocaleString()}${
+                  validated.advanceMethod ? ` via ${validated.advanceMethod.replace("_", " ")}` : ""
+                }${
+                  validated.advanceMethod === "UPI" && validated.advanceReference?.trim()
+                    ? ` (Ref: ${validated.advanceReference.trim()})`
+                    : ""
+                }${validated.advanceNotes?.trim() ? ` — ${validated.advanceNotes.trim()}` : ""}`,
               },
             ]
           : []),

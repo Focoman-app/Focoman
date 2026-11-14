@@ -31,6 +31,10 @@ export interface ReceiptSourceInfo {
   label: string;
   amountMinor: number;
   paymentDate?: string;
+  paymentMethod?: string;
+  paymentReference?: string;
+  notes?: string;
+  proofUrl?: string;
   requiresConfirmation: boolean;
 }
 
@@ -39,16 +43,36 @@ export function getReceiptSources(order: Pick<Order, 'pricing'>): ReceiptSourceI
   const sources: ReceiptSourceInfo[] = [];
   if (amounts.advance > 0) {
     const date = order.pricing.advanceDate;
-    sources.push({ source: { kind: 'ADVANCE' }, key: 'advance', label: 'Advance', amountMinor: amounts.advance,
-      ...(date && isBillingDate(date) ? { paymentDate: date } : {}), requiresConfirmation: !date || !isBillingDate(date) });
+    sources.push({
+      source: { kind: 'ADVANCE' },
+      key: 'advance',
+      label: 'Advance',
+      amountMinor: amounts.advance,
+      ...(date && isBillingDate(date) ? { paymentDate: date } : {}),
+      ...(order.pricing.advanceMethod ? { paymentMethod: order.pricing.advanceMethod } : {}),
+      ...(order.pricing.advanceReference ? { paymentReference: order.pricing.advanceReference } : {}),
+      ...(order.pricing.advanceNotes ? { notes: order.pricing.advanceNotes } : {}),
+      ...(order.pricing.advanceProofUrl ? { proofUrl: order.pricing.advanceProofUrl } : {}),
+      requiresConfirmation: !date || !isBillingDate(date),
+    });
   }
   for (const payment of order.pricing.installments ?? []) {
     const amountMinor = toMinorUnits(payment.amount);
     if (amountMinor === 0) continue;
     const validDate = isBillingDate(payment.date);
     const automatic = payment.id.endsWith('_auto') || payment.notes === 'Final Payment (Marked Paid)';
-    sources.push({ source: { kind: 'INSTALLMENT', id: payment.id }, key: `installment:${payment.id}`, label: payment.notes || 'Payment', amountMinor,
-      ...(validDate ? { paymentDate: payment.date } : {}), requiresConfirmation: automatic || !validDate });
+    sources.push({
+      source: { kind: 'INSTALLMENT', id: payment.id },
+      key: `installment:${payment.id}`,
+      label: payment.notes || 'Payment',
+      amountMinor,
+      ...(validDate ? { paymentDate: payment.date } : {}),
+      ...(payment.method ? { paymentMethod: payment.method } : {}),
+      ...(payment.referenceNumber ? { paymentReference: payment.referenceNumber } : {}),
+      ...(payment.notes ? { notes: payment.notes } : {}),
+      ...(payment.proofUrl ? { proofUrl: payment.proofUrl } : {}),
+      requiresConfirmation: automatic || !validDate,
+    });
   }
   return sources;
 }

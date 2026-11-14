@@ -67,6 +67,9 @@ export const DEFAULT_ORDER_FORM = {
   customServiceInput: "",
   finalConfirmedPrice: "" as unknown as number,
   advanceAmount: "" as unknown as number,
+  advanceMethod: "CASH" as "CASH" | "UPI" | "BANK_TRANSFER",
+  advanceReference: "",
+  advanceNotes: "",
 };
 
 export type NewOrderFormState = typeof DEFAULT_ORDER_FORM;
@@ -79,6 +82,8 @@ export function exportOmsOrdersToExcel(studioSlug: string, filtered: Order[]) {
     eventType: string;
     paymentType: string;
     paymentDate: string;
+    paymentMethod: string;
+    paymentReference: string;
     amount: number;
     notes: string;
   }> = [];
@@ -93,6 +98,8 @@ export function exportOmsOrdersToExcel(studioSlug: string, filtered: Order[]) {
         eventType: order.eventType,
         paymentType: rcp.label,
         paymentDate: rcp.date || "-",
+        paymentMethod: rcp.method ? rcp.method.replace(/_/g, " ") : "-",
+        paymentReference: rcp.referenceNumber || "-",
         amount: rcp.amount,
         notes: rcp.notes || "",
       });

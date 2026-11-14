@@ -28,11 +28,13 @@ export async function renderBillingPdf(doc: BillingDocument) {
       <View wrap={false} style={{ marginTop: 20, borderTopWidth: 1, paddingTop: 10 }}>
         <Text>{doc.kind === 'INVOICE' ? 'Order value' : 'Receipt amount'}: {money(doc.amountMinor)}</Text>
         {doc.paymentDate && <Text>Payment date: {doc.paymentDate}</Text>}
+        {doc.paymentMethod && <RichText>{`Payment mode: ${doc.paymentMethod.replace(/_/g, ' ')}`}</RichText>}
+        {doc.paymentReference && <RichText>{`Transaction reference: ${doc.paymentReference}`}</RichText>}
         <Text>Recorded paid at issue: {money(doc.paidMinor)}</Text><Text>Balance at issue: {money(doc.remainingMinor)}</Text>
         {doc.overpaymentMinor > 0 && <Text>Overpayment: {money(doc.overpaymentMinor)}</Text>}
         {doc.dueDate && <Text>Due date: {doc.dueDate}</Text>}
       </View>
-      {[doc.paymentMethod, doc.paymentReference, doc.issuer.paymentInstructions, doc.issuer.notes, doc.notes, doc.voidReason].filter(Boolean).map((line, i) => <View key={i} style={{ marginTop: 12 }}><RichText>{line!}</RichText></View>)}
+      {[doc.issuer.paymentInstructions, doc.issuer.notes, doc.notes, doc.voidReason].filter(Boolean).map((line, i) => <View key={i} style={{ marginTop: 12 }}><RichText>{line!}</RichText></View>)}
       <Text fixed style={{ position: 'absolute', bottom: 25, left: 44, fontSize: 8 }} render={({ pageNumber, totalPages }) => `${doc.number} · ${pageNumber} / ${totalPages}`} />
     </Page>
   </Document>);

@@ -35,6 +35,8 @@ interface OmsCreateOrderModalProps {
   busyEventDates: string[];
   hasCrm?: boolean;
   hasWhatsAppOperations?: boolean;
+  advanceProofFile?: File | null;
+  onChangeAdvanceProofFile?: (file: File | null) => void;
 }
 
 export function OmsCreateOrderModal({
@@ -63,6 +65,8 @@ export function OmsCreateOrderModal({
   busyEventDates,
   hasCrm = true,
   hasWhatsAppOperations = false,
+  advanceProofFile = null,
+  onChangeAdvanceProofFile,
 }: OmsCreateOrderModalProps) {
   const [calendarMonth, setCalendarMonth] = useState(() => {
     const base = newOrderForm.eventDate ? new Date(`${newOrderForm.eventDate}T00:00:00`) : new Date();
@@ -520,9 +524,9 @@ export function OmsCreateOrderModal({
                                 ? "Today"
                                 : "Click to toggle event date"
                             }
-                            className={`relative flex h-9 flex-col items-center justify-center rounded text-[10px] font-semibold transition ${
+                            className={`relative flex h-9 flex-col items-center justify-center rounded-lg text-[10px] font-semibold transition ${
                               selected
-                                ? "bg-brand-blue-primary text-white shadow-2xs"
+                                ? "!bg-brand-blue-primary !text-white ring-2 ring-brand-blue-primary/30 hover:!bg-brand-blue-primary hover:!text-white"
                                 : isToday
                                 ? "bg-brand-blue-50 text-brand-blue-primary ring-1 ring-brand-blue-soft hover:bg-brand-blue-100"
                                 : busy
@@ -534,7 +538,9 @@ export function OmsCreateOrderModal({
                             {isToday && <span className="text-[7px] leading-none">Today</span>}
                             {busy && (
                               <span
-                                className="absolute right-1 top-1 h-1 w-1 rounded-full bg-amber-500"
+                                className={`absolute right-1 top-1 h-1 w-1 rounded-full ${
+                                  selected ? "bg-white" : "bg-amber-500"
+                                }`}
                                 aria-label="Existing studio event"
                               />
                             )}
@@ -848,8 +854,9 @@ export function OmsCreateOrderModal({
             {/* Pricing and Advance with Validation */}
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-bold text-text-primary">
-                  Confirmed Total Price (₹) *
+                <label className="block text-xs font-bold text-text-primary leading-snug">
+                  Confirmed Total{" "}
+                  <span className="whitespace-nowrap">Price (₹)&nbsp;*</span>
                 </label>
                 <input
                   type="number"
@@ -877,8 +884,9 @@ export function OmsCreateOrderModal({
                 )}
               </div>
               <div>
-                <label className="block text-xs font-bold text-text-primary">
-                  Advance Received (₹) *
+                <label className="block text-xs font-bold text-text-primary leading-snug">
+                  Advance{" "}
+                  <span className="whitespace-nowrap">Received (₹)&nbsp;*</span>
                 </label>
                 <input
                   type="number"
@@ -911,6 +919,88 @@ export function OmsCreateOrderModal({
                     Advance amount cannot exceed the confirmed total price.
                   </div>
                 )}
+
+              <div className="col-span-2 rounded-xl border border-brand-blue-light bg-blue-50/50 p-3 space-y-2.5">
+                <div>
+                  <label className="text-[10px] font-bold text-text-secondary block mb-0.5">
+                    Payment Mode
+                  </label>
+                  <select
+                    value={newOrderForm.advanceMethod}
+                    onChange={(e) =>
+                      setNewOrderForm({
+                        ...newOrderForm,
+                        advanceMethod: e.target.value as
+                          | "CASH"
+                          | "UPI"
+                          | "BANK_TRANSFER",
+                      })
+                    }
+                    className="w-full rounded-lg border border-border-default bg-white px-2.5 py-1 text-xs text-text-primary focus:outline-none focus:border-brand-blue-primary focus:ring-1 focus:ring-brand-blue-primary"
+                  >
+                    <option value="CASH">Cash</option>
+                    <option value="UPI">UPI</option>
+                    <option value="BANK_TRANSFER">Bank Transfer</option>
+                  </select>
+                </div>
+
+                {newOrderForm.advanceMethod === "UPI" && (
+                  <div>
+                    <label className="text-[10px] font-bold text-text-secondary block mb-0.5">
+                      UPI Transaction ID{" "}
+                      <span className="font-normal">(Optional)</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={newOrderForm.advanceReference}
+                      onChange={(e) =>
+                        setNewOrderForm({
+                          ...newOrderForm,
+                          advanceReference: e.target.value,
+                        })
+                      }
+                      placeholder="UTR / transaction number"
+                      maxLength={200}
+                      className="w-full rounded-lg border border-border-default bg-white px-2.5 py-1 text-xs text-text-secondary focus:outline-none focus:border-brand-blue-primary focus:ring-1 focus:ring-brand-blue-primary"
+                    />
+                    <label className="mt-2 block text-[10px] font-bold text-text-secondary">
+                      Screenshot proof{" "}
+                      <span className="font-normal">(Optional)</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(event) =>
+                          onChangeAdvanceProofFile?.(
+                            event.target.files?.[0] || null
+                          )
+                        }
+                        className="mt-1 block w-full text-[10px] text-text-secondary"
+                      />
+                    </label>
+                    {advanceProofFile && (
+                      <p className="mt-1 text-[10px] text-text-tertiary">
+                        Selected: {advanceProofFile.name}
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                <div>
+                  <input
+                    type="text"
+                    value={newOrderForm.advanceNotes}
+                    onChange={(e) =>
+                      setNewOrderForm({
+                        ...newOrderForm,
+                        advanceNotes: e.target.value,
+                      })
+                    }
+                    placeholder="Optional note"
+                    maxLength={50}
+                    className="w-full rounded-lg border border-border-default bg-white px-2.5 py-1 text-xs text-text-secondary focus:outline-none focus:border-brand-blue-primary focus:ring-1 focus:ring-brand-blue-primary"
+                  />
+                </div>
+              </div>
             </div>
 
             {/* Payment Summary Breakdown */}

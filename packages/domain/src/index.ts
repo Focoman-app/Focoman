@@ -104,6 +104,9 @@ export interface OrderReceiptEntry {
   label: string;
   amount: number;
   date: string;
+  method?: string;
+  referenceNumber?: string;
+  proofUrl?: string;
   notes?: string;
   recordedBy?: string;
 }
@@ -112,6 +115,10 @@ export interface OrderPaymentBreakdown {
   confirmedPrice: number;
   advanceAmount: number;
   advanceDate: string;
+  advanceMethod?: Order['pricing']['advanceMethod'];
+  advanceReference?: string;
+  advanceProofUrl?: string;
+  advanceNotes?: string;
   installments: NonNullable<Order['pricing']['installments']>;
   installmentsTotal: number;
   totalPaid: number;
@@ -130,6 +137,10 @@ export function calculateOrderPaymentBreakdown(
   const confirmedPrice = amounts.confirmed / 100;
   const advanceAmount = amounts.advance / 100;
   const advanceDate = order.pricing.advanceDate || '';
+  const advanceMethod = order.pricing.advanceMethod;
+  const advanceReference = order.pricing.advanceReference;
+  const advanceProofUrl = order.pricing.advanceProofUrl;
+  const advanceNotes = order.pricing.advanceNotes;
   const installments = order.pricing.installments || [];
   const installmentsTotal = amounts.installmentsTotal / 100;
   const totalPaid = amounts.paid / 100;
@@ -143,12 +154,20 @@ export function calculateOrderPaymentBreakdown(
       label: source.label,
       amount: source.amountMinor / 100,
       date: source.paymentDate!,
+      ...(source.paymentMethod ? { method: source.paymentMethod } : {}),
+      ...(source.paymentReference ? { referenceNumber: source.paymentReference } : {}),
+      ...(source.proofUrl ? { proofUrl: source.proofUrl } : {}),
+      ...(source.notes ? { notes: source.notes } : {}),
     }));
 
   return {
     confirmedPrice,
     advanceAmount,
     advanceDate,
+    ...(advanceMethod ? { advanceMethod } : {}),
+    ...(advanceReference ? { advanceReference } : {}),
+    ...(advanceProofUrl ? { advanceProofUrl } : {}),
+    ...(advanceNotes ? { advanceNotes } : {}),
     installments,
     installmentsTotal,
     totalPaid,
@@ -200,6 +219,7 @@ export function toCustomerTrackingView(
     studioCity?: string;
     studioPhone?: string;
     hasErp?: boolean;
+    hasDriveReview?: boolean;
     canIssueBilling?: boolean;
     studioBillingProfile?: CustomerTrackingView['order']['studioBillingProfile'];
     staffEmails?: string[];
@@ -221,6 +241,12 @@ export function toCustomerTrackingView(
       studioCity: studioInfo?.studioCity,
       studioPhone: studioInfo?.studioPhone,
       hasErp: studioInfo?.hasErp,
+      hasDriveReview:
+        studioInfo?.hasDriveReview ??
+        Boolean(
+          order.hasDriveReviewEntitlement ||
+            (order.driveDeliverables && order.driveDeliverables.length > 0)
+        ),
       canIssueBilling: studioInfo?.canIssueBilling,
       studioBillingProfile: studioInfo?.studioBillingProfile,
       customerName: order.customer.name,
@@ -237,9 +263,14 @@ export function toCustomerTrackingView(
       eventLocation: order.eventLocation || order.locationInfo?.address,
       services: order.services,
       packages: order.packages,
+      assignedResources: order.assignedResources || [],
       totalAmount: breakdown.confirmedPrice,
       advanceAmount: breakdown.advanceAmount,
       advanceDate: breakdown.advanceDate,
+      ...(breakdown.advanceMethod ? { advanceMethod: breakdown.advanceMethod } : {}),
+      ...(breakdown.advanceReference ? { advanceReference: breakdown.advanceReference } : {}),
+      ...(breakdown.advanceProofUrl ? { advanceProofUrl: breakdown.advanceProofUrl } : {}),
+      ...(breakdown.advanceNotes ? { advanceNotes: breakdown.advanceNotes } : {}),
       amountPaid: breakdown.totalPaid,
       remainingAmount: breakdown.remainingAmount,
       installments: breakdown.installments,
@@ -253,10 +284,14 @@ export function toCustomerTrackingView(
       createdAt: order.createdAt,
     },
     tasks: tasks.map((task) => ({
+      id: task.id,
       title: task.title,
       serviceCategory: task.serviceCategory,
       status: task.status,
       sequenceOrder: task.sequenceOrder,
+      ...(task.assignedMemberId ? { assignedMemberId: task.assignedMemberId } : {}),
+      ...(task.assignedMemberName ? { assignedMemberName: task.assignedMemberName } : {}),
+      ...(task.reworkNotes ? { reworkNotes: task.reworkNotes } : {}),
     })),
   };
 }

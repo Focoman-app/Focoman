@@ -30,7 +30,18 @@ interface OrderVerticalWorkflowProps {
   tasks: Task[] | CustomerTrackingView["tasks"];
   variant: "oms" | "tracking";
   // OMS-specific callback actions
-  onUpdateTaskStatus?: (taskId: string, nextStatus: TaskStatus) => void | Promise<void>;
+  onUpdateTaskStatus?: (
+    taskId: string,
+    nextStatus: TaskStatus,
+    reworkNotes?: string
+  ) => void | Promise<void>;
+  onCustomerReviewTask?: (
+    taskId: string,
+    decision: "COMPLETED" | "REWORK",
+    reworkNotes?: string
+  ) => void | Promise<void>;
+  canCustomerAct?: boolean;
+  studioOwnerName?: string;
   allSelectableCrew?: SelectableCrew[];
   temporaryCrewList?: Array<{ id: string; name: string; isTemporary: true }>;
   onSaveServiceCrew?: (serviceName: string, memberNames: string[]) => Promise<void>;
@@ -66,6 +77,9 @@ export function OrderVerticalWorkflow({
   tasks = [],
   variant,
   onUpdateTaskStatus,
+  onCustomerReviewTask,
+  canCustomerAct = true,
+  studioOwnerName,
   allSelectableCrew = [],
   temporaryCrewList = [],
   onSaveServiceCrew,
@@ -79,6 +93,11 @@ export function OrderVerticalWorkflow({
   const isOms = variant === "oms";
   const fullOrder = isOms ? (order as Order) : null;
   const fullTasks = tasks as Task[];
+
+  const [reworkOpenTaskId, setReworkOpenTaskId] = useState<string | null>(null);
+  const [reworkNotesDraft, setReworkNotesDraft] = useState<Record<string, string>>({});
+  const [submittingTaskId, setSubmittingTaskId] = useState<string | null>(null);
+  const [actionFeedbackError, setActionFeedbackError] = useState<string | null>(null);
 
   // Event timing calculations
   const nextOrPrimaryShootDate = useMemo(
@@ -211,7 +230,10 @@ export function OrderVerticalWorkflow({
     () => services.filter((svc) => !isDeliverableOnlyService(svc)),
     [services]
   );
-  const assignedResources = useMemo(() => fullOrder?.assignedResources || [], [fullOrder?.assignedResources]);
+  const assignedResources = useMemo(
+    () => order.assignedResources || [],
+    [order.assignedResources]
+  );
   const assignedServicesCount = useMemo(() => {
     return services.filter((svcName) => {
       const svcLower = svcName.trim().toLowerCase();
@@ -245,7 +267,7 @@ export function OrderVerticalWorkflow({
 
     if (order.orderStatus === "AWAITING_EVENT") {
       if (isTodayEvent) return "phase_event_day";
-      if (!preEventCompleted) return "phase_pre_event";
+      if (hasErp && !preEventCompleted) return "phase_pre_event";
       return "phase_event_day";
     }
 
@@ -255,22 +277,24 @@ export function OrderVerticalWorkflow({
     }
 
     return "phase_event_day";
-  }, [order.orderStatus, isTodayEvent, preEventCompleted, isProductionCompleted]);
+  }, [order.orderStatus, isTodayEvent, hasErp, preEventCompleted, isProductionCompleted]);
 
-  // Phase expansion state: defaults to expanding active phase (and Phase 01 when awaiting event)
+  // Phase expansion state: defaults to expanding active phase (and Phase 01/02 when awaiting event)
   const [expandedPhases, setExpandedPhases] = useState<Set<PhaseId>>(() =>
     order.orderStatus === "AWAITING_EVENT"
-      ? new Set<PhaseId>(["phase_event_day", "phase_pre_event"])
+      ? new Set<PhaseId>(hasErp ? ["phase_event_day", "phase_pre_event"] : ["phase_event_day"])
       : new Set<PhaseId>([activePhaseId])
   );
 
   useEffect(() => {
     if (order.orderStatus === "AWAITING_EVENT") {
-      setExpandedPhases(new Set<PhaseId>(["phase_event_day", "phase_pre_event"]));
+      setExpandedPhases(
+        new Set<PhaseId>(hasErp ? ["phase_event_day", "phase_pre_event"] : ["phase_event_day"])
+      );
     } else {
       setExpandedPhases(new Set<PhaseId>([activePhaseId]));
     }
-  }, [activePhaseId, order.id, order.orderStatus]);
+  }, [activePhaseId, hasErp, order.id, order.orderStatus]);
 
   const togglePhase = (phaseId: PhaseId) => {
     setExpandedPhases((prev) => {
@@ -310,6 +334,28 @@ export function OrderVerticalWorkflow({
     });
   };
 
+  const currentOrderSavedAndDraftDates = useMemo(() => {
+    const savedMain = normalizedMainDates;
+    const savedServices = order.serviceSchedules
+      ? Object.values(order.serviceSchedules).flat()
+      : [];
+    const draftMain = scheduleDatesDraft;
+    const draftServices = Object.values(serviceSchedulesDraft).flat();
+    return new Set<string>([
+      ...savedMain,
+      ...savedServices,
+      ...draftMain,
+      ...draftServices,
+    ]);
+  }, [normalizedMainDates, order.serviceSchedules, scheduleDatesDraft, serviceSchedulesDraft]);
+
+  const todayIsoValue = useMemo(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(
+      now.getDate()
+    ).padStart(2, "0")}`;
+  }, []);
+
   const renderInlineMultiDateCalendar = (
     selectedDates: string[],
     onToggleDate: (iso: string) => void,
@@ -325,7 +371,15 @@ export function OrderVerticalWorkflow({
       ...Array.from({ length: daysInMonth }, (_, index) => {
         const day = index + 1;
         const iso = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-        return { day, iso, count: busyDateCounts[iso] || 0 };
+        const isCurrentEventDate = currentOrderSavedAndDraftDates.has(iso);
+        const isToday = iso === todayIsoValue;
+        return {
+          day,
+          iso,
+          otherCount: busyDateCounts[iso] || 0,
+          isCurrentEventDate,
+          isToday,
+        };
       }),
     ];
 
@@ -365,22 +419,48 @@ export function OrderVerticalWorkflow({
                 key={cell.iso}
                 type="button"
                 onClick={() => onToggleDate(cell.iso)}
-                className={`relative rounded-lg py-1.5 text-xs font-semibold transition ${
+                className={`relative flex h-9 flex-col items-center justify-center rounded-lg text-[10px] font-semibold transition ${
                   selectedDates.includes(cell.iso)
-                    ? "bg-brand-blue-primary text-white ring-2 ring-brand-blue-primary/30"
-                    : cell.count > 0
-                    ? "bg-amber-50 text-amber-900 hover:bg-amber-100"
+                    ? "!bg-brand-blue-primary !text-white ring-2 ring-brand-blue-primary/30 hover:!bg-brand-blue-primary hover:!text-white"
+                    : cell.isToday
+                    ? "bg-brand-blue-50 text-brand-blue-primary ring-1 ring-brand-blue-soft hover:bg-brand-blue-100"
+                    : cell.isCurrentEventDate
+                    ? "bg-purple-100 text-purple-900 ring-1 ring-purple-300 hover:bg-purple-200/70"
+                    : cell.otherCount > 0
+                    ? "bg-amber-50 text-amber-900 ring-1 ring-amber-200 hover:bg-amber-100"
                     : "text-text-primary hover:bg-surface-app"
                 }`}
-                title={cell.count > 0 ? `${cell.count} existing shoot date(s) scheduled` : "Available"}
+                title={
+                  cell.isCurrentEventDate && cell.otherCount > 0
+                    ? `Current event shoot date · ${cell.otherCount} other shoot(s) scheduled`
+                    : cell.isCurrentEventDate
+                    ? "Current event shoot date"
+                    : cell.otherCount > 0
+                    ? `${cell.otherCount} other shoot date(s) scheduled`
+                    : cell.isToday
+                    ? "Today"
+                    : "Available"
+                }
               >
-                {cell.day}
-                {cell.count > 0 && (
-                  <span
-                    className={`mx-auto mt-0.5 block h-1 w-1 rounded-full ${
-                      selectedDates.includes(cell.iso) ? "bg-white" : "bg-amber-500"
-                    }`}
-                  />
+                <span>{cell.day}</span>
+                {cell.isToday && <span className="text-[7px] leading-none">Today</span>}
+                {(cell.isCurrentEventDate || cell.otherCount > 0) && (
+                  <span className="mx-auto mt-0.5 flex items-center justify-center gap-0.5">
+                    {cell.isCurrentEventDate && (
+                      <span
+                        className={`block h-1 w-1 rounded-full ${
+                          selectedDates.includes(cell.iso) ? "bg-purple-200" : "bg-purple-600"
+                        }`}
+                      />
+                    )}
+                    {cell.otherCount > 0 && (
+                      <span
+                        className={`block h-1 w-1 rounded-full ${
+                          selectedDates.includes(cell.iso) ? "bg-amber-200" : "bg-amber-500"
+                        }`}
+                      />
+                    )}
+                  </span>
                 )}
               </button>
             ) : (
@@ -388,10 +468,15 @@ export function OrderVerticalWorkflow({
             )
           )}
         </div>
-        <div className="mt-2.5 flex items-center justify-between border-t border-border-default pt-2 text-[10px] text-text-tertiary">
-          <span className="inline-flex items-center gap-1.5">
-            <span className="h-2 w-2 rounded-full bg-amber-500" /> Shoot already scheduled
-          </span>
+        <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 border-t border-border-default pt-2 text-[10px] text-text-tertiary">
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="inline-flex items-center gap-1">
+              <span className="h-2 w-2 rounded-full bg-purple-600" /> Current event shoot
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <span className="h-2 w-2 rounded-full bg-amber-500" /> Other shoot dates
+            </span>
+          </div>
           <div className="flex items-center gap-1.5">
             {selectedDates.length > 0 && (
               <button
@@ -510,16 +595,83 @@ export function OrderVerticalWorkflow({
     );
   }, [order.serviceSchedules, services]);
 
+  // Active tasks for the Top "Current Main State" Panel during Post-Event Workflow
+  const activeStreamTasks = useMemo(() => {
+    if (order.orderStatus !== "POST_EVENT_IN_PROGRESS") return [];
+    const items: Array<{ streamLabel: string; streamBadgeClass: string; task: Task }> = [];
+
+    const nextPhoto = photoTasks.find((t) => t.status !== "COMPLETED");
+    if (nextPhoto) {
+      items.push({
+        streamLabel: "Photography Pipeline",
+        streamBadgeClass: "bg-sky-100 text-sky-800 border-sky-200",
+        task: nextPhoto,
+      });
+    }
+
+    const nextVideo = videoTasks.find((t) => t.status !== "COMPLETED");
+    if (nextVideo) {
+      items.push({
+        streamLabel: "Videography Pipeline",
+        streamBadgeClass: "bg-indigo-100 text-indigo-800 border-indigo-200",
+        task: nextVideo,
+      });
+    }
+
+    otherTasks
+      .filter((t) => t.status !== "COMPLETED")
+      .forEach((t) => {
+        items.push({
+          streamLabel: "Additional Production",
+          streamBadgeClass: "bg-slate-100 text-slate-700 border-slate-200",
+          task: t,
+        });
+      });
+
+    if (isProductionCompleted) {
+      const nextDelivery = deliveryTasks.find((t) => t.status !== "COMPLETED");
+      if (nextDelivery) {
+        items.push({
+          streamLabel: "Final Handover & Delivery",
+          streamBadgeClass: "bg-emerald-100 text-emerald-800 border-emerald-200",
+          task: nextDelivery,
+        });
+      }
+    }
+
+    return items;
+  }, [order.orderStatus, photoTasks, videoTasks, otherTasks, deliveryTasks, isProductionCompleted]);
+
+  const isTaskAssignedToNonOwnerMember = (task: Task): { isMember: boolean; memberName: string } => {
+    if (!hasErp) return { isMember: false, memberName: "" };
+    const crewInfo = getDefaultCrewForTask(task);
+    const name = (crewInfo?.name || task.assignedMemberName || "").trim();
+    if (!name || name.toLowerCase() === "unassigned" || name.toLowerCase() === "unassigned crew") {
+      return { isMember: false, memberName: "" };
+    }
+    const lowerName = name.toLowerCase();
+    const ownerClean = (studioOwnerName || "").trim().toLowerCase();
+    const isOwner =
+      (task.assignedMemberId || "").startsWith("owner-") ||
+      lowerName.includes("(owner)") ||
+      lowerName === "studio owner" ||
+      (ownerClean.length > 0 && (lowerName === ownerClean || lowerName.includes(ownerClean)));
+    return { isMember: !isOwner, memberName: name };
+  };
+
   return (
-    <div className="w-full space-y-4">
-      {/* 1. Terminal State: Cancelled Order Banner (if applicable) */}
-      {order.orderStatus === "CANCELLED" && (
+    <div className="w-full space-y-5">
+      {/* 1. TOP CURRENT MAIN STATE PANEL (Active Action Center) */}
+      {order.orderStatus === "CANCELLED" ? (
         <div className="rounded-2xl border border-rose-200 bg-rose-50/80 p-4 space-y-2">
           <div className="flex items-center gap-2.5">
             <div className="flex h-7 w-7 items-center justify-center rounded-full bg-rose-600 text-white font-extrabold text-xs shadow-xs">
               ✕
             </div>
             <div>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-rose-700 block">
+                Current Main State
+              </span>
               <h3 className="text-sm font-bold text-rose-900">Order Cancelled (Terminal State)</h3>
               <p className="text-xs text-rose-700">
                 This order has been cancelled and is no longer moving through active production pipelines.
@@ -538,9 +690,504 @@ export function OrderVerticalWorkflow({
             </div>
           )}
         </div>
+      ) : order.orderStatus === "COMPLETED" ? (
+        <div className="rounded-2xl border border-emerald-300 bg-emerald-50/60 p-4 shadow-2xs space-y-2">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <div className="flex items-center gap-2">
+              <span className="rounded-md bg-emerald-600 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white">
+                Current Main State
+              </span>
+              <span className="rounded-md border border-emerald-300 bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-900">
+                Fulfilled &amp; Completed
+              </span>
+            </div>
+            <span className="text-[11px] font-mono font-bold text-emerald-800">
+              {allTasksCompletedCount}/{allTasksCount} Steps Done
+            </span>
+          </div>
+          <div>
+            <h3 className="text-sm font-extrabold text-emerald-950">
+              Order Completed — All Deliverables Approved &amp; Handed Over
+            </h3>
+            <p className="text-xs text-emerald-800 mt-0.5">
+              All post-event workflow stages and final handovers have been completed. The pipeline below is in read-only mode for reference.
+            </p>
+          </div>
+        </div>
+      ) : order.orderStatus === "AWAITING_EVENT" ? (
+        <div className="rounded-2xl border border-blue-200 bg-gradient-to-br from-blue-50/70 via-white to-slate-50 p-4 shadow-2xs space-y-3">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="rounded-md bg-brand-blue-primary px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white">
+                Current Main State
+              </span>
+              <span
+                className={`rounded-md border px-2 py-0.5 text-[10px] font-bold ${
+                  isTodayEvent
+                    ? "border-amber-300 bg-amber-100 text-amber-900"
+                    : "border-blue-200 bg-blue-100/80 text-brand-blue-primary"
+                }`}
+              >
+                {isTodayEvent ? "Event Shoot Active Today" : "Awaiting Event"}
+              </span>
+              {eventRem && (
+                <span className="rounded-md border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-bold text-text-secondary">
+                  {eventRem.display}
+                </span>
+              )}
+            </div>
+            {hasErp && services.length > 0 && (
+              <span
+                className={`rounded-md border px-2 py-0.5 text-[10px] font-bold ${
+                  preEventCompleted
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                    : "border-amber-200 bg-amber-50 text-amber-800"
+                }`}
+              >
+                Crew Readiness: {assignedServicesCount}/{services.length} Services Allocated
+              </span>
+            )}
+          </div>
+
+          <div>
+            <h3 className="text-sm font-extrabold text-text-primary">
+              {isTodayEvent
+                ? `Event Shoot Underway Today (${formattedMainDates})`
+                : `Awaiting Scheduled Event (${formattedMainDates || "Date TBD"})`}
+            </h3>
+            <p className="text-xs text-text-secondary mt-0.5">
+              {isTodayEvent
+                ? "Event shoot is scheduled for today. Post-event production workflows will activate once coverage concludes."
+                : isFutureEvent
+                ? "Post-event production and customer review workflows remain locked until the scheduled event date."
+                : "Event date has arrived. Post-event production workflows are ready to begin."}
+            </p>
+          </div>
+        </div>
+      ) : (
+        /* POST_EVENT_IN_PROGRESS: Active Workflow & Customer / Studio Action Center */
+        <div className="rounded-2xl border border-blue-200 bg-gradient-to-br from-blue-50/60 via-white to-slate-50 p-4 shadow-2xs space-y-3.5">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="rounded-md bg-brand-blue-primary px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white">
+                Current Main State
+              </span>
+              <span className="rounded-md border border-blue-200 bg-blue-100/80 px-2 py-0.5 text-[10px] font-bold text-brand-blue-primary">
+                {isProductionCompleted ? "Final Handover & Delivery" : "Post-Event Workflow"}
+              </span>
+              {activeStreamTasks.some((item) => item.task.status === "REVIEW") && (
+                <span className="rounded-md border border-purple-300 bg-purple-100 px-2 py-0.5 text-[10px] font-bold text-purple-900">
+                  Pending Customer Review
+                </span>
+              )}
+            </div>
+            {allTasksCount > 0 && (
+              <span className="text-[11px] font-mono font-bold text-text-secondary">
+                {allTasksCompletedCount}/{allTasksCount} Steps Completed ({Math.round((allTasksCompletedCount / allTasksCount) * 100)}%)
+              </span>
+            )}
+          </div>
+
+          {actionFeedbackError && (
+            <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700">
+              {actionFeedbackError}
+            </div>
+          )}
+
+          {activeStreamTasks.length === 0 ? (
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-3 text-xs text-emerald-900">
+              <p className="font-bold">All production tasks are completed.</p>
+              <p className="text-[11px] text-emerald-800 mt-0.5">
+                Order will automatically transition to Completed once financial clearance is recorded.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-2.5">
+              {activeStreamTasks.map(({ streamLabel, streamBadgeClass, task }) => {
+                const displayTitle = (task.title || "").replace("&", "and");
+                const titleLower = (task.title || "").toLowerCase();
+                const isRawSelection =
+                  titleLower.includes("raw photo") || titleLower.includes("photo selection");
+                const isPhotoEditing =
+                  titleLower.includes("photo editing") ||
+                  titleLower.includes("retouch") ||
+                  titleLower.includes("color grading");
+                const status = task.status;
+                const isReview = status === "REVIEW";
+                const isRework = status === "REWORK";
+                const isInProgress = status === "IN_PROGRESS";
+                const { isMember, memberName } = isTaskAssignedToNonOwnerMember(task);
+                const isBusy = submittingTaskId === task.id;
+                const isReworkBoxOpen = reworkOpenTaskId === task.id;
+
+                const stateHeadline = isReview
+                  ? `Pending Customer Review — ${displayTitle}`
+                  : isRework
+                  ? `Post-Event Workflow — Studio working on ${displayTitle} (Rework)`
+                  : isInProgress
+                  ? `Post-Event Workflow — Studio working on ${displayTitle}`
+                  : `Post-Event Workflow — Studio ready to start ${displayTitle}`;
+
+                return (
+                  <div
+                    key={task.id || task.title}
+                    className={`rounded-xl border p-3.5 transition space-y-2.5 ${
+                      isReview
+                        ? "border-purple-200 bg-purple-50/50"
+                        : isRework
+                        ? "border-amber-200 bg-amber-50/50"
+                        : "border-border-default bg-white"
+                    }`}
+                  >
+                    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2.5">
+                      <div className="space-y-1 min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span
+                            className={`rounded border px-1.5 py-0.5 text-[9px] font-bold ${streamBadgeClass}`}
+                          >
+                            {streamLabel}
+                          </span>
+                          <span
+                            className={`rounded border px-1.5 py-0.5 text-[9px] font-bold ${
+                              isReview
+                                ? "border-purple-200 bg-purple-100 text-purple-800"
+                                : isRework
+                                ? "border-amber-200 bg-amber-100 text-amber-800"
+                                : isInProgress
+                                ? "border-blue-200 bg-blue-100 text-blue-800"
+                                : "border-slate-200 bg-slate-100 text-slate-700"
+                            }`}
+                          >
+                            {isReview
+                              ? "Pending Customer View"
+                              : isRework
+                              ? "Corrections Requested"
+                              : isInProgress
+                              ? isRawSelection
+                                ? "Gathering & Processing Photos"
+                                : "In Progress"
+                              : isRawSelection
+                              ? "Preparing Photo Selection"
+                              : "Ready to Start"}
+                          </span>
+                          {isOms && hasErp && !isReview && isMember && (
+                            <span className="rounded border border-indigo-200 bg-indigo-50 px-1.5 py-0.5 text-[9px] font-bold text-indigo-800">
+                              Pending on Member: {memberName}
+                            </span>
+                          )}
+                        </div>
+
+                        <h4 className="text-xs sm:text-sm font-extrabold text-text-primary">
+                          {stateHeadline}
+                        </h4>
+
+                        {task.reworkNotes && (
+                          <div className="rounded-lg border border-amber-200 bg-amber-50/80 px-2.5 py-1.5 text-[11px] text-amber-950">
+                            <span className="font-bold">Rework Note:</span> {task.reworkNotes}
+                          </div>
+                        )}
+
+                        <p className="text-[11px] text-text-secondary">
+                          {isReview
+                            ? isOms
+                              ? "Studio has submitted this step for customer review. Customer can mark it Completed or Rework on their tracking page, or Studio Owner can update below on behalf of customer."
+                              : "Studio has updated this step for your review. You can mark it Completed or request Rework directly below."
+                            : isOms
+                            ? isMember
+                              ? `Assigned to ${memberName}. Studio Owner can also update this step on behalf of ${memberName}.`
+                              : "Update the current studio step below to move the workflow forward."
+                            : "Studio is currently working on this step. Once updated by the studio, you will be able to review and mark Completed or Rework here."}
+                        </p>
+                      </div>
+
+                      {/* ACTION CONTROLS IN TOP MAIN STATE PANEL */}
+                      <div className="flex flex-col items-stretch sm:items-end gap-1.5 shrink-0">
+                        {/* CASE A: Customer Tracking View & Task is in REVIEW */}
+                        {!isOms && isReview && (
+                          canCustomerAct && onCustomerReviewTask ? (
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <button
+                                type="button"
+                                disabled={isBusy}
+                                onClick={() =>
+                                  void (async () => {
+                                    setActionFeedbackError(null);
+                                    setSubmittingTaskId(task.id);
+                                    try {
+                                      await onCustomerReviewTask(task.id, "COMPLETED");
+                                      setReworkOpenTaskId(null);
+                                    } catch (err) {
+                                      setActionFeedbackError(
+                                        err instanceof Error ? err.message : "Failed to update review."
+                                      );
+                                    } finally {
+                                      setSubmittingTaskId(null);
+                                    }
+                                  })()
+                                }
+                                className="rounded-lg bg-emerald-600 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-emerald-700 transition shadow-2xs cursor-pointer disabled:opacity-50"
+                              >
+                                {isBusy ? "Updating…" : "✓ Mark Completed"}
+                              </button>
+                              <button
+                                type="button"
+                                disabled={isBusy}
+                                onClick={() =>
+                                  setReworkOpenTaskId((prev) => (prev === task.id ? null : task.id))
+                                }
+                                className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-1.5 text-[11px] font-bold text-amber-900 hover:bg-amber-100 transition cursor-pointer disabled:opacity-50"
+                              >
+                                Request Rework
+                              </button>
+                            </div>
+                          ) : (
+                            <span className="text-[10px] font-semibold text-purple-800 bg-purple-100/80 px-2.5 py-1 rounded-lg border border-purple-200">
+                              Awaiting Customer Approval
+                            </span>
+                          )
+                        )}
+
+                        {/* CASE B: Studio OMS View */}
+                        {isOms && onUpdateTaskStatus && (
+                          <div className="flex flex-wrap items-center justify-end gap-1.5">
+                            {(status === "ASSIGNED" || status === "AWAITING_EVENT") && (
+                              <button
+                                type="button"
+                                disabled={isBusy}
+                                onClick={() =>
+                                  void (async () => {
+                                    setSubmittingTaskId(task.id);
+                                    try {
+                                      await onUpdateTaskStatus(task.id, "IN_PROGRESS");
+                                    } finally {
+                                      setSubmittingTaskId(null);
+                                    }
+                                  })()
+                                }
+                                className="rounded-lg bg-brand-blue-primary px-3 py-1.5 text-[11px] font-bold text-white hover:bg-sky-600 transition cursor-pointer shadow-2xs disabled:opacity-50"
+                              >
+                                {isRawSelection ? "Start Preparation" : "Start Step"}
+                                {hasErp && isMember ? ` (On Behalf of ${memberName})` : ""}
+                              </button>
+                            )}
+
+                            {status === "IN_PROGRESS" && (
+                              <>
+                                <button
+                                  type="button"
+                                  disabled={isBusy}
+                                  onClick={() =>
+                                    void (async () => {
+                                      setSubmittingTaskId(task.id);
+                                      try {
+                                        await onUpdateTaskStatus(task.id, "REVIEW");
+                                      } finally {
+                                        setSubmittingTaskId(null);
+                                      }
+                                    })()
+                                  }
+                                  className="rounded-lg bg-purple-600 px-2.5 py-1.5 text-[11px] font-bold text-white hover:bg-purple-700 transition cursor-pointer shadow-2xs disabled:opacity-50"
+                                >
+                                  Send for Customer Review
+                                  {hasErp && isMember ? ` (On Behalf of ${memberName})` : ""}
+                                </button>
+                                {(isRawSelection || isPhotoEditing) && onMarkOfflineReviewReady && (
+                                  <button
+                                    type="button"
+                                    disabled={isBusy}
+                                    onClick={() =>
+                                      void (async () => {
+                                        setSubmittingTaskId(task.id);
+                                        try {
+                                          await onMarkOfflineReviewReady(task.id);
+                                        } finally {
+                                          setSubmittingTaskId(null);
+                                        }
+                                      })()
+                                    }
+                                    className="rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-[11px] font-bold text-amber-900 hover:bg-amber-100 transition cursor-pointer disabled:opacity-50"
+                                  >
+                                    Confirm Offline Handoff
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  disabled={isBusy}
+                                  onClick={() =>
+                                    void (async () => {
+                                      setSubmittingTaskId(task.id);
+                                      try {
+                                        await onUpdateTaskStatus(task.id, "COMPLETED");
+                                      } finally {
+                                        setSubmittingTaskId(null);
+                                      }
+                                    })()
+                                  }
+                                  className="rounded-lg bg-emerald-600 px-2.5 py-1.5 text-[11px] font-bold text-white hover:bg-emerald-700 transition cursor-pointer shadow-2xs disabled:opacity-50"
+                                >
+                                  Mark Completed
+                                  {hasErp && isMember ? ` (On Behalf of ${memberName})` : ""}
+                                </button>
+                              </>
+                            )}
+
+                            {status === "REWORK" && (
+                              <>
+                                <button
+                                  type="button"
+                                  disabled={isBusy}
+                                  onClick={() =>
+                                    void (async () => {
+                                      setSubmittingTaskId(task.id);
+                                      try {
+                                        await onUpdateTaskStatus(task.id, "REVIEW");
+                                      } finally {
+                                        setSubmittingTaskId(null);
+                                      }
+                                    })()
+                                  }
+                                  className="rounded-lg bg-purple-600 px-2.5 py-1.5 text-[11px] font-bold text-white hover:bg-purple-700 transition cursor-pointer shadow-2xs disabled:opacity-50"
+                                >
+                                  Re-submit for Customer Review
+                                  {hasErp && isMember ? ` (On Behalf of ${memberName})` : ""}
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={isBusy}
+                                  onClick={() =>
+                                    void (async () => {
+                                      setSubmittingTaskId(task.id);
+                                      try {
+                                        await onUpdateTaskStatus(task.id, "COMPLETED");
+                                      } finally {
+                                        setSubmittingTaskId(null);
+                                      }
+                                    })()
+                                  }
+                                  className="rounded-lg bg-emerald-600 px-2.5 py-1.5 text-[11px] font-bold text-white hover:bg-emerald-700 transition cursor-pointer shadow-2xs disabled:opacity-50"
+                                >
+                                  Mark Completed
+                                  {hasErp && isMember ? ` (On Behalf of ${memberName})` : ""}
+                                </button>
+                              </>
+                            )}
+
+                            {status === "REVIEW" && (
+                              <>
+                                <button
+                                  type="button"
+                                  disabled={isBusy}
+                                  onClick={() =>
+                                    void (async () => {
+                                      setSubmittingTaskId(task.id);
+                                      try {
+                                        await onUpdateTaskStatus(task.id, "COMPLETED");
+                                        setReworkOpenTaskId(null);
+                                      } finally {
+                                        setSubmittingTaskId(null);
+                                      }
+                                    })()
+                                  }
+                                  className="rounded-lg bg-emerald-600 px-2.5 py-1.5 text-[11px] font-bold text-white hover:bg-emerald-700 transition cursor-pointer shadow-2xs disabled:opacity-50"
+                                >
+                                  Completed (On Behalf of Customer)
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={isBusy}
+                                  onClick={() =>
+                                    setReworkOpenTaskId((prev) => (prev === task.id ? null : task.id))
+                                  }
+                                  className="rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-[11px] font-bold text-amber-900 hover:bg-amber-100 transition cursor-pointer disabled:opacity-50"
+                                >
+                                  Rework (On Behalf of Customer)
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Inline Rework Note Box (for Customer or Studio Owner On Behalf of Customer) */}
+                    {isReview && isReworkBoxOpen && (
+                      <div className="pt-2 border-t border-purple-200/70 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                        <input
+                          type="text"
+                          value={reworkNotesDraft[task.id] || ""}
+                          onChange={(e) =>
+                            setReworkNotesDraft((prev) => ({
+                              ...prev,
+                              [task.id]: e.target.value,
+                            }))
+                          }
+                          placeholder={
+                            isOms
+                              ? "Optional rework note recorded on behalf of customer..."
+                              : "Describe the corrections or changes needed (optional)..."
+                          }
+                          className="flex-1 rounded-lg border border-border-default bg-white px-3 py-1.5 text-xs text-text-primary outline-none focus:border-brand-blue-primary"
+                        />
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setReworkOpenTaskId(null)}
+                            className="rounded-lg border border-border-default bg-white px-2.5 py-1.5 text-[11px] font-semibold text-text-secondary"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            disabled={isBusy}
+                            onClick={() =>
+                              void (async () => {
+                                setActionFeedbackError(null);
+                                setSubmittingTaskId(task.id);
+                                const note = (reworkNotesDraft[task.id] || "").trim();
+                                try {
+                                  if (isOms && onUpdateTaskStatus) {
+                                    await onUpdateTaskStatus(
+                                      task.id,
+                                      "REWORK",
+                                      note || "Rework requested on behalf of customer."
+                                    );
+                                  } else if (!isOms && onCustomerReviewTask) {
+                                    await onCustomerReviewTask(
+                                      task.id,
+                                      "REWORK",
+                                      note || "Customer requested rework."
+                                    );
+                                  }
+                                  setReworkOpenTaskId(null);
+                                } catch (err) {
+                                  setActionFeedbackError(
+                                    err instanceof Error ? err.message : "Failed to submit rework."
+                                  );
+                                } finally {
+                                  setSubmittingTaskId(null);
+                                }
+                              })()
+                            }
+                            className="rounded-lg bg-amber-600 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-amber-700 transition cursor-pointer disabled:opacity-50"
+                          >
+                            {isBusy
+                              ? "Submitting…"
+                              : isOms
+                              ? "Confirm Rework (On Behalf of Customer)"
+                              : "Submit Rework Request"}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
       )}
 
-      {/* 2. Unified Vertical Workflow Timeline */}
+      {/* 2. Unified Vertical Workflow Timeline (Read-Only Status & Flow Overview for Tasks) */}
       <div className="relative pl-6 sm:pl-8 space-y-6 before:absolute before:left-3 sm:before:left-4 before:top-4 before:bottom-4 before:w-0.5 before:bg-slate-200/80">
         {/* PHASE 1: Event Schedule & Execution (Basic Event Info, Multi-Date & Separate Event Shoot Dates) */}
         <div className="relative group">
@@ -828,15 +1475,7 @@ export function OrderVerticalWorkflow({
                   </div>
                 ) : (
                   <div className="space-y-2.5">
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-text-secondary">
-                      <div className="rounded-xl bg-slate-50 p-2.5 border border-border-default/60">
-                        <span className="text-[10px] uppercase font-bold text-text-tertiary block">
-                          Main Event Date(s)
-                        </span>
-                        <span className="font-bold text-text-primary block">
-                          {formattedMainDates || "Date to be scheduled"}
-                        </span>
-                      </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-text-secondary">
                       <div className="rounded-xl bg-slate-50 p-2.5 border border-border-default/60">
                         <span className="text-[10px] uppercase font-bold text-text-tertiary block">
                           Shoot Venue
@@ -889,6 +1528,33 @@ export function OrderVerticalWorkflow({
                         </div>
                       </div>
                     )}
+
+                    {!hasErp && services.length > 0 && (
+                      <div className="rounded-xl border border-border-default/60 bg-slate-50/70 p-2.5 space-y-1.5">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-text-tertiary block">
+                          Booked Services
+                        </span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {services.map((svcName) => {
+                            const separateDatesForSvc = order.serviceSchedules?.[svcName] || [];
+                            return (
+                              <span
+                                key={svcName}
+                                className="inline-flex items-center gap-1.5 rounded-lg border border-border-default bg-white px-2.5 py-1 text-xs font-semibold text-text-primary"
+                              >
+                                <span className="h-1.5 w-1.5 rounded-full bg-brand-blue-primary shrink-0" />
+                                <span>{svcName}</span>
+                                {separateDatesForSvc.length > 0 && (
+                                  <span className="rounded bg-blue-50 border border-blue-200 px-1.5 py-0.2 text-[10px] font-bold text-brand-blue-primary">
+                                    {formatMultiDateDisplay(separateDatesForSvc)}
+                                  </span>
+                                )}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -896,7 +1562,8 @@ export function OrderVerticalWorkflow({
           </div>
         </div>
 
-        {/* PHASE 2: Pre-Event Preparation & Crew Allocation */}
+        {/* PHASE 2: Pre-Event Preparation & Crew Allocation (ERP / Starter & Professional Studios Only) */}
+        {hasErp && (
         <div className="relative group">
           {/* Timeline Marker */}
           <div
@@ -1189,8 +1856,9 @@ export function OrderVerticalWorkflow({
             )}
           </div>
         </div>
+        )}
 
-        {/* PHASE 3: Post-Event Production (Parallel Photography & Videography Streams) */}
+        {/* PHASE 3 (or 2 for Free Tier): Post-Event Production (Parallel Photography & Videography Streams) */}
         <div className="relative group">
           {/* Timeline Marker */}
           <div
@@ -1202,7 +1870,7 @@ export function OrderVerticalWorkflow({
                 : "bg-slate-100 text-slate-400 border border-slate-300"
             }`}
           >
-            {isProductionCompleted && order.orderStatus === "COMPLETED" ? "✓" : "3"}
+            {isProductionCompleted && order.orderStatus === "COMPLETED" ? "✓" : hasErp ? "3" : "2"}
           </div>
 
           <div
@@ -1219,7 +1887,7 @@ export function OrderVerticalWorkflow({
               <div className="min-w-0 pr-2">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-text-tertiary">
-                    Phase 03
+                    {hasErp ? "Phase 03" : "Phase 02"}
                   </span>
                   <span
                     className={`inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-bold border ${
@@ -1310,7 +1978,9 @@ export function OrderVerticalWorkflow({
                     </div>
 
                     <div className="space-y-1.5 pt-1">
-                      {photoTasks.map((task) => renderTaskRow(task))}
+                      {photoTasks.map((task) =>
+                        renderTaskRow(task, order.orderStatus === "AWAITING_EVENT")
+                      )}
                     </div>
                   </div>
                 )}
@@ -1322,7 +1992,7 @@ export function OrderVerticalWorkflow({
                       <div className="flex items-center gap-1.5">
                         <span className="text-xs font-bold text-text-primary">Videography Pipeline</span>
                         <span className="rounded bg-indigo-100 text-indigo-800 px-1.5 py-0.2 text-[9px] font-bold">
-                          Stream B (Independent)
+                          Stream B
                         </span>
                       </div>
                       <span className="text-[11px] font-mono font-bold text-text-secondary">
@@ -1340,7 +2010,9 @@ export function OrderVerticalWorkflow({
                     </div>
 
                     <div className="space-y-1.5 pt-1">
-                      {videoTasks.map((task) => renderTaskRow(task))}
+                      {videoTasks.map((task) =>
+                        renderTaskRow(task, order.orderStatus === "AWAITING_EVENT")
+                      )}
                     </div>
                   </div>
                 )}
@@ -1349,7 +2021,11 @@ export function OrderVerticalWorkflow({
                 {otherTasks.length > 0 && (
                   <div className="rounded-xl border border-border-default bg-slate-50/50 p-3 space-y-2">
                     <span className="text-xs font-bold text-text-primary block">Additional Tasks</span>
-                    <div className="space-y-1.5">{otherTasks.map((task) => renderTaskRow(task))}</div>
+                    <div className="space-y-1.5">
+                      {otherTasks.map((task) =>
+                        renderTaskRow(task, order.orderStatus === "AWAITING_EVENT")
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
@@ -1357,7 +2033,7 @@ export function OrderVerticalWorkflow({
           </div>
         </div>
 
-        {/* PHASE 4: Final Handover & Delivery */}
+        {/* PHASE 4 (or 3 for Free Tier): Final Handover & Delivery */}
         <div className="relative group">
           {/* Timeline Marker */}
           <div
@@ -1369,7 +2045,7 @@ export function OrderVerticalWorkflow({
                 : "bg-slate-100 text-slate-400 border border-slate-300"
             }`}
           >
-            {order.orderStatus === "COMPLETED" ? "✓" : "4"}
+            {order.orderStatus === "COMPLETED" ? "✓" : hasErp ? "4" : "3"}
           </div>
 
           <div
@@ -1386,22 +2062,22 @@ export function OrderVerticalWorkflow({
               <div className="min-w-0 pr-2">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-text-tertiary">
-                    Phase 04
+                    {hasErp ? "Phase 04" : "Phase 03"}
                   </span>
                   <span
                     className={`inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-bold border ${
                       order.orderStatus === "COMPLETED"
                         ? "bg-emerald-50 text-emerald-800 border-emerald-200"
-                        : activePhaseId === "phase_delivery"
+                        : isProductionCompleted && order.orderStatus !== "AWAITING_EVENT"
                         ? "bg-blue-50 text-brand-blue-primary border-blue-200"
                         : "bg-slate-100 text-slate-600 border-slate-200"
                     }`}
                   >
                     {order.orderStatus === "COMPLETED"
                       ? "Handover Completed"
-                      : activePhaseId === "phase_delivery"
-                      ? "Final Delivery in Progress"
-                      : "Pending Production Completion"}
+                      : isProductionCompleted && order.orderStatus !== "AWAITING_EVENT"
+                      ? "Unlocked · Final Delivery in Progress"
+                      : `Locked · Complete ${hasErp ? "Phase 03" : "Phase 02"} First`}
                   </span>
                 </div>
                 <h3 className="text-sm font-bold text-text-primary mt-0.5">Final Handover &amp; Delivery</h3>
@@ -1431,14 +2107,19 @@ export function OrderVerticalWorkflow({
               <div className="mt-4 pt-3.5 border-t border-border-default/60 space-y-3 text-xs">
                 {deliveryTasks.length > 0 ? (
                   <div className="space-y-1.5">
-                    {deliveryTasks.map((task) => renderTaskRow(task))}
+                    {deliveryTasks.map((task) =>
+                      renderTaskRow(
+                        task,
+                        order.orderStatus === "AWAITING_EVENT" || !isProductionCompleted
+                      )
+                    )}
                   </div>
                 ) : (
                   <div className="rounded-xl bg-slate-50 p-3 border border-border-default/60 text-text-secondary space-y-1">
                     <p className="font-semibold text-text-primary">
-                      {isProductionCompleted
-                        ? "Ready for digital album and deliverable dispatch"
-                        : "Waiting for photo editing and video cuts to finish before dispatch."}
+                      {isProductionCompleted && order.orderStatus !== "AWAITING_EVENT"
+                        ? "Unlocked — Ready for digital album and deliverable dispatch"
+                        : `Locked until ${hasErp ? "Phase 03" : "Phase 02"} (Post-Event Production) is completed.`}
                     </p>
                     <p className="text-[11px] text-text-tertiary">
                       All deliverables will be presented to the client via their passkey-secured tracking link.
@@ -1465,7 +2146,7 @@ export function OrderVerticalWorkflow({
           </div>
         </div>
 
-        {/* PHASE 5: Completed Terminal State */}
+        {/* PHASE 5 (or 4 for Free Tier): Completed Terminal State */}
         <div className="relative group">
           {/* Timeline Marker */}
           <div
@@ -1475,7 +2156,7 @@ export function OrderVerticalWorkflow({
                 : "bg-slate-100 text-slate-400 border border-slate-300"
             }`}
           >
-            {order.orderStatus === "COMPLETED" ? "✓" : "5"}
+            {order.orderStatus === "COMPLETED" ? "✓" : hasErp ? "5" : "4"}
           </div>
 
           <div
@@ -1543,7 +2224,7 @@ export function OrderVerticalWorkflow({
   );
 
   // Helper renderer for individual task rows
-  function renderTaskRow(task: Task) {
+  function renderTaskRow(task: Task, isLockedPhase = false) {
     const taskAge = calculateTaskAgeBadge(task);
     const displayTitle = (task.title || "").replace("&", "and");
 
@@ -1557,9 +2238,7 @@ export function OrderVerticalWorkflow({
     const isRawSelection = titleLower.includes("raw photo") || titleLower.includes("photo selection");
     const isPhotoEditing = titleLower.includes("photo editing") || titleLower.includes("retouch") || titleLower.includes("color grading");
 
-    const statusBadgeStyle = effectiveStatus === "AWAITING_EVENT"
-      ? "bg-slate-100 text-slate-600 border-slate-200"
-      : isDone
+    const statusBadgeStyle = isDone
       ? "bg-emerald-100 text-emerald-800 border-emerald-200"
       : isInProgress
       ? "bg-blue-100 text-blue-800 border-blue-200"
@@ -1569,8 +2248,8 @@ export function OrderVerticalWorkflow({
       ? "bg-amber-100 text-amber-800 border-amber-200"
       : "bg-slate-100 text-slate-700 border-slate-200";
 
-    const statusLabel = effectiveStatus === "AWAITING_EVENT"
-      ? "Awaiting Event"
+    const statusLabel = isLockedPhase && !isDone
+      ? null
       : isDone
       ? (isRawSelection ? "Selection confirmed" : "Completed")
       : isInProgress
@@ -1579,14 +2258,18 @@ export function OrderVerticalWorkflow({
       ? "Pending with customer"
       : isRework
       ? "Corrections requested"
-      : isRawSelection ? "Preparing photo selection" : hasErp ? "Assigned" : "Awaiting Event";
-    const nextActionOwner = isDone ? null : isReview ? "Customer" : "Studio";
+      : isRawSelection
+      ? "Preparing photo selection"
+      : "Ready to start";
+    const nextActionOwner = isLockedPhase || isDone ? null : isReview ? "Customer" : "Studio";
 
     return (
       <div
         key={task.id || task.title}
         className={`rounded-xl border p-2.5 transition flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 ${
-          isDone
+          isLockedPhase && !isDone
+            ? "bg-slate-50/70 border-border-default/60 opacity-75"
+            : isDone
             ? "bg-white border-emerald-200/80 shadow-2xs"
             : isInProgress
             ? "bg-white border-blue-200 shadow-2xs ring-1 ring-blue-50"
@@ -1600,9 +2283,11 @@ export function OrderVerticalWorkflow({
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-bold text-text-primary text-xs">{displayTitle}</span>
-            <span className={`rounded px-1.5 py-0.2 text-[9px] font-bold border ${statusBadgeStyle}`}>
-              {statusLabel}
-            </span>
+            {statusLabel && (
+              <span className={`rounded px-1.5 py-0.2 text-[9px] font-bold border ${statusBadgeStyle}`}>
+                {statusLabel}
+              </span>
+            )}
             {nextActionOwner && (
               <span
                 className={`rounded px-1.5 py-0.2 text-[9px] font-bold border ${
@@ -1614,7 +2299,7 @@ export function OrderVerticalWorkflow({
                 Next action: {nextActionOwner}
               </span>
             )}
-            {isOms && hasErp && (
+            {isOms && hasErp && !isLockedPhase && (
               <span className={`rounded px-1.5 py-0.2 text-[9px] font-bold border ${taskAge.colorClass}`}>
                 {taskAge.label}
               </span>
@@ -1656,7 +2341,7 @@ export function OrderVerticalWorkflow({
                           {crewInfo.name}
                           {crewInfo.isAuto && (
                             <span className="text-[9px] text-text-tertiary font-normal ml-1">
-                              (auto from Phase 1)
+                              (auto from Phase 2)
                             </span>
                           )}
                         </span>
@@ -1678,90 +2363,25 @@ export function OrderVerticalWorkflow({
               )}
             </div>
           )}
+          {task.reworkNotes && !isLockedPhase && (
+            <p className="mt-1 text-[10px] text-amber-800 font-medium">
+              Rework note: {task.reworkNotes}
+            </p>
+          )}
         </div>
 
-        {/* Action Controls for OMS */}
-        {isOms && onUpdateTaskStatus && (
-          <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-center">
-            <>
-                {(effectiveStatus === "ASSIGNED" || effectiveStatus === "AWAITING_EVENT") && (
-                  <button
-                    type="button"
-                    onClick={() => onUpdateTaskStatus(task.id, "IN_PROGRESS")}
-                    className="rounded-lg bg-brand-blue-primary text-white font-bold text-[10px] px-2.5 py-1 hover:bg-sky-600 transition cursor-pointer shadow-2xs"
-                  >
-                    {isRawSelection ? "Start preparation" : "Start"}
-                  </button>
-                )}
-
-                {effectiveStatus === "IN_PROGRESS" && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => onUpdateTaskStatus(task.id, "REVIEW")}
-                      className="rounded-lg bg-purple-600 text-white font-bold text-[10px] px-2 py-1 hover:bg-purple-700 transition cursor-pointer shadow-2xs"
-                    >
-                    {isRawSelection || isPhotoEditing ? "Send for review" : "Review"}
-                    </button>
-                  {(isRawSelection || isPhotoEditing) && onMarkOfflineReviewReady && (
-                    <button type="button" onClick={() => void onMarkOfflineReviewReady(task.id)} className="rounded-lg border border-amber-300 bg-amber-50 px-2 py-1 text-[10px] font-bold text-amber-900 hover:bg-amber-100 transition">Confirm offline handoff</button>
-                  )}
-                    <button
-                      type="button"
-                      onClick={() => onUpdateTaskStatus(task.id, "COMPLETED")}
-                      className="rounded-lg bg-emerald-600 text-white font-bold text-[10px] px-2 py-1 hover:bg-emerald-700 transition cursor-pointer shadow-2xs"
-                    >
-                      Complete
-                    </button>
-                  </>
-                )}
-
-                {effectiveStatus === "REVIEW" && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => onUpdateTaskStatus(task.id, "REWORK")}
-                      className="rounded-lg bg-amber-600 text-white font-bold text-[10px] px-2 py-1 hover:bg-amber-700 transition cursor-pointer shadow-2xs"
-                    >
-                      Rework
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onUpdateTaskStatus(task.id, "COMPLETED")}
-                      className="rounded-lg bg-emerald-600 text-white font-bold text-[10px] px-2 py-1 hover:bg-emerald-700 transition cursor-pointer shadow-2xs"
-                    >
-                      Complete
-                    </button>
-                  </>
-                )}
-
-                {effectiveStatus === "REWORK" && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => onUpdateTaskStatus(task.id, "REVIEW")}
-                      className="rounded-lg bg-purple-600 text-white font-bold text-[10px] px-2 py-1 hover:bg-purple-700 transition cursor-pointer shadow-2xs"
-                    >
-                      Re-submit
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onUpdateTaskStatus(task.id, "COMPLETED")}
-                      className="rounded-lg bg-emerald-600 text-white font-bold text-[10px] px-2 py-1 hover:bg-emerald-700 transition cursor-pointer shadow-2xs"
-                    >
-                      Complete
-                    </button>
-                  </>
-                )}
-
-                {effectiveStatus === "COMPLETED" && (
-                  <span className="text-[10px] font-bold text-emerald-700 flex items-center gap-1">
-                    <span>✓ Done</span>
-                  </span>
-                )}
-            </>
-          </div>
-        )}
+        {/* Read-Only Status Indicator in Pipeline (Actions happen in Top Current Main State Panel) */}
+        <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-center">
+          {effectiveStatus === "COMPLETED" ? (
+            <span className="text-[10px] font-bold text-emerald-700 flex items-center gap-1">
+              <span>✓ Done</span>
+            </span>
+          ) : !isLockedPhase ? (
+            <span className="text-[10px] font-medium text-text-tertiary">
+              {isReview ? "Action in top panel" : "Status view"}
+            </span>
+          ) : null}
+        </div>
       </div>
     );
   }

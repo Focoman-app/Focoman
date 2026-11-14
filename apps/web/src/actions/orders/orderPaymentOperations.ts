@@ -187,6 +187,18 @@ export async function updatePaymentStatusCore(rawInput: unknown): Promise<{
           currentPricing.advanceDate ||
           existingOrder.createdAt?.split("T")[0] ||
           new Date().toISOString().split("T")[0],
+        ...(validated.advanceMethod !== undefined
+          ? { advanceMethod: validated.advanceMethod }
+          : {}),
+        ...(validated.advanceReference !== undefined
+          ? { advanceReference: validated.advanceReference }
+          : {}),
+        ...(validated.advanceProofUrl !== undefined
+          ? { advanceProofUrl: validated.advanceProofUrl }
+          : {}),
+        ...(validated.advanceNotes !== undefined
+          ? { advanceNotes: validated.advanceNotes }
+          : {}),
         installments: finalInstallments,
         remainingAmount: newRemaining,
         previousAdvanceAmount: previousAdvance,

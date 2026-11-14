@@ -91,6 +91,27 @@ export function MinimalBillingModal({
             <p>Order value: {money(breakdown.confirmedPrice)}</p>
             <p>Recorded paid: {money(breakdown.totalPaid)}</p>
             <p>Remaining balance: {money(breakdown.remainingAmount)}</p>
+            {breakdown.receipts.length > 0 && (
+              <div className="rounded-2xl border border-border-default bg-surface-app p-3 space-y-2">
+                <p className="font-bold text-text-primary">Recorded payment receipts</p>
+                {breakdown.receipts.map((rcp) => (
+                  <div key={rcp.id} className="flex flex-wrap items-center justify-between gap-2 border-t border-border-default pt-2 first:border-t-0 first:pt-0">
+                    <div>
+                      <p className="font-semibold text-text-primary">
+                        {rcp.label} ({rcp.receiptNumber})
+                      </p>
+                      <p className="text-[11px] text-text-secondary">
+                        Date: {rcp.date}
+                        {rcp.method ? ` · Mode: ${rcp.method.replace(/_/g, ' ')}` : ''}
+                        {rcp.referenceNumber ? ` · Ref: ${rcp.referenceNumber}` : ''}
+                        {rcp.notes ? ` · ${rcp.notes}` : ''}
+                      </p>
+                    </div>
+                    <span className="font-mono font-bold text-text-primary">{money(rcp.amount)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
             <p className="text-text-secondary">
               This statement reflects current order records. Request an issued invoice or payment receipt from your studio.
             </p>

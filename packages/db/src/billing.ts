@@ -77,17 +77,20 @@ export async function issueBillingDocumentTransaction(input: IssueBillingInput):
     if (payment?.requiresConfirmation && (!input.receiptConfirmation?.confirmed || input.receiptConfirmation.amountMinor !== payment.amountMinor || !isBillingDate(input.receiptConfirmation.paymentDate))) {
       throw new Error('Confirm the actual payment amount and payment date before issuing its receipt.');
     }
+    const resolvedNotes = optional.notes || payment?.notes;
+    const resolvedMethod = optional.paymentMethod || payment?.paymentMethod;
+    const resolvedReference = optional.paymentReference || payment?.paymentReference;
     const document: BillingDocument = {
       schemaVersion: 1, id: identity, studioId: input.studioId, orderId: input.orderId, kind: input.kind,
       number, revision, sourceKey, sourceFingerprint: hash(fingerprint), issuedAt: now, issuedByUid: input.actorUid,
       status: 'ISSUED', issuer, customer, orderNumber: cleanText(order.orderNumber, 'Order number', 100), description,
       currency: 'INR', amountMinor: payment?.amountMinor ?? amounts.confirmed, paidMinor: amounts.paid,
       remainingMinor: amounts.remaining, overpaymentMinor: amounts.overpayment,
-      ...(optional.notes ? { notes: optional.notes } : {}),
+      ...(resolvedNotes ? { notes: resolvedNotes } : {}),
       ...(input.kind === 'INVOICE' && optional.dueDate ? { dueDate: optional.dueDate } : {}),
       ...(payment ? { paymentDate: payment.requiresConfirmation ? input.receiptConfirmation!.paymentDate : payment.paymentDate,
-        ...(optional.paymentMethod ? { paymentMethod: optional.paymentMethod } : {}),
-        ...(optional.paymentReference ? { paymentReference: optional.paymentReference } : {}) } : {}),
+        ...(resolvedMethod ? { paymentMethod: resolvedMethod } : {}),
+        ...(resolvedReference ? { paymentReference: resolvedReference } : {}) } : {}),
       ...(payment?.requiresConfirmation ? { receiptConfirmation: { ...input.receiptConfirmation!, confirmedAt: now, confirmedByUid: input.actorUid } } : {}),
       ...(input.replacementOf ? { replacementOf: input.replacementOf } : {}),
     };

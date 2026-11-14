@@ -1,5 +1,5 @@
 import "server-only";
-import { getStudioTimestampIST, toCustomerTrackingView } from "@focoman/domain";
+import { canCompleteOrder, getStudioTimestampIST, toCustomerTrackingView } from "@focoman/domain";
 import {
   getMembersByStudio,
   getMembershipByUidAndStudio,
@@ -100,6 +100,17 @@ export async function getOrderByPasskeyCore(passkey: string): Promise<{
       studio?.features,
       studio?.planInfo
     );
+    const hasOrderDriveReview =
+      order.hasDriveReviewEntitlement !== undefined
+        ? Boolean(
+            order.hasDriveReviewEntitlement ||
+              effectiveFeatures.driveReview ||
+              (order.driveDeliverables && order.driveDeliverables.length > 0)
+          )
+        : Boolean(
+            effectiveFeatures.driveReview ||
+              (order.driveDeliverables && order.driveDeliverables.length > 0)
+          );
     const view = toCustomerTrackingView(order, studio?.name || "Studio", tasks, {
       studioId: order.studioId,
       studioOwnerId,
@@ -108,6 +119,7 @@ export async function getOrderByPasskeyCore(passkey: string): Promise<{
       studioCity: studio?.city,
       studioPhone: studio?.ownerPhone,
       hasErp: effectiveFeatures.erp,
+      hasDriveReview: hasOrderDriveReview,
       canIssueBilling: Boolean(effectiveFeatures.reports),
       studioBillingProfile: studio?.billingProfile,
       staffEmails: Array.from(new Set(staffEmails)),
@@ -276,9 +288,20 @@ export async function updateOrderDriveDeliverablesCore(input: {
       return { success: false, error: "Order not found in authorized studio." };
     }
 
-    const { getEffectiveStudioTier } = await import("@/lib/proEntitlements");
-    const tier = getEffectiveStudioTier(studio?.ownerEmail || decoded.email, studio?.planInfo);
-    if (tier === "FREE" && input.deliverables.length > (existingOrder.driveDeliverables?.length || 0)) {
+    const effectiveFeatures = getEffectiveStudioFeatures(
+      studio?.ownerEmail || decoded.email,
+      studio?.features,
+      studio?.planInfo
+    );
+    const isOrderEntitledForDrive = Boolean(
+      effectiveFeatures.driveReview ||
+        existingOrder.hasDriveReviewEntitlement ||
+        (existingOrder.driveDeliverables && existingOrder.driveDeliverables.length > 0)
+    );
+    if (
+      !isOrderEntitledForDrive &&
+      input.deliverables.length > (existingOrder.driveDeliverables?.length || 0)
+    ) {
       return {
         success: false,
         error: "Google Drive Photo Preview & Selection is included in the ₹999/month and ₹1,999/month plans. Please upgrade your studio plan to add Drive deliverables.",
@@ -488,3 +511,214 @@ export async function submitCustomerDeliverableReviewCore(input: {
     };
   }
 }
+
+export async function submitCustomerTaskReviewCore(input: {
+  orderId: string;
+  taskId: string;
+  status: "COMPLETED" | "REWORK";
+  reworkNotes?: string;
+  passkey?: string;
+  idToken?: string;
+}): Promise<{
+  success: boolean;
+  taskStatus?: "COMPLETED" | "REWORK";
+  orderStatus?: Order["orderStatus"];
+  error?: string;
+}> {
+  try {
+    const order = await getOrderById(input.orderId);
+    if (!order) {
+      return { success: false, error: "Order not found." };
+    }
+
+    let actorName = order.customer.name || "Customer";
+    let isStudioStaff = false;
+    let isAuthorized = false;
+
+    if (input.idToken) {
+      try {
+        const decoded = await requireVerifiedUser(input.idToken);
+        const userEmail = decoded.email?.toLowerCase();
+        const customerEmail = order.customer.email?.toLowerCase();
+        const isPrimaryCustomer = Boolean(
+          (userEmail && customerEmail && userEmail === customerEmail) ||
+            (order.customer.uid && order.customer.uid === decoded.uid)
+        );
+        const isEditorCollaborator = Boolean(
+          userEmail &&
+            (order.collaborators || []).some(
+              (c) => c.email.toLowerCase() === userEmail && c.role === "EDITOR"
+            )
+        );
+        try {
+          const m = await getMembershipByUidAndStudio(decoded.uid, order.studioId);
+          if (m && m.status === "ACTIVE") isStudioStaff = true;
+        } catch {
+          // ignore
+        }
+        if (isPrimaryCustomer || isEditorCollaborator || isStudioStaff) {
+          isAuthorized = true;
+          actorName = decoded.name || decoded.email || actorName;
+        }
+      } catch {
+        // fallback to passkey check below if token check fails
+      }
+    }
+
+    if (!isAuthorized && input.passkey) {
+      const cleanInput = input.passkey.trim().toUpperCase();
+      const numericPinMatch =
+        order.trackingPasskey?.match(/\d{6}/g) ||
+        order.orderNumber.match(/\d{6}/g) ||
+        [];
+      const matchesPasskey =
+        (order.passkeyPin && cleanInput === order.passkeyPin.toUpperCase()) ||
+        (order.trackingPasskey &&
+          cleanInput === order.trackingPasskey.toUpperCase()) ||
+        cleanInput === order.orderNumber.toUpperCase() ||
+        cleanInput === order.id.toUpperCase() ||
+        numericPinMatch.some((pin) => cleanInput === pin);
+
+      if (matchesPasskey) {
+        isAuthorized = true;
+      }
+    }
+
+    if (!isAuthorized) {
+      return {
+        success: false,
+        error:
+          "Only the customer or an authorized editor can submit review approvals.",
+      };
+    }
+
+    const orderTasks = await getTasksByOrder(order.id);
+    const targetTask = orderTasks.find((t) => t.id === input.taskId);
+    if (!targetTask) {
+      return {
+        success: false,
+        error: "Production task not found for this order.",
+      };
+    }
+    if (targetTask.status !== "REVIEW") {
+      return {
+        success: false,
+        error: "This step is not currently awaiting customer review.",
+      };
+    }
+
+    const cleanNote = input.reworkNotes?.trim();
+    const updatedTask = await updateTask(targetTask.id, {
+      status: input.status,
+      ...(input.status === "COMPLETED"
+        ? { reworkNotes: undefined }
+        : { reworkNotes: cleanNote || "Customer requested rework." }),
+    });
+
+    if (!updatedTask) {
+      return { success: false, error: "Failed to update task status." };
+    }
+
+    const updatedTasksList = orderTasks.map((t) =>
+      t.id === updatedTask.id ? updatedTask : t
+    );
+    const isCompletable = canCompleteOrder(order.paymentStatus, updatedTasksList);
+    const nextOrderStatus: Order["orderStatus"] =
+      isCompletable && order.orderStatus !== "COMPLETED"
+        ? "COMPLETED"
+        : order.orderStatus;
+
+    const nowIso = new Date().toISOString();
+    const currentDeliverables = order.driveDeliverables || [];
+    const hasLinkedDeliverable = currentDeliverables.some(
+      (d) => d.linkedTaskId === targetTask.id
+    );
+    const updatedDeliverables = hasLinkedDeliverable
+      ? currentDeliverables.map((d) =>
+          d.linkedTaskId === targetTask.id
+            ? {
+                ...d,
+                clientApproved: input.status === "COMPLETED",
+                clientFeedback: cleanNote || undefined,
+                clientReviewedAt: nowIso,
+              }
+            : d
+        )
+      : currentDeliverables;
+
+    const reviewAudit: OrderAuditEntry = {
+      id: `audit_${Date.now()}_cust_task_review`,
+      timestamp: getStudioTimestampIST(new Date()),
+      actorName,
+      actorRole: isStudioStaff ? "Owner" : "Customer",
+      action:
+        input.status === "COMPLETED"
+          ? "Customer Approved Step"
+          : "Customer Requested Rework",
+      details: `${
+        input.status === "COMPLETED" ? "Approved and completed" : "Requested rework on"
+      } "${targetTask.title}" (${targetTask.serviceCategory})${
+        cleanNote ? ` — Note: "${cleanNote}"` : ""
+      }`,
+    };
+
+    await updateOrder(order.id, {
+      ...(nextOrderStatus !== order.orderStatus
+        ? { orderStatus: nextOrderStatus }
+        : {}),
+      ...(hasLinkedDeliverable ? { driveDeliverables: updatedDeliverables } : {}),
+      auditLog: [...(order.auditLog || []), reviewAudit],
+    });
+
+    void dispatchOrderStageWhatsAppNotification({
+      studioId: order.studioId,
+      order,
+      taskTitle: targetTask.title,
+      newStatus: input.status,
+    });
+
+    void (async () => {
+      try {
+        const studio = await getStudioBySlug(order.studioId);
+        if (!studio) return;
+        const details =
+          cleanNote ||
+          (input.status === "COMPLETED"
+            ? "Customer approved the step."
+            : "Customer requested rework.");
+        if (studio.ownerEmail) {
+          await sendPipelineStatusUpdateEmail({
+            toEmail: studio.ownerEmail,
+            studioName: studio.name,
+            studioSlug: studio.id,
+            recipientName: studio.ownerName || "Studio Owner",
+            orderId: order.id,
+            eventTitle: order.eventType,
+            taskTitle: targetTask.title,
+            newStatus: input.status,
+            details,
+          });
+        }
+      } catch (notificationError) {
+        console.warn(
+          "[submitCustomerTaskReview] Notification dispatch error:",
+          notificationError
+        );
+      }
+    })();
+
+    return {
+      success: true,
+      taskStatus: input.status,
+      orderStatus: nextOrderStatus,
+    };
+  } catch (err: unknown) {
+    console.error("[submitCustomerTaskReviewAction] Error:", err);
+    return {
+      success: false,
+      error:
+        err instanceof Error ? err.message : "Failed to submit customer review.",
+    };
+  }
+}
+

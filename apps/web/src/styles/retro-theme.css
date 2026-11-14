@@ -355,10 +355,10 @@ body.retro-ui {
   transition: background-color 0.1s ease, color 0.1s ease !important;
 }
 
-.retro-ui [role="menu"] button:hover,
-.retro-ui [role="menu"] a:hover,
-.retro-ui div[class*="absolute"][class*="shadow"] button:hover,
-.retro-ui div[class*="absolute"][class*="shadow"] a:hover {
+.retro-ui [role="menu"] button:not([class*="bg-brand-"]):hover,
+.retro-ui [role="menu"] a:not([class*="bg-brand-"]):hover,
+.retro-ui div[class*="absolute"][class*="shadow"] button:not([class*="bg-brand-"]):hover,
+.retro-ui div[class*="absolute"][class*="shadow"] a:not([class*="bg-brand-"]):hover {
   background-color: #FAF7F2 !important;
   color: #C2410C !important;
   transform: none !important;

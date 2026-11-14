@@ -43,6 +43,7 @@ import {
   getMySyncedOrdersCore,
   getOrderByPasskeyCore,
   submitCustomerDeliverableReviewCore,
+  submitCustomerTaskReviewCore,
   syncOrderToAccountCore,
   updateOrderCollaboratorsCore,
   updateOrderDriveDeliverablesCore,
@@ -337,6 +338,22 @@ export async function submitCustomerDeliverableReviewAction(input: {
   return submitCustomerDeliverableReviewCore(input);
 }
 
+export async function submitCustomerTaskReviewAction(input: {
+  orderId: string;
+  taskId: string;
+  status: "COMPLETED" | "REWORK";
+  reworkNotes?: string;
+  passkey?: string;
+  idToken?: string;
+}): Promise<{
+  success: boolean;
+  taskStatus?: "COMPLETED" | "REWORK";
+  orderStatus?: Order["orderStatus"];
+  error?: string;
+}> {
+  return submitCustomerTaskReviewCore(input);
+}
+
 export async function updateAssignmentCallTimeAction(input: {
   orderId: string;
   studioId: string;
@@ -347,4 +364,5 @@ export async function updateAssignmentCallTimeAction(input: {
 }): Promise<{ success: boolean; order?: Order; error?: string }> {
   return updateAssignmentCallTimeCore(input);
 }
+
 

@@ -569,7 +569,7 @@ export default function WorkspacesPage() {
                     </Link>
                     <Link
                       href="/track"
-                      className="rounded-xl border border-brand-blue-primary bg-brand-blue-primary px-3.5 py-2 text-xs font-bold text-white hover:bg-sky-600 transition shadow-xs"
+                      className="rounded-xl border border-brand-blue-primary bg-white px-3.5 py-2 text-xs font-bold text-brand-blue-primary hover:bg-blue-50 transition"
                     >
                       Track Order
                     </Link>

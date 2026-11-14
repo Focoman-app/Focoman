@@ -89,7 +89,7 @@ export default function OmsPage({
   const canExportOrders = effectiveFeatures.reports;
   const hasErp = effectiveFeatures.erp;
   const hasWhatsAppOperations = effectiveFeatures.whatsapp;
-  const hasDriveReview = Boolean(studio?.features?.driveReview);
+  const hasDriveReview = effectiveFeatures.driveReview;
   const [orders, setOrders] = useState<Order[]>([]);
   const [omsSection, setOmsSection] = useState<"ORDERS" | "LEADS">("ORDERS");
   const [leads, setLeads] = useState<StudioLead[]>([]);
@@ -159,6 +159,7 @@ export default function OmsPage({
 
   const [formError, setFormError] = useState<string | null>(null);
   const [newOrderForm, setNewOrderForm] = useState(DEFAULT_ORDER_FORM);
+  const [advanceProofFile, setAdvanceProofFile] = useState<File | null>(null);
   const [showServicesDropdown, setShowServicesDropdown] = useState(false);
   const [isUpdatingPayment, setIsUpdatingPayment] = useState(false);
   const [isSendingReminder, setIsSendingReminder] = useState(false);
@@ -416,6 +417,7 @@ export default function OmsPage({
       passkeyPin: Math.floor(100000 + Math.random() * 900000).toString(),
     });
     setSelectedPackageId("");
+    setAdvanceProofFile(null);
     setFormError(null);
     setShowServicesDropdown(false);
     setShowCustomerDropdown(false);
@@ -644,6 +646,31 @@ export default function OmsPage({
       return;
     }
 
+    let advanceProofUrl: string | undefined;
+    if (
+      parsedAdvance > 0 &&
+      newOrderForm.advanceMethod === "UPI" &&
+      advanceProofFile
+    ) {
+      try {
+        const paymentId = `adv_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+        advanceProofUrl = await uploadPaymentProof({
+          studioId: studioSlug,
+          orderId: "advance",
+          paymentId,
+          file: advanceProofFile,
+        });
+      } catch (error) {
+        setFormError(
+          error instanceof Error
+            ? error.message
+            : "Failed to upload advance payment proof."
+        );
+        setIsSubmitting(false);
+        return;
+      }
+    }
+
     const res = await createOrderAction({
       idToken: token,
       studioId: studioSlug,
@@ -668,12 +695,26 @@ export default function OmsPage({
       estimatedPrice: parsedFinalPrice,
       finalConfirmedPrice: parsedFinalPrice,
       advanceAmount: parsedAdvance,
+      ...(parsedAdvance > 0
+        ? {
+            advanceMethod: newOrderForm.advanceMethod,
+            ...(newOrderForm.advanceMethod === "UPI" &&
+            newOrderForm.advanceReference.trim()
+              ? { advanceReference: newOrderForm.advanceReference.trim() }
+              : {}),
+            ...(advanceProofUrl ? { advanceProofUrl } : {}),
+            ...(newOrderForm.advanceNotes.trim()
+              ? { advanceNotes: newOrderForm.advanceNotes.trim() }
+              : {}),
+          }
+        : {}),
     });
 
     setIsSubmitting(false);
 
     if (res.success && res.order) {
       setShowCreateModal(false);
+      setAdvanceProofFile(null);
       setNewOrderForm({
         ...DEFAULT_ORDER_FORM,
         passkeyPin: Math.floor(100000 + Math.random() * 900000).toString(),
@@ -692,7 +733,11 @@ export default function OmsPage({
     }
   };
 
-  const handleUpdateTaskStatus = async (taskId: string, newStatus: TaskStatus) => {
+  const handleUpdateTaskStatus = async (
+    taskId: string,
+    newStatus: TaskStatus,
+    reworkNotes?: string
+  ) => {
     const token = (await getIdToken(false)) ?? workspaceToken;
     if (!selected || !token) return;
     const res = await updateTaskStatusAction({
@@ -701,6 +746,7 @@ export default function OmsPage({
       taskId,
       orderId: selected.id,
       status: newStatus,
+      ...(reworkNotes !== undefined ? { reworkNotes } : {}),
     });
     if (res.success && res.task) {
       setSelectedTasks((prev) =>
@@ -1657,6 +1703,7 @@ export default function OmsPage({
             tasks={selectedTasks}
             variant="oms"
             onUpdateTaskStatus={handleUpdateTaskStatus}
+            studioOwnerName={studio?.ownerName || workspaceUser?.displayName || "Studio Owner"}
             allSelectableCrew={allSelectableCrew}
             temporaryCrewList={temporaryCrewList}
             onSaveServiceCrew={handleSaveServiceCrewAssignments}
@@ -1665,7 +1712,12 @@ export default function OmsPage({
             onMarkOfflineReviewReady={handleMarkTaskOfflineReviewReady}
             onSaveSchedule={handleSaveOrderSchedule}
             busyEventDates={orders
-              .filter((order) => !order.isDeleted && order.orderStatus !== "CANCELLED")
+              .filter(
+                (order) =>
+                  order.id !== selected.id &&
+                  !order.isDeleted &&
+                  order.orderStatus !== "CANCELLED"
+              )
               .flatMap((order) => {
                 const main =
                   order.eventDates && order.eventDates.length > 0
@@ -1762,8 +1814,10 @@ export default function OmsPage({
             />
           )}
 
-          {/* 5B. Google Drive Deliverables & Client Preview (Drive Review only) */}
-          {hasDriveReview && (
+          {/* 5B. Google Drive Deliverables & Client Preview (Starter/Pro or Orders Registered During Entitlement Period) */}
+          {(hasDriveReview ||
+            Boolean(selected.hasDriveReviewEntitlement) ||
+            Boolean(selected.driveDeliverables && selected.driveDeliverables.length > 0)) && (
             <GoogleDriveDeliverablesSection
               orderId={selected.id}
               deliverables={selected.driveDeliverables || []}
@@ -1875,6 +1929,8 @@ export default function OmsPage({
           .filter(Boolean)}
         hasCrm={hasCrm}
         hasWhatsAppOperations={hasWhatsAppOperations}
+        advanceProofFile={advanceProofFile}
+        onChangeAdvanceProofFile={setAdvanceProofFile}
       />
 
       {/* In-App Cancellation, Soft-Delete & Notice Dialogs */}

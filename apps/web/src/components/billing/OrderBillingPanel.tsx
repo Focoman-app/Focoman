@@ -185,10 +185,33 @@ export function OrderBillingPanel({
                   {context.sources.map((s) => (
                     <option key={s.key} value={s.key}>
                       {s.label} receipt · {money(s.amountMinor)}
+                      {s.paymentMethod ? ` · ${s.paymentMethod.replace(/_/g, ' ')}` : ''}
+                      {s.paymentReference ? ` (Ref: ${s.paymentReference})` : ''}
                     </option>
                   ))}
                 </select>
               </label>
+              {source && (source.paymentMethod || source.paymentReference || source.notes) && (
+                <div className="rounded-xl border border-border-default bg-surface-app p-2.5 text-text-secondary space-y-0.5">
+                  {source.paymentMethod && (
+                    <p>
+                      <span className="font-semibold text-text-primary">Payment Mode:</span>{' '}
+                      {source.paymentMethod.replace(/_/g, ' ')}
+                    </p>
+                  )}
+                  {source.paymentReference && (
+                    <p>
+                      <span className="font-semibold text-text-primary">Transaction Reference:</span>{' '}
+                      <span className="font-mono">{source.paymentReference}</span>
+                    </p>
+                  )}
+                  {source.notes && (
+                    <p>
+                      <span className="font-semibold text-text-primary">Payment Note:</span> {source.notes}
+                    </p>
+                  )}
+                </div>
+              )}
               <p className="text-text-secondary">
                 Recorded paid: {money(context.financials.paid)} · Balance: {money(context.financials.remaining)}
                 {context.financials.overpayment > 0 ? ` · Overpayment: ${money(context.financials.overpayment)}` : ''}
@@ -249,8 +272,10 @@ export function OrderBillingPanel({
                   source: source?.source,
                   expectedSourceFingerprint: source?.fingerprint || context.invoiceFingerprint,
                   optionalFields: {
-                    notes: notes || undefined,
+                    notes: notes || source?.notes || undefined,
                     dueDate: selection === 'invoice' ? dueDate || undefined : undefined,
+                    paymentMethod: source?.paymentMethod || undefined,
+                    paymentReference: source?.paymentReference || undefined,
                   },
                   receiptConfirmation: source?.requiresConfirmation
                     ? { confirmed: true, amountMinor: source.amountMinor, paymentDate }
@@ -289,9 +314,18 @@ export function OrderBillingPanel({
             )}
             {visibleDocuments.map((doc) => (
               <div key={doc.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border-default bg-surface-app p-3">
-                <span className="font-semibold text-text-primary">
-                  {doc.number} · {doc.status} · {money(doc.amountMinor)}
-                </span>
+                <div className="space-y-0.5">
+                  <span className="font-semibold text-text-primary block">
+                    {doc.number} · {doc.status} · {money(doc.amountMinor)}
+                  </span>
+                  {(doc.paymentMethod || doc.paymentReference) && (
+                    <span className="text-[11px] text-text-secondary block">
+                      {doc.paymentMethod ? `Mode: ${doc.paymentMethod.replace(/_/g, ' ')}` : ''}
+                      {doc.paymentMethod && doc.paymentReference ? ' · ' : ''}
+                      {doc.paymentReference ? `Ref: ${doc.paymentReference}` : ''}
+                    </span>
+                  )}
+                </div>
                 <div className="flex items-center gap-2">
                   <button disabled={busy} className={control} onClick={() => run(() => download(doc))}>
                     Download PDF

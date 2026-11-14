@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import type { Order, OrderInstallment, PaymentStatus } from "@focoman/types";
 import { calculateOrderPaymentBreakdown } from "@focoman/domain";
 
@@ -100,6 +101,132 @@ export function OmsPaymentSummarySection({
     onOpenReceipt?.(receiptKey);
   };
 
+  const today = new Date();
+  const todayValue = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+
+  const [activeDatePicker, setActiveDatePicker] = useState<"advance" | "installment" | null>(null);
+  const [calendarMonth, setCalendarMonth] = useState(() => {
+    const base = editAdvanceDate ? new Date(`${editAdvanceDate}T00:00:00`) : new Date();
+    return new Date(base.getFullYear(), base.getMonth(), 1);
+  });
+
+  const openPaymentCalendar = (target: "advance" | "installment", currentVal: string) => {
+    if (activeDatePicker === target) {
+      setActiveDatePicker(null);
+      return;
+    }
+    const base = currentVal ? new Date(`${currentVal}T00:00:00`) : new Date();
+    if (!Number.isNaN(base.getTime())) {
+      setCalendarMonth(new Date(base.getFullYear(), base.getMonth(), 1));
+    }
+    setActiveDatePicker(target);
+  };
+
+  const renderPaymentDateCalendar = (
+    selectedDate: string,
+    onSelectDate: (iso: string) => void,
+    onClose: () => void
+  ) => {
+    const year = calendarMonth.getFullYear();
+    const month = calendarMonth.getMonth();
+    const firstWeekday = new Date(year, month, 1).getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const cells = [
+      ...Array.from({ length: firstWeekday }, () => null),
+      ...Array.from({ length: daysInMonth }, (_, idx) => {
+        const day = idx + 1;
+        const iso = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+        return { day, iso, isToday: iso === todayValue };
+      }),
+    ];
+
+    return (
+      <div
+        role="dialog"
+        aria-label="Choose payment date"
+        className="mt-1.5 w-64 rounded-2xl border border-border-default bg-white p-3 shadow-xl z-30"
+      >
+        <div className="mb-2 flex items-center justify-between text-[10px] font-bold text-text-secondary">
+          <button
+            type="button"
+            onClick={() => setCalendarMonth(new Date(year, month - 1, 1))}
+            className="rounded px-1.5 py-0.5 hover:bg-surface-app"
+            aria-label="Previous month"
+          >
+            ‹
+          </button>
+          <span>
+            {calendarMonth.toLocaleDateString("en-IN", {
+              month: "long",
+              year: "numeric",
+            })}
+          </span>
+          <button
+            type="button"
+            onClick={() => setCalendarMonth(new Date(year, month + 1, 1))}
+            className="rounded px-1.5 py-0.5 hover:bg-surface-app"
+            aria-label="Next month"
+          >
+            ›
+          </button>
+        </div>
+        <div className="grid grid-cols-7 gap-1 text-center text-[9px] font-bold text-text-tertiary">
+          {["S", "M", "T", "W", "T", "F", "S"].map((d, idx) => (
+            <span key={`${d}-${idx}`}>{d}</span>
+          ))}
+        </div>
+        <div className="mt-1 grid grid-cols-7 gap-1">
+          {cells.map((cell, index) =>
+            cell ? (
+              <button
+                key={cell.iso}
+                type="button"
+                onClick={() => {
+                  onSelectDate(cell.iso);
+                  onClose();
+                }}
+                title={cell.isToday ? "Today" : `Select ${cell.iso}`}
+                className={`relative flex h-8 flex-col items-center justify-center rounded-lg text-[10px] font-semibold transition ${
+                  selectedDate === cell.iso
+                    ? "!bg-brand-blue-primary !text-white ring-2 ring-brand-blue-primary/30 hover:!bg-brand-blue-primary hover:!text-white"
+                    : cell.isToday
+                    ? "bg-brand-blue-50 text-brand-blue-primary ring-1 ring-brand-blue-soft hover:bg-brand-blue-100"
+                    : "text-text-primary hover:bg-surface-app"
+                }`}
+              >
+                <span>{cell.day}</span>
+                {cell.isToday && (
+                  <span className="text-[7px] leading-none">Today</span>
+                )}
+              </button>
+            ) : (
+              <span key={`empty-${index}`} />
+            )
+          )}
+        </div>
+        <div className="mt-2 pt-2 border-t border-border-default flex items-center justify-between">
+          <button
+            type="button"
+            onClick={() => {
+              onSelectDate(todayValue);
+              onClose();
+            }}
+            className="rounded px-2 py-0.5 text-[10px] font-semibold text-brand-blue-primary hover:bg-blue-50"
+          >
+            Today ({todayValue})
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg bg-brand-blue-primary px-2.5 py-0.5 text-[10px] font-bold text-white"
+          >
+            Done
+          </button>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div>
       <div className="flex items-center justify-between">
@@ -196,15 +323,25 @@ export function OmsPaymentSummarySection({
               <div className="flex justify-between items-start">
                 <div>
                   <span className="text-text-secondary font-medium">Advance Received:</span>
-                  <div className="flex items-center gap-1 mt-0.5">
-                    <span className="text-[10px] text-text-tertiary">Recorded on:</span>
-                    <input
-                      type="date"
-                      value={editAdvanceDate}
-                      onChange={(e) => onChangeEditAdvanceDate(e.target.value)}
-                      className="rounded border border-border-default bg-white px-1 py-0.5 text-[10px] text-text-secondary focus:outline-none focus:border-brand-blue-primary"
-                      title="Date advance payment was recorded"
-                    />
+                  <div className="relative">
+                    <div className="flex items-center gap-1 mt-0.5">
+                      <span className="text-[10px] text-text-tertiary">Recorded on:</span>
+                      <button
+                        type="button"
+                        onClick={() => openPaymentCalendar("advance", editAdvanceDate)}
+                        className="inline-flex items-center gap-1.5 rounded border border-border-default bg-white px-2 py-0.5 text-[10px] font-semibold text-text-primary hover:border-brand-blue-primary"
+                        title="Date advance payment was recorded"
+                      >
+                        <span>{editAdvanceDate || todayValue}</span>
+                        <span className="text-[9px] font-bold text-brand-blue-primary">Calendar</span>
+                      </button>
+                    </div>
+                    {activeDatePicker === "advance" &&
+                      renderPaymentDateCalendar(
+                        editAdvanceDate || todayValue,
+                        onChangeEditAdvanceDate,
+                        () => setActiveDatePicker(null)
+                      )}
                   </div>
                 </div>
                 <div className="flex items-center gap-1.5">
@@ -325,18 +462,27 @@ export function OmsPaymentSummarySection({
                             autoFocus
                           />
                         </div>
-                        <div className="w-36">
+                        <div className="relative w-40">
                           <label className="text-[10px] font-bold text-text-secondary block mb-0.5">
                             Recorded on Date
                           </label>
-                          <input
-                            type="date"
-                            value={newInstallmentDate}
-                            onChange={(e) =>
-                              onChangeNewInstallmentDate(e.target.value)
-                            }
-                            className="w-full rounded-lg border border-border-default bg-white px-2 py-1 text-xs text-text-primary focus:outline-none focus:border-brand-blue-primary focus:ring-1 focus:ring-brand-blue-primary"
-                          />
+                          <button
+                            type="button"
+                            onClick={() => openPaymentCalendar("installment", newInstallmentDate)}
+                            className="flex w-full items-center justify-between rounded-lg border border-border-default bg-white px-2.5 py-1 text-xs font-semibold text-text-primary hover:border-brand-blue-primary"
+                          >
+                            <span>{newInstallmentDate || todayValue}</span>
+                            <span className="text-[9px] font-bold text-brand-blue-primary ml-1">Calendar</span>
+                          </button>
+                          {activeDatePicker === "installment" && (
+                            <div className="absolute right-0 top-full z-30">
+                              {renderPaymentDateCalendar(
+                                newInstallmentDate || todayValue,
+                                onChangeNewInstallmentDate,
+                                () => setActiveDatePicker(null)
+                              )}
+                            </div>
+                          )}
                         </div>
                       </div>
 
@@ -514,6 +660,15 @@ export function OmsPaymentSummarySection({
                     <span className="text-text-secondary">Advance Received:</span>
                     <div className="text-[10px] text-text-tertiary">
                       Recorded on {breakdown.advanceDate || "-"}
+                      {breakdown.advanceMethod
+                        ? ` · ${breakdown.advanceMethod.replace("_", " ")}`
+                        : ""}
+                      {breakdown.advanceReference
+                        ? ` · Ref: ${breakdown.advanceReference}`
+                        : ""}
+                      {breakdown.advanceNotes
+                        ? ` · ${breakdown.advanceNotes}`
+                        : ""}
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
@@ -547,6 +702,8 @@ export function OmsPaymentSummarySection({
                             </span>
                             <span className="text-[10px] text-text-tertiary ml-1.5">
                               Recorded on {inst.date}
+                              {inst.method ? ` · ${inst.method.replace("_", " ")}` : ""}
+                              {inst.referenceNumber ? ` · Ref: ${inst.referenceNumber}` : ""}
                               {inst.notes ? ` · ${inst.notes}` : ""}
                             </span>
                           </div>

@@ -10,6 +10,7 @@ import {
   updateOrderCollaboratorsAction,
   checkIsStudioStaffAction,
   submitCustomerDeliverableReviewAction,
+  submitCustomerTaskReviewAction,
   updateOrderDriveDeliverablesAction,
 } from "@/actions/orderActions";
 import { User } from "firebase/auth";
@@ -69,10 +70,12 @@ export function TrackOrderClient({ view, rawIdentifier }: TrackOrderClientProps)
   const [collaboratorError, setCollaboratorError] = useState<string | null>(null);
   const [showShareModal, setShowShareModal] = useState(false);
 
-  // Live Google Drive Deliverables & Billing Modal State
+  // Live Google Drive Deliverables, Tasks, Order Status & Billing Modal State
   const [driveDeliverables, setDriveDeliverables] = useState<OrderDriveDeliverable[]>(
     order.driveDeliverables || []
   );
+  const [tasksState, setTasksState] = useState(tasks);
+  const [orderStatusState, setOrderStatusState] = useState<OrderStatus>(order.orderStatus);
   const [billingModalState, setBillingModalState] = useState<{
     isOpen: boolean;
     tab: "INVOICE" | "RECEIPT";
@@ -364,6 +367,22 @@ export function TrackOrderClient({ view, rawIdentifier }: TrackOrderClientProps)
         });
         if (res.success && res.deliverables) {
           setDriveDeliverables(res.deliverables);
+          const targetDeliv = res.deliverables.find((d) => d.id === input.deliverableId);
+          if (targetDeliv?.linkedTaskId) {
+            setTasksState((prev) =>
+              prev.map((t) =>
+                t.id === targetDeliv.linkedTaskId
+                  ? {
+                      ...t,
+                      status: input.approved ? "COMPLETED" : "REWORK",
+                      reworkNotes: input.approved
+                        ? undefined
+                        : input.feedback?.trim() || "Customer requested corrections.",
+                    }
+                  : t
+              )
+            );
+          }
         }
         return { success: res.success, error: res.error };
       } catch (err) {
@@ -374,6 +393,53 @@ export function TrackOrderClient({ view, rawIdentifier }: TrackOrderClientProps)
       }
     },
     [currentUser, order.id]
+  );
+
+  const handleCustomerReviewTask = useCallback(
+    async (
+      taskId: string,
+      decision: "COMPLETED" | "REWORK",
+      reworkNotes?: string
+    ) => {
+      const token = currentUser ? await currentUser.getIdToken() : undefined;
+      const passkeyToken =
+        enteredPasskey.trim() ||
+        order.trackingPasskey ||
+        order.passkeyPin ||
+        rawIdentifier;
+
+      const res = await submitCustomerTaskReviewAction({
+        orderId: order.id,
+        taskId,
+        status: decision,
+        reworkNotes,
+        passkey: passkeyToken,
+        idToken: token,
+      });
+
+      if (!res.success) {
+        throw new Error(res.error || "Failed to update task review status.");
+      }
+
+      setTasksState((prev) =>
+        prev.map((t) =>
+          t.id === taskId
+            ? {
+                ...t,
+                status: decision,
+                reworkNotes:
+                  decision === "COMPLETED"
+                    ? undefined
+                    : reworkNotes?.trim() || "Customer requested rework.",
+              }
+            : t
+        )
+      );
+      if (res.orderStatus) {
+        setOrderStatusState(res.orderStatus);
+      }
+    },
+    [currentUser, enteredPasskey, order.id, order.passkeyPin, order.trackingPasskey, rawIdentifier]
   );
 
   const handleSaveStaffDeliverables = useCallback(
@@ -451,7 +517,7 @@ export function TrackOrderClient({ view, rawIdentifier }: TrackOrderClientProps)
   const canEdit = Boolean(isCustomerOwnerMatch || isStaffMatch || collaboratorMatch?.role === "EDITOR");
 
   const signInRedirectUrl = `/sign-in?redirect=${encodeURIComponent(`/track/${rawIdentifier}`)}&autoSync=true`;
-  const isCompleted = order.orderStatus === "COMPLETED";
+  const isCompleted = orderStatusState === "COMPLETED";
 
   // =========================================================================
   // 1. LOCKED STATE: Show Email Auth (No PIN) OR PIN Auth (If no customer email)
@@ -847,10 +913,10 @@ export function TrackOrderClient({ view, rawIdentifier }: TrackOrderClientProps)
               <div className="text-left sm:text-right">
                 <div className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-bold shadow-xs ${
                   isCompleted ? "bg-emerald-100 text-emerald-800 border border-emerald-300" : 
-                  order.orderStatus === "POST_EVENT_IN_PROGRESS" ? "bg-amber-100 text-amber-800 border border-amber-300" :
+                  orderStatusState === "POST_EVENT_IN_PROGRESS" ? "bg-amber-100 text-amber-800 border border-amber-300" :
                   "bg-sky-100 text-sky-800 border border-sky-300"
                 }`}>
-                  {STATUS_LABELS[order.orderStatus]}
+                  {STATUS_LABELS[orderStatusState]}
                 </div>
               </div>
             </div>
@@ -938,6 +1004,8 @@ export function TrackOrderClient({ view, rawIdentifier }: TrackOrderClientProps)
                 </span>
                 <span className="mt-1 block text-[11px] text-emerald-700 tabular-nums">
                   Advance: ₹{Math.round(order.advanceAmount).toLocaleString("en-IN")}
+                  {order.advanceMethod ? ` (${order.advanceMethod.replace("_", " ")})` : ""}
+                  {order.advanceReference ? ` · Ref: ${order.advanceReference}` : ""}
                   {order.installments && order.installments.length > 0
                     ? ` + ${order.installments.length} Installment(s)`
                     : ""}
@@ -952,15 +1020,17 @@ export function TrackOrderClient({ view, rawIdentifier }: TrackOrderClientProps)
             </div>
           </div>
 
-          {/* Google Drive Deliverables & In-App Preview */}
-          <GoogleDriveDeliverablesSection
-            orderId={order.id}
-            deliverables={driveDeliverables}
-            canManageLinks={isStaffMatch}
-            canSubmitClientReview={canEdit}
-            onSaveDeliverables={isStaffMatch ? handleSaveStaffDeliverables : undefined}
-            onSubmitClientReview={canEdit ? handleSubmitDeliverableReview : undefined}
-          />
+          {/* Google Drive Deliverables & In-App Preview (Starter/Pro or Orders Registered During Entitlement Period) */}
+          {(order.hasDriveReview || driveDeliverables.length > 0) && (
+            <GoogleDriveDeliverablesSection
+              orderId={order.id}
+              deliverables={driveDeliverables}
+              canManageLinks={isStaffMatch}
+              canSubmitClientReview={canEdit}
+              onSaveDeliverables={isStaffMatch ? handleSaveStaffDeliverables : undefined}
+              onSubmitClientReview={canEdit ? handleSubmitDeliverableReview : undefined}
+            />
+          )}
 
           {/* Order Lifecycle Pipeline — Unified Vertical Workflow */}
           <div className="rounded-3xl border border-border-default bg-white p-6 shadow-sm sm:p-8 space-y-6">
@@ -968,29 +1038,33 @@ export function TrackOrderClient({ view, rawIdentifier }: TrackOrderClientProps)
               <div>
                 <h2 className="text-lg font-bold text-text-primary">Order Lifecycle Pipeline</h2>
                 <p className="text-xs text-text-tertiary mt-0.5">
-                  Live end-to-end vertical workflow tracking pre-event preparation, shoot execution, and post-event milestones
+                  {order.hasErp
+                    ? "Live end-to-end vertical workflow tracking event schedule, pre-event preparation, and post-event milestones"
+                    : "Live end-to-end vertical workflow tracking event schedule, post-event production, and final delivery milestones"}
                 </p>
               </div>
               <div className="self-start sm:self-center">
                 <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold ${
-                  order.orderStatus === "COMPLETED"
+                  orderStatusState === "COMPLETED"
                     ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
-                    : order.orderStatus === "POST_EVENT_IN_PROGRESS"
+                    : orderStatusState === "POST_EVENT_IN_PROGRESS"
                     ? "bg-blue-100 text-blue-800 border border-blue-200"
-                    : order.orderStatus === "CANCELLED"
+                    : orderStatusState === "CANCELLED"
                     ? "bg-rose-100 text-rose-800 border border-rose-200"
                     : "bg-amber-100 text-amber-800 border border-amber-200"
                 }`}>
-                  {STATUS_LABELS[order.orderStatus]}
+                  {STATUS_LABELS[orderStatusState]}
                 </span>
               </div>
             </div>
 
             <OrderVerticalWorkflow
-              order={order}
-              tasks={tasks}
+              order={{ ...order, orderStatus: orderStatusState }}
+              tasks={tasksState}
               variant="tracking"
               hasErp={Boolean(order.hasErp)}
+              canCustomerAct={Boolean(canEdit || (!hasCustomerEmail && isUnlocked))}
+              onCustomerReviewTask={handleCustomerReviewTask}
             />
           </div>
         </div>
@@ -1018,6 +1092,10 @@ export function TrackOrderClient({ view, rawIdentifier }: TrackOrderClientProps)
               finalConfirmedPrice: order.totalAmount,
               advanceAmount: order.advanceAmount,
               advanceDate: order.advanceDate,
+              advanceMethod: order.advanceMethod,
+              advanceReference: order.advanceReference,
+              advanceProofUrl: order.advanceProofUrl,
+              advanceNotes: order.advanceNotes,
               remainingAmount: order.remainingAmount,
               installments: order.installments || [],
             },

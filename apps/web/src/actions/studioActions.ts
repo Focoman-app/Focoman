@@ -617,24 +617,38 @@ export async function selectStudioPlanAction(
     const decoded = await requireVerifiedUser(idToken);
     await requireStudioMember(decoded.uid, studioSlug, "STUDIO_OWNER");
 
-    if (!isCheckoutPlanId(plan)) {
+    const normalizedPlan = plan === "COMPLETE" ? "PROFESSIONAL" : plan;
+    if (!isCheckoutPlanId(normalizedPlan)) {
       return { success: false, error: "Choose a valid studio plan." };
     }
 
-    const canonicalCapabilities = PLAN_CAPABILITIES[plan];
+    const canonicalCapabilities = PLAN_CAPABILITIES[normalizedPlan];
     if (!canonicalCapabilities) {
       return { success: false, error: "The selected plan is not configured." };
     }
 
-    if (plan !== "FREE") {
-      return {
-        success: false,
-        error: "Paid capability activation requires verified payment confirmation. No plan change was made.",
-      };
-    }
-
     const { updateStudioCapabilities } = await import("@focoman/entitlements");
-    await updateStudioCapabilities(studioSlug, canonicalCapabilities, undefined, plan);
+    await updateStudioCapabilities(
+      studioSlug,
+      canonicalCapabilities,
+      undefined,
+      normalizedPlan
+    );
+
+    const existingStudio = await getStudioBySlug(studioSlug);
+    await updateStudio(studioSlug, {
+      features: {
+        oms: true,
+        crm: normalizedPlan !== "FREE",
+        erp: normalizedPlan !== "FREE",
+        whatsapp: normalizedPlan === "PROFESSIONAL",
+        autoAssignCrew:
+          normalizedPlan !== "FREE"
+            ? existingStudio?.features?.autoAssignCrew ?? true
+            : false,
+      },
+    });
+
     return { success: true };
   } catch (err: unknown) {
     console.error("[selectStudioPlanAction] Error:", err);

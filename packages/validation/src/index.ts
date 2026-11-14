@@ -41,7 +41,11 @@ export const CreateOrderSchema = z.object({
   packages: z.array(z.string()).optional(),
   estimatedPrice: z.number().nonnegative(),
   finalConfirmedPrice: z.number().nonnegative(),
-  advanceAmount: z.number().nonnegative()
+  advanceAmount: z.number().nonnegative(),
+  advanceMethod: z.enum(['CASH', 'UPI', 'BANK_TRANSFER']).optional(),
+  advanceReference: z.string().trim().max(200).optional().or(z.literal('')),
+  advanceProofUrl: z.string().url().optional().or(z.literal('')),
+  advanceNotes: z.string().trim().max(50).optional().or(z.literal(''))
 }).refine(data => data.advanceAmount <= data.finalConfirmedPrice, {
   message: 'Advance amount cannot exceed the confirmed total price.',
   path: ['advanceAmount']
@@ -91,6 +95,10 @@ export const UpdatePaymentSchema = z.object({
   finalConfirmedPrice: z.number().nonnegative().optional(),
   advanceAmount: z.number().nonnegative().optional(),
   advanceDate: z.string().optional(),
+  advanceMethod: z.enum(['CASH', 'UPI', 'BANK_TRANSFER']).optional(),
+  advanceReference: z.string().trim().max(200).optional().or(z.literal('')),
+  advanceProofUrl: z.string().url().optional().or(z.literal('')),
+  advanceNotes: z.string().trim().max(50).optional().or(z.literal('')),
   installments: z.array(OrderInstallmentSchema).optional(),
   paymentStatus: z.enum([
     'PENDING',

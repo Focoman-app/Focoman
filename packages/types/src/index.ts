@@ -251,6 +251,7 @@ export interface CustomerTrackingView {
     studioCity?: string;
     studioPhone?: string;
     hasErp?: boolean;
+    hasDriveReview?: boolean;
     canIssueBilling?: boolean;
     studioBillingProfile?: StudioBillingProfile;
     customerName: string;
@@ -266,9 +267,14 @@ export interface CustomerTrackingView {
     callTime?: string;
     services: string[];
     packages?: string[];
+    assignedResources?: ResourceAssignment[];
     totalAmount: number;
     advanceAmount: number;
     advanceDate?: string;
+    advanceMethod?: PaymentMethod;
+    advanceReference?: string;
+    advanceProofUrl?: string;
+    advanceNotes?: string;
     amountPaid?: number;
     remainingAmount: number;
     installments?: OrderInstallment[];
@@ -282,10 +288,14 @@ export interface CustomerTrackingView {
     createdAt?: string;
   };
   tasks: Array<{
+    id: string;
     title: string;
     serviceCategory: string;
     status: TaskStatus;
     sequenceOrder: number;
+    assignedMemberId?: string;
+    assignedMemberName?: string;
+    reworkNotes?: string;
   }>;
 }
 
@@ -533,6 +543,10 @@ export interface OrderPricing {
   finalConfirmedPrice: number;
   advanceAmount: number;
   advanceDate?: string;
+  advanceMethod?: PaymentMethod;
+  advanceReference?: string;
+  advanceProofUrl?: string;
+  advanceNotes?: string;
   remainingAmount: number;
   previousAdvanceAmount?: number;
   installments?: OrderInstallment[];
@@ -582,6 +596,7 @@ export interface Order extends SoftDeletable {
   notifySms?: boolean;
   notifyEmail?: boolean;
   collaborators?: OrderCollaborator[];
+  hasDriveReviewEntitlement?: boolean;
   driveDeliverables?: OrderDriveDeliverable[];
   createdBy?: string;
   createdByRole?: string;

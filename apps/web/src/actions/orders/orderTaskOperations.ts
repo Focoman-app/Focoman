@@ -181,6 +181,35 @@ export async function updateTaskStatusCore(rawInput: unknown): Promise<{
     let newOrderStatus: OrderStatus | undefined = undefined;
 
     if (order) {
+      const isOwner = membership.role === "STUDIO_OWNER";
+      const isOnBehalfOfCustomer =
+        isOwner &&
+        existingTask.status === "REVIEW" &&
+        (validated.status === "COMPLETED" || validated.status === "REWORK");
+      const assignedName = (existingTask.assignedMemberName || "").trim();
+      const assignedId = (existingTask.assignedMemberId || "").trim();
+      const isAssignedToCrewMember = Boolean(
+        assignedName &&
+          assignedId &&
+          assignedId !== "unassigned" &&
+          !assignedId.startsWith("owner-") &&
+          assignedId !== decoded.uid &&
+          !assignedName.toLowerCase().includes("(owner)") &&
+          assignedName.toLowerCase() !== "unassigned crew" &&
+          assignedName.toLowerCase() !== (decoded.name || "").trim().toLowerCase()
+      );
+      const isOnBehalfOfMember =
+        isOwner && !isOnBehalfOfCustomer && isAssignedToCrewMember;
+
+      const onBehalfSuffix = isOnBehalfOfCustomer
+        ? " (on behalf of customer)"
+        : isOnBehalfOfMember
+        ? ` (on behalf of ${assignedName})`
+        : "";
+      const noteSuffix = validated.reworkNotes?.trim()
+        ? ` — Note: "${validated.reworkNotes.trim()}"`
+        : "";
+
       const taskAudit: OrderAuditEntry = {
         id: `audit_${Date.now()}_task`,
         timestamp: getStudioTimestampIST(new Date()),
@@ -189,9 +218,15 @@ export async function updateTaskStatusCore(rawInput: unknown): Promise<{
           decoded.email ||
           existingTask.assignedMemberName ||
           "Crew Member",
-        actorRole: membership.role === "STUDIO_OWNER" ? "Owner" : "Member",
-        action: "Task Status Updated",
-        details: `Updated task "${existingTask.title}" (${existingTask.serviceCategory}) status to ${validated.status}`,
+        actorRole: isOwner ? "Owner" : "Member",
+        action: isOnBehalfOfCustomer
+          ? validated.status === "COMPLETED"
+            ? "Task Approved (On Behalf of Customer)"
+            : "Task Rework Requested (On Behalf of Customer)"
+          : isOnBehalfOfMember
+          ? `Task Status Updated (On Behalf of ${assignedName})`
+          : "Task Status Updated",
+        details: `Updated task "${existingTask.title}" (${existingTask.serviceCategory}) status to ${validated.status}${onBehalfSuffix}${noteSuffix}`,
       };
 
       const allTasks = await getTasksByOrder(validated.orderId);

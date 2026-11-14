@@ -59,6 +59,19 @@ function isCheckoutPlanId(value: string | null): value is CheckoutPlanId {
   return value === "FREE" || value === "STARTER" || value === "PROFESSIONAL";
 }
 
+function resolveCheckoutPlanParam(
+  planParam: string | null,
+  upgradeParam: string | null
+): CheckoutPlanId | null {
+  const clean = planParam?.toUpperCase() ?? null;
+  if (isCheckoutPlanId(clean)) return clean;
+  if (clean === "COMPLETE") return "PROFESSIONAL";
+  const upgrade = upgradeParam?.toLowerCase() ?? null;
+  if (upgrade === "reports" || upgrade === "whatsapp") return "PROFESSIONAL";
+  if (upgrade === "erp" || upgrade === "crm" || upgrade === "drive") return "STARTER";
+  return null;
+}
+
 function buildCheckoutUrl(studioId: string, plan: CheckoutPlanId) {
   const params = new URLSearchParams({ studio: studioId, plan: plan.toLowerCase() });
   return `/checkout?${params.toString()}`;
@@ -68,13 +81,16 @@ export function CheckoutBuilder() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const studioParam = searchParams.get("studio") ?? "";
-  const planParam = searchParams.get("plan")?.toUpperCase() ?? null;
+  const planParam = resolveCheckoutPlanParam(
+    searchParams.get("plan"),
+    searchParams.get("upgrade")
+  );
   const [user, setUser] = useState<User | null>(null);
   const [ownerWorkspaces, setOwnerWorkspaces] = useState<StudioMembership[]>([]);
   const [isLoadingWorkspaces, setIsLoadingWorkspaces] = useState(true);
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
   const [selectedPlan, setSelectedPlan] = useState<CheckoutPlanId>(
-    isCheckoutPlanId(planParam) ? planParam : "FREE"
+    planParam ?? "FREE"
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -127,7 +143,7 @@ export function CheckoutBuilder() {
   }, [ownerWorkspaces, router, selectedPlan, studioParam]);
 
   useEffect(() => {
-    if (isCheckoutPlanId(planParam) && planParam !== selectedPlan) {
+    if (planParam && planParam !== selectedPlan) {
       setSelectedPlan(planParam);
       setCheckoutSuccess(false);
       setSubmitError(null);
@@ -276,8 +292,10 @@ export function CheckoutBuilder() {
 
         {checkoutSuccess ? (
           <div className="mt-5 rounded-2xl border border-emerald-300 bg-emerald-50 p-5 text-center">
-            <h3 className="text-base font-extrabold text-emerald-950">Free plan saved</h3>
-            <p className="mt-1 text-xs text-emerald-800">The Free plan is now saved for {selectedWorkspace?.studioName ?? "this studio"}.</p>
+            <h3 className="text-base font-extrabold text-emerald-950">{selectedPlanOption.name} plan enabled</h3>
+            <p className="mt-1 text-xs text-emerald-800">
+              The {selectedPlanOption.name} plan is now active for {selectedWorkspace?.studioName ?? "this studio"}.
+            </p>
             {selectedWorkspace && (
               <Link href={`/${selectedWorkspace.studioId}/dashboard`} className="mt-4 inline-flex rounded-xl bg-emerald-700 px-4 py-2.5 text-xs font-extrabold text-white transition hover:bg-emerald-800">Open studio dashboard</Link>
             )}
@@ -292,7 +310,7 @@ export function CheckoutBuilder() {
             >
               {isSubmitting ? "Saving plan..." : selectedPlan === "FREE" ? "Save Free plan" : "Continue to payment setup"}
             </button>
-            {selectedPlan !== "FREE" && <p className="text-center text-[11px] text-text-tertiary">Paid plans are activated only after verified payment confirmation.</p>}
+            {selectedPlan !== "FREE" && <p className="text-center text-[11px] text-text-tertiary">Testing mode active: Clicking above immediately activates the selected plan for end-to-end testing.</p>}
             {submitError && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-center text-[11px] text-red-700">{submitError}</p>}
           </div>
         )}
