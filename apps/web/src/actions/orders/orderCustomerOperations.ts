@@ -95,6 +95,11 @@ export async function getOrderByPasskeyCore(passkey: string): Promise<{
       console.warn("[getOrderByPasskeyAction] Error fetching members:", err);
     }
 
+    const effectiveFeatures = getEffectiveStudioFeatures(
+      studio?.ownerEmail,
+      studio?.features,
+      studio?.planInfo
+    );
     const view = toCustomerTrackingView(order, studio?.name || "Studio", tasks, {
       studioId: order.studioId,
       studioOwnerId,
@@ -102,11 +107,8 @@ export async function getOrderByPasskeyCore(passkey: string): Promise<{
       studioLogoUrl: studio?.logoUrl,
       studioCity: studio?.city,
       studioPhone: studio?.ownerPhone,
-      hasErp: getEffectiveStudioFeatures(
-        studio?.ownerEmail,
-        studio?.features,
-        studio?.planInfo
-      ).erp,
+      hasErp: effectiveFeatures.erp,
+      canIssueBilling: Boolean(effectiveFeatures.reports),
       studioBillingProfile: studio?.billingProfile,
       staffEmails: Array.from(new Set(staffEmails)),
       staffUids: Array.from(new Set(staffUids)),

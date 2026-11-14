@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import type { Order, OrderInstallment, PaymentStatus } from "@focoman/types";
 import { calculateOrderPaymentBreakdown } from "@focoman/domain";
 
@@ -91,25 +90,13 @@ export function OmsPaymentSummarySection({
   onChangeNewInstallmentProofFile,
   onSavePricing,
 }: OmsPaymentSummarySectionProps) {
-  const [showPlanNote, setShowPlanNote] = useState(false);
-
-  useEffect(() => {
-    setShowPlanNote(false);
-  }, [selected.id, canIssueBilling]);
-
   const handleInvoiceClick = () => {
-    if (!canIssueBilling) {
-      setShowPlanNote(true);
-      return;
-    }
+    if (!canIssueBilling) return;
     onOpenInvoice?.();
   };
 
   const handleReceiptClick = (receiptKey: string) => {
-    if (!canIssueBilling) {
-      setShowPlanNote(true);
-      return;
-    }
+    if (!canIssueBilling) return;
     onOpenReceipt?.(receiptKey);
   };
 
@@ -162,18 +149,15 @@ export function OmsPaymentSummarySection({
                   <span>{isSendingReminder ? "Sending..." : "Send Reminder"}</span>
                 </button>
               )}
-              <button
-                type="button"
-                aria-disabled={!canIssueBilling}
-                onClick={handleInvoiceClick}
-                className={`rounded-lg border border-border-default bg-white px-2.5 py-1 text-[11px] font-semibold text-text-secondary shadow-2xs transition flex items-center ${
-                  canIssueBilling
-                    ? "hover:text-brand-blue-primary hover:border-brand-blue-primary hover:bg-blue-50/50 cursor-pointer"
-                    : "opacity-50 cursor-not-allowed"
-                }`}
-              >
-                <span>Invoice</span>
-              </button>
+              {canIssueBilling && (
+                <button
+                  type="button"
+                  onClick={handleInvoiceClick}
+                  className="rounded-lg border border-border-default bg-white px-2.5 py-1 text-[11px] font-semibold text-text-secondary shadow-2xs transition flex items-center hover:text-brand-blue-primary hover:border-brand-blue-primary hover:bg-blue-50/50 cursor-pointer"
+                >
+                  <span>Invoice</span>
+                </button>
+              )}
               <button
                 type="button"
                 disabled={isUpdatingPayment}
@@ -188,11 +172,6 @@ export function OmsPaymentSummarySection({
           )}
         </div>
       </div>
-      {showPlanNote && !canIssueBilling && (
-        <p className="mt-1.5 text-right text-[11px] font-medium text-amber-800">
-          Included in Professional Plan
-        </p>
-      )}
 
       <div className="mt-2 space-y-2.5 rounded-2xl bg-surface-app p-4 border border-border-default text-xs">
         {isEditingPricing ? (
@@ -538,16 +517,11 @@ export function OmsPaymentSummarySection({
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    {breakdown.advanceAmount > 0 && (
+                    {canIssueBilling && breakdown.advanceAmount > 0 && (
                       <button
                         type="button"
-                        aria-disabled={!canIssueBilling}
                         onClick={() => handleReceiptClick("advance")}
-                        className={`inline-flex items-center rounded border border-border-default bg-white px-2 py-0.5 text-[10px] font-semibold text-text-secondary transition ${
-                          canIssueBilling
-                            ? "hover:text-brand-blue-primary hover:border-brand-blue-primary hover:bg-blue-50/50 cursor-pointer"
-                            : "opacity-50 cursor-not-allowed"
-                        }`}
+                        className="inline-flex items-center rounded border border-border-default bg-white px-2 py-0.5 text-[10px] font-semibold text-text-secondary transition hover:text-brand-blue-primary hover:border-brand-blue-primary hover:bg-blue-50/50 cursor-pointer"
                       >
                         <span>Receipt</span>
                       </button>
@@ -577,20 +551,17 @@ export function OmsPaymentSummarySection({
                             </span>
                           </div>
                           <div className="flex items-center gap-2">
-                            <button
-                              type="button"
-                              aria-disabled={!canIssueBilling}
-                              onClick={() =>
-                                handleReceiptClick(inst.id ? `installment:${inst.id}` : "advance")
-                              }
-                              className={`inline-flex items-center rounded border border-border-default bg-white px-2 py-0.5 text-[10px] font-semibold text-text-secondary transition ${
-                                canIssueBilling
-                                  ? "hover:text-brand-blue-primary hover:border-brand-blue-primary hover:bg-blue-50/50 cursor-pointer"
-                                  : "opacity-50 cursor-not-allowed"
-                              }`}
-                            >
-                              <span>Receipt</span>
-                            </button>
+                            {canIssueBilling && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleReceiptClick(inst.id ? `installment:${inst.id}` : "advance")
+                                }
+                                className="inline-flex items-center rounded border border-border-default bg-white px-2 py-0.5 text-[10px] font-semibold text-text-secondary transition hover:text-brand-blue-primary hover:border-brand-blue-primary hover:bg-blue-50/50 cursor-pointer"
+                              >
+                                <span>Receipt</span>
+                              </button>
+                            )}
                             <span className="font-mono font-bold text-text-primary tabular-nums">
                               ₹{inst.amount.toLocaleString("en-IN")}
                             </span>

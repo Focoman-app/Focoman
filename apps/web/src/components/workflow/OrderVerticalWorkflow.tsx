@@ -10,7 +10,13 @@ import {
   ResourceAssignment,
   TemporaryCrewMember,
 } from "@focoman/types";
-import { getEventDaysRemaining, calculateTaskAgeBadge } from "@/utils/dateUtils";
+import {
+  getEventDaysRemaining,
+  calculateTaskAgeBadge,
+  normalizeDateList,
+  formatMultiDateDisplay,
+  getNextOrPrimaryOrderShootDate,
+} from "@/utils/dateUtils";
 
 interface SelectableCrew {
   id: string;
@@ -31,11 +37,29 @@ interface OrderVerticalWorkflowProps {
   onOpenErpWizard?: (serviceName: string, query?: string) => void;
   onAssignTaskCrew?: (taskId: string, memberName: string) => Promise<void>;
   onMarkOfflineReviewReady?: (taskId: string) => Promise<void>;
-  onSaveSchedule?: (eventDate: string, eventLocation: string) => Promise<void>;
+  onSaveSchedule?: (
+    eventDate: string,
+    eventLocation: string,
+    eventDates?: string[],
+    serviceSchedules?: Record<string, string[]>
+  ) => Promise<void>;
+  busyEventDates?: string[];
   hasErp?: boolean;
 }
 
 type PhaseId = "phase_lead" | "phase_pre_event" | "phase_event_day" | "phase_post_event" | "phase_delivery" | "phase_completed";
+
+function isDeliverableOnlyService(serviceName: string): boolean {
+  const lower = (serviceName || "").trim().toLowerCase();
+  return (
+    lower.includes("album") ||
+    lower.includes("photobook") ||
+    lower.includes("hard drive") ||
+    lower.includes("pen drive") ||
+    lower.includes("raw footage") ||
+    lower.includes("frame")
+  );
+}
 
 export function OrderVerticalWorkflow({
   order,
@@ -49,6 +73,7 @@ export function OrderVerticalWorkflow({
   onAssignTaskCrew,
   onMarkOfflineReviewReady,
   onSaveSchedule,
+  busyEventDates = [],
   hasErp = true,
 }: OrderVerticalWorkflowProps) {
   const isOms = variant === "oms";
@@ -56,21 +81,64 @@ export function OrderVerticalWorkflow({
   const fullTasks = tasks as Task[];
 
   // Event timing calculations
-  const eventRem = useMemo(() => getEventDaysRemaining(order.eventDate), [order.eventDate]);
+  const nextOrPrimaryShootDate = useMemo(
+    () => getNextOrPrimaryOrderShootDate(order),
+    [order]
+  );
+  const eventRem = useMemo(
+    () => getEventDaysRemaining(nextOrPrimaryShootDate),
+    [nextOrPrimaryShootDate]
+  );
   const isFutureEvent = Boolean(eventRem && eventRem.diffDays > 0);
   const isTodayEvent = Boolean(eventRem && eventRem.diffDays === 0);
 
+  const normalizedMainDates = useMemo(
+    () =>
+      normalizeDateList(
+        order.eventDates && order.eventDates.length > 0
+          ? order.eventDates
+          : order.eventDate
+          ? [order.eventDate]
+          : []
+      ),
+    [order.eventDates, order.eventDate]
+  );
+  const formattedMainDates = useMemo(
+    () => formatMultiDateDisplay(normalizedMainDates, order.eventDate),
+    [normalizedMainDates, order.eventDate]
+  );
+
   const [editingSchedule, setEditingSchedule] = useState(false);
-  const [scheduleDateDraft, setScheduleDateDraft] = useState(order.eventDate || "");
+  const [scheduleDatesDraft, setScheduleDatesDraft] = useState<string[]>(normalizedMainDates);
   const [scheduleLocationDraft, setScheduleLocationDraft] = useState(order.eventLocation || "");
+  const [serviceSchedulesDraft, setServiceSchedulesDraft] = useState<Record<string, string[]>>(
+    order.serviceSchedules || {}
+  );
+  const [activeCalendarTarget, setActiveCalendarTarget] = useState<string | null>(null);
+  const [calendarMonth, setCalendarMonth] = useState(() => {
+    const base = normalizedMainDates[0] ? new Date(`${normalizedMainDates[0]}T00:00:00`) : new Date();
+    return new Date(base.getFullYear(), base.getMonth(), 1);
+  });
   const [savingSchedule, setSavingSchedule] = useState(false);
+
+  const busyDateCounts = useMemo(
+    () =>
+      busyEventDates.reduce<Record<string, number>>((acc, date) => {
+        if (!date) return acc;
+        acc[date] = (acc[date] || 0) + 1;
+        return acc;
+      }, {}),
+    [busyEventDates]
+  );
 
   useEffect(() => {
     if (!editingSchedule) {
-      setScheduleDateDraft(order.eventDate || "");
+      setScheduleDatesDraft(normalizedMainDates);
       setScheduleLocationDraft(order.eventLocation || "");
+      setServiceSchedulesDraft(order.serviceSchedules || {});
+      setActiveCalendarTarget(null);
     }
-  }, [order.eventDate, order.eventLocation, editingSchedule]);
+  }, [normalizedMainDates, order.eventLocation, order.serviceSchedules, editingSchedule]);
 
   // Group production tasks dynamically
   const photoTasks = useMemo(() => {
@@ -139,6 +207,10 @@ export function OrderVerticalWorkflow({
 
   // Phase Progress Calculations
   const services = useMemo(() => order.services || [], [order.services]);
+  const schedulableShootServices = useMemo(
+    () => services.filter((svc) => !isDeliverableOnlyService(svc)),
+    [services]
+  );
   const assignedResources = useMemo(() => fullOrder?.assignedResources || [], [fullOrder?.assignedResources]);
   const assignedServicesCount = useMemo(() => {
     return services.filter((svcName) => {
@@ -174,7 +246,7 @@ export function OrderVerticalWorkflow({
     if (order.orderStatus === "AWAITING_EVENT") {
       if (isTodayEvent) return "phase_event_day";
       if (!preEventCompleted) return "phase_pre_event";
-      return "phase_pre_event";
+      return "phase_event_day";
     }
 
     if (order.orderStatus === "POST_EVENT_IN_PROGRESS") {
@@ -182,15 +254,23 @@ export function OrderVerticalWorkflow({
       return "phase_post_event";
     }
 
-    return "phase_pre_event";
+    return "phase_event_day";
   }, [order.orderStatus, isTodayEvent, preEventCompleted, isProductionCompleted]);
 
-  // Phase expansion state: defaults to expanding active phase and collapsing others
-  const [expandedPhases, setExpandedPhases] = useState<Set<PhaseId>>(() => new Set([activePhaseId]));
+  // Phase expansion state: defaults to expanding active phase (and Phase 01 when awaiting event)
+  const [expandedPhases, setExpandedPhases] = useState<Set<PhaseId>>(() =>
+    order.orderStatus === "AWAITING_EVENT"
+      ? new Set<PhaseId>(["phase_event_day", "phase_pre_event"])
+      : new Set<PhaseId>([activePhaseId])
+  );
 
   useEffect(() => {
-    setExpandedPhases(new Set([activePhaseId]));
-  }, [activePhaseId, order.id]);
+    if (order.orderStatus === "AWAITING_EVENT") {
+      setExpandedPhases(new Set<PhaseId>(["phase_event_day", "phase_pre_event"]));
+    } else {
+      setExpandedPhases(new Set<PhaseId>([activePhaseId]));
+    }
+  }, [activePhaseId, order.id, order.orderStatus]);
 
   const togglePhase = (phaseId: PhaseId) => {
     setExpandedPhases((prev) => {
@@ -202,6 +282,137 @@ export function OrderVerticalWorkflow({
       }
       return next;
     });
+  };
+
+  // Multi-date toggle helpers for schedule editing in Phase 01
+  const toggleDraftMainDate = (isoDate: string) => {
+    setScheduleDatesDraft((prev) => {
+      const exists = prev.includes(isoDate);
+      const next = exists ? prev.filter((d) => d !== isoDate) : [...prev, isoDate];
+      return normalizeDateList(next);
+    });
+  };
+
+  const toggleDraftServiceDate = (serviceName: string, isoDate: string) => {
+    setServiceSchedulesDraft((prev) => {
+      const current = prev[serviceName] || [];
+      const exists = current.includes(isoDate);
+      const next = normalizeDateList(
+        exists ? current.filter((d) => d !== isoDate) : [...current, isoDate]
+      );
+      const updated = { ...prev };
+      if (next.length > 0) {
+        updated[serviceName] = next;
+      } else {
+        delete updated[serviceName];
+      }
+      return updated;
+    });
+  };
+
+  const renderInlineMultiDateCalendar = (
+    selectedDates: string[],
+    onToggleDate: (iso: string) => void,
+    onClearDates: () => void,
+    onCloseCalendar: () => void
+  ) => {
+    const year = calendarMonth.getFullYear();
+    const month = calendarMonth.getMonth();
+    const firstWeekday = new Date(year, month, 1).getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const cells = [
+      ...Array.from({ length: firstWeekday }, () => null),
+      ...Array.from({ length: daysInMonth }, (_, index) => {
+        const day = index + 1;
+        const iso = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+        return { day, iso, count: busyDateCounts[iso] || 0 };
+      }),
+    ];
+
+    return (
+      <div className="mt-1.5 rounded-xl border border-border-default bg-white p-3 shadow-lg">
+        <div className="mb-2 flex items-center justify-between">
+          <button
+            type="button"
+            onClick={() => setCalendarMonth(new Date(year, month - 1, 1))}
+            className="rounded-lg border border-border-default px-2 py-0.5 text-xs font-bold text-text-secondary hover:bg-surface-app"
+          >
+            ←
+          </button>
+          <span className="text-xs font-bold text-text-primary">
+            {calendarMonth.toLocaleString("en-IN", { month: "long", year: "numeric" })}
+          </span>
+          <button
+            type="button"
+            onClick={() => setCalendarMonth(new Date(year, month + 1, 1))}
+            className="rounded-lg border border-border-default px-2 py-0.5 text-xs font-bold text-text-secondary hover:bg-surface-app"
+          >
+            →
+          </button>
+        </div>
+        <p className="mb-2 text-[10px] text-text-tertiary">
+          Click dates to toggle selection on or off. Consecutive days format as a range; separate dates stay unblocked in between.
+        </p>
+        <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-bold uppercase text-text-tertiary">
+          {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((d) => (
+            <span key={d}>{d}</span>
+          ))}
+        </div>
+        <div className="mt-1 grid grid-cols-7 gap-1">
+          {cells.map((cell, index) =>
+            cell ? (
+              <button
+                key={cell.iso}
+                type="button"
+                onClick={() => onToggleDate(cell.iso)}
+                className={`relative rounded-lg py-1.5 text-xs font-semibold transition ${
+                  selectedDates.includes(cell.iso)
+                    ? "bg-brand-blue-primary text-white ring-2 ring-brand-blue-primary/30"
+                    : cell.count > 0
+                    ? "bg-amber-50 text-amber-900 hover:bg-amber-100"
+                    : "text-text-primary hover:bg-surface-app"
+                }`}
+                title={cell.count > 0 ? `${cell.count} existing shoot date(s) scheduled` : "Available"}
+              >
+                {cell.day}
+                {cell.count > 0 && (
+                  <span
+                    className={`mx-auto mt-0.5 block h-1 w-1 rounded-full ${
+                      selectedDates.includes(cell.iso) ? "bg-white" : "bg-amber-500"
+                    }`}
+                  />
+                )}
+              </button>
+            ) : (
+              <span key={`empty-${index}`} />
+            )
+          )}
+        </div>
+        <div className="mt-2.5 flex items-center justify-between border-t border-border-default pt-2 text-[10px] text-text-tertiary">
+          <span className="inline-flex items-center gap-1.5">
+            <span className="h-2 w-2 rounded-full bg-amber-500" /> Shoot already scheduled
+          </span>
+          <div className="flex items-center gap-1.5">
+            {selectedDates.length > 0 && (
+              <button
+                type="button"
+                onClick={onClearDates}
+                className="rounded border border-border-default px-2 py-0.5 text-[10px] font-semibold text-text-secondary hover:text-status-danger"
+              >
+                Clear
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={onCloseCalendar}
+              className="rounded bg-brand-blue-primary px-2.5 py-0.5 text-[10px] font-bold text-white"
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      </div>
+    );
   };
 
   // Crew search and assignment state for OMS
@@ -292,6 +503,13 @@ export function OrderVerticalWorkflow({
     return null;
   };
 
+  const activeServiceScheduleEntries = useMemo(() => {
+    const map = order.serviceSchedules || {};
+    return Object.entries(map).filter(
+      ([svcName, dates]) => services.includes(svcName) && Array.isArray(dates) && dates.length > 0
+    );
+  }, [order.serviceSchedules, services]);
+
   return (
     <div className="w-full space-y-4">
       {/* 1. Terminal State: Cancelled Order Banner (if applicable) */}
@@ -324,7 +542,361 @@ export function OrderVerticalWorkflow({
 
       {/* 2. Unified Vertical Workflow Timeline */}
       <div className="relative pl-6 sm:pl-8 space-y-6 before:absolute before:left-3 sm:before:left-4 before:top-4 before:bottom-4 before:w-0.5 before:bg-slate-200/80">
-        {/* PHASE 1: Pre-Event Preparation */}
+        {/* PHASE 1: Event Schedule & Execution (Basic Event Info, Multi-Date & Separate Event Shoot Dates) */}
+        <div className="relative group">
+          {/* Timeline Marker */}
+          <div
+            className={`absolute -left-6 sm:-left-8 top-0.5 flex h-6 w-6 sm:h-7 sm:w-7 items-center justify-center rounded-full font-bold text-xs ring-4 ring-white shadow-2xs transition-all ${
+              order.orderStatus === "POST_EVENT_IN_PROGRESS" || order.orderStatus === "COMPLETED"
+                ? "bg-emerald-500 text-white"
+                : activePhaseId === "phase_event_day"
+                ? "bg-brand-blue-primary text-white shadow-sm ring-blue-100 ring-4"
+                : "bg-slate-100 text-slate-500 border border-slate-300"
+            }`}
+          >
+            {order.orderStatus === "POST_EVENT_IN_PROGRESS" || order.orderStatus === "COMPLETED" ? "✓" : "1"}
+          </div>
+
+          <div
+            className={`rounded-2xl border p-4 shadow-2xs transition ${
+              activePhaseId === "phase_event_day"
+                ? "border-blue-200 bg-white ring-1 ring-blue-100/60"
+                : "border-border-default bg-white"
+            }`}
+          >
+            <div
+              className="flex items-center justify-between cursor-pointer select-none"
+              onClick={() => togglePhase("phase_event_day")}
+            >
+              <div className="min-w-0 pr-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-text-tertiary">
+                    Phase 01
+                  </span>
+                  <span
+                    className={`inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-bold border ${
+                      order.orderStatus === "POST_EVENT_IN_PROGRESS" || order.orderStatus === "COMPLETED"
+                        ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                        : isTodayEvent
+                        ? "bg-blue-50 text-brand-blue-primary border-blue-200"
+                        : "bg-slate-100 text-slate-600 border-slate-200"
+                    }`}
+                  >
+                    {order.orderStatus === "POST_EVENT_IN_PROGRESS" || order.orderStatus === "COMPLETED"
+                      ? "Shoot Completed"
+                      : isTodayEvent
+                      ? "Shoot Active Today"
+                      : "Awaiting Event"}
+                  </span>
+                  {eventRem && (
+                    <span
+                      className={`rounded-md px-2 py-0.5 text-[10px] font-bold border ${
+                        eventRem.diffDays > 0
+                          ? "bg-blue-50 text-brand-blue-primary border-blue-200"
+                          : eventRem.diffDays === 0
+                          ? "bg-amber-50 text-amber-800 border-amber-200"
+                          : "bg-slate-100 text-slate-600 border-slate-200"
+                      }`}
+                    >
+                      {eventRem.display}
+                    </span>
+                  )}
+                </div>
+                <h3 className="text-sm font-bold text-text-primary mt-0.5">Event Schedule &amp; Execution</h3>
+                <p className="text-xs text-text-secondary mt-0.5">
+                  Basic event schedule, venue, multi-day dates, and separate event shoot dates
+                </p>
+              </div>
+              <button
+                type="button"
+                aria-label="Toggle Phase 1"
+                className="rounded-lg p-1 text-text-tertiary hover:bg-slate-100 transition shrink-0"
+              >
+                <svg
+                  className={`h-4 w-4 transition-transform duration-200 ${
+                    expandedPhases.has("phase_event_day") ? "rotate-180" : ""
+                  }`}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+            </div>
+
+            {expandedPhases.has("phase_event_day") && (
+              <div className="mt-4 pt-3.5 border-t border-border-default/60 space-y-3 text-xs">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-text-tertiary">
+                    Basic Event Information &amp; Schedule
+                  </span>
+                  {isOms && onSaveSchedule && !editingSchedule && (
+                    <button
+                      type="button"
+                      onClick={() => setEditingSchedule(true)}
+                      className="rounded border border-border-default bg-white px-2 py-1 text-[10px] font-semibold text-brand-blue-primary hover:border-brand-blue-primary cursor-pointer"
+                    >
+                      Edit schedule
+                    </button>
+                  )}
+                </div>
+
+                {editingSchedule ? (
+                  <div className="space-y-3 rounded-xl border border-brand-blue-soft bg-blue-50/40 p-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      <div>
+                        <label className="text-[10px] font-bold text-text-secondary block">
+                          Main Event Date(s)
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setActiveCalendarTarget((prev) => (prev === "__main__" ? null : "__main__"))
+                          }
+                          className="mt-1 flex w-full items-center justify-between rounded border border-border-default bg-white px-2.5 py-1.5 text-left text-xs font-semibold text-text-primary hover:border-brand-blue-primary"
+                        >
+                          <span className="truncate">
+                            {scheduleDatesDraft.length > 0
+                              ? formatMultiDateDisplay(scheduleDatesDraft)
+                              : "Select one or multiple dates"}
+                          </span>
+                          <span className="text-[10px] font-bold text-brand-blue-primary ml-2 shrink-0">
+                            {scheduleDatesDraft.length > 1
+                              ? `${scheduleDatesDraft.length} days`
+                              : "Calendar"}
+                          </span>
+                        </button>
+                        {scheduleDatesDraft.length > 0 && (
+                          <div className="mt-1.5 flex flex-wrap gap-1">
+                            {scheduleDatesDraft.map((iso) => (
+                              <span
+                                key={iso}
+                                className="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-brand-blue-primary"
+                              >
+                                {iso}
+                                <button
+                                  type="button"
+                                  onClick={() => toggleDraftMainDate(iso)}
+                                  className="font-bold hover:text-status-danger"
+                                  aria-label={`Remove ${iso}`}
+                                >
+                                  ×
+                                </button>
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      <div>
+                        <label className="text-[10px] font-bold text-text-secondary block">
+                          Shoot Venue
+                        </label>
+                        <input
+                          type="text"
+                          value={scheduleLocationDraft}
+                          onChange={(event) => setScheduleLocationDraft(event.target.value)}
+                          placeholder="Client Venue / Location"
+                          className="mt-1 w-full rounded border border-border-default bg-white px-2.5 py-1.5 text-xs text-text-primary focus:border-brand-blue-primary focus:outline-none"
+                        />
+                      </div>
+                    </div>
+
+                    {activeCalendarTarget === "__main__" &&
+                      renderInlineMultiDateCalendar(
+                        scheduleDatesDraft,
+                        toggleDraftMainDate,
+                        () => setScheduleDatesDraft([]),
+                        () => setActiveCalendarTarget(null)
+                      )}
+
+                    {/* Separate Event / Shoot Dates for Booked Shoot Services */}
+                    {schedulableShootServices.length > 0 && (
+                      <div className="pt-2.5 border-t border-blue-200/70 space-y-2">
+                        <div>
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-text-secondary block">
+                            Separate Event / Shoot Dates (Optional)
+                          </span>
+                          <span className="text-[10px] text-text-tertiary block">
+                            If any booked shoot service happens on a different date than the main event, set its date(s) below. Leave blank if covered on the main event date.
+                          </span>
+                        </div>
+                        <div className="space-y-2">
+                          {schedulableShootServices.map((svcName) => {
+                            const svcDates = serviceSchedulesDraft[svcName] || [];
+                            const isOpen = activeCalendarTarget === `svc:${svcName}`;
+                            return (
+                              <div
+                                key={svcName}
+                                className="rounded-lg border border-border-default bg-white p-2.5 space-y-1.5"
+                              >
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                  <span className="text-xs font-semibold text-text-primary">
+                                    {svcName}
+                                  </span>
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    {svcDates.length > 0 ? (
+                                      svcDates.map((iso) => (
+                                        <span
+                                          key={iso}
+                                          className="inline-flex items-center gap-1 rounded bg-blue-50 border border-blue-200 px-2 py-0.5 text-[10px] font-semibold text-brand-blue-primary"
+                                        >
+                                          {iso}
+                                          <button
+                                            type="button"
+                                            onClick={() => toggleDraftServiceDate(svcName, iso)}
+                                            className="font-bold hover:text-status-danger"
+                                            aria-label={`Remove ${iso} from ${svcName}`}
+                                          >
+                                            ×
+                                          </button>
+                                        </span>
+                                      ))
+                                    ) : (
+                                      <span className="text-[10px] italic text-text-tertiary">
+                                        Same as main event ({formatMultiDateDisplay(scheduleDatesDraft)})
+                                      </span>
+                                    )}
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setActiveCalendarTarget((prev) =>
+                                          prev === `svc:${svcName}` ? null : `svc:${svcName}`
+                                        )
+                                      }
+                                      className="rounded border border-border-default bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-brand-blue-primary hover:border-brand-blue-primary"
+                                    >
+                                      {isOpen ? "Hide calendar" : svcDates.length > 0 ? "Edit dates" : "Set separate date"}
+                                    </button>
+                                  </div>
+                                </div>
+                                {isOpen &&
+                                  renderInlineMultiDateCalendar(
+                                    svcDates,
+                                    (iso) => toggleDraftServiceDate(svcName, iso),
+                                    () =>
+                                      setServiceSchedulesDraft((prev) => {
+                                        const next = { ...prev };
+                                        delete next[svcName];
+                                        return next;
+                                      }),
+                                    () => setActiveCalendarTarget(null)
+                                  )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="flex justify-end gap-2 pt-1">
+                      <button
+                        type="button"
+                        disabled={savingSchedule}
+                        onClick={() => setEditingSchedule(false)}
+                        className="rounded border border-border-default bg-white px-2.5 py-1 text-[10px] font-semibold"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        disabled={savingSchedule || scheduleDatesDraft.length === 0}
+                        onClick={() =>
+                          void (async () => {
+                            if (!onSaveSchedule || scheduleDatesDraft.length === 0) return;
+                            setSavingSchedule(true);
+                            try {
+                              const sortedMain = normalizeDateList(scheduleDatesDraft);
+                              await onSaveSchedule(
+                                sortedMain[0],
+                                scheduleLocationDraft,
+                                sortedMain,
+                                serviceSchedulesDraft
+                              );
+                              setEditingSchedule(false);
+                            } finally {
+                              setSavingSchedule(false);
+                            }
+                          })()
+                        }
+                        className="rounded bg-brand-blue-primary px-3 py-1 text-[10px] font-bold text-white disabled:opacity-50"
+                      >
+                        {savingSchedule ? "Saving…" : "Save schedule"}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-2.5">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-text-secondary">
+                      <div className="rounded-xl bg-slate-50 p-2.5 border border-border-default/60">
+                        <span className="text-[10px] uppercase font-bold text-text-tertiary block">
+                          Main Event Date(s)
+                        </span>
+                        <span className="font-bold text-text-primary block">
+                          {formattedMainDates || "Date to be scheduled"}
+                        </span>
+                      </div>
+                      <div className="rounded-xl bg-slate-50 p-2.5 border border-border-default/60">
+                        <span className="text-[10px] uppercase font-bold text-text-tertiary block">
+                          Shoot Venue
+                        </span>
+                        <span className="font-semibold text-text-primary truncate block">
+                          {order.eventLocation || "Client Venue / Location"}
+                        </span>
+                      </div>
+                      <div className="rounded-xl bg-slate-50 p-2.5 border border-border-default/60">
+                        <span className="text-[10px] uppercase font-bold text-text-tertiary block">
+                          Coverage Status
+                        </span>
+                        <span
+                          className={`font-semibold block ${
+                            order.orderStatus === "POST_EVENT_IN_PROGRESS" || order.orderStatus === "COMPLETED"
+                              ? "text-emerald-800"
+                              : isTodayEvent
+                              ? "text-brand-blue-primary"
+                              : "text-text-secondary"
+                          }`}
+                        >
+                          {order.orderStatus === "POST_EVENT_IN_PROGRESS" || order.orderStatus === "COMPLETED"
+                            ? "Shoot completed & wrapped up"
+                            : isTodayEvent
+                            ? "Event underway today"
+                            : `Scheduled (${formattedMainDates})`}
+                        </span>
+                      </div>
+                    </div>
+
+                    {activeServiceScheduleEntries.length > 0 && (
+                      <div className="rounded-xl border border-border-default/60 bg-slate-50/70 p-2.5 space-y-1.5">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-text-tertiary block">
+                          Separate Event / Shoot Dates
+                        </span>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                          {activeServiceScheduleEntries.map(([svcName, dates]) => (
+                            <div
+                              key={svcName}
+                              className="flex items-center justify-between rounded-lg border border-border-default/60 bg-white px-2.5 py-1.5 text-xs"
+                            >
+                              <span className="font-semibold text-text-primary truncate pr-2">
+                                {svcName}
+                              </span>
+                              <span className="rounded bg-blue-50 border border-blue-200 px-2 py-0.5 text-[10px] font-bold text-brand-blue-primary shrink-0">
+                                {formatMultiDateDisplay(dates)}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* PHASE 2: Pre-Event Preparation & Crew Allocation */}
         <div className="relative group">
           {/* Timeline Marker */}
           <div
@@ -335,10 +907,10 @@ export function OrderVerticalWorkflow({
                 ? "bg-brand-blue-primary text-white shadow-sm ring-blue-100 ring-4"
                 : preEventCompleted
                 ? "bg-emerald-500 text-white"
-                : "bg-slate-100 text-slate-500 border border-slate-300"
+                : "bg-slate-100 text-slate-400 border border-slate-300"
             }`}
           >
-            {preEventCompleted && order.orderStatus !== "AWAITING_EVENT" ? "✓" : "1"}
+            {preEventCompleted && order.orderStatus !== "AWAITING_EVENT" ? "✓" : "2"}
           </div>
 
           <div
@@ -355,7 +927,7 @@ export function OrderVerticalWorkflow({
               <div className="min-w-0 pr-2">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-text-tertiary">
-                    Phase 01
+                    Phase 02
                   </span>
                   <span
                     className={`inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-bold border ${
@@ -381,7 +953,7 @@ export function OrderVerticalWorkflow({
               </div>
               <button
                 type="button"
-                aria-label="Toggle Phase 1"
+                aria-label="Toggle Phase 2"
                 className="rounded-lg p-1 text-text-tertiary hover:bg-slate-100 transition shrink-0"
               >
                 <svg
@@ -399,31 +971,6 @@ export function OrderVerticalWorkflow({
 
             {expandedPhases.has("phase_pre_event") && (
               <div className="mt-4 pt-3.5 border-t border-border-default/60 space-y-3">
-                {/* Event Schedule Info */}
-                <div className="flex items-center justify-between rounded-xl bg-slate-50/80 p-2.5 border border-border-default/60 text-xs">
-                  <div>
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-text-tertiary block">
-                      Target Event Date
-                    </span>
-                    <span className="font-bold text-text-primary">
-                      {order.eventDate || "Date to be scheduled"}
-                    </span>
-                  </div>
-                  {eventRem && (
-                    <span
-                      className={`rounded-md px-2 py-0.5 text-[10px] font-bold border ${
-                        eventRem.diffDays > 0
-                          ? "bg-blue-50 text-brand-blue-primary border-blue-200"
-                          : eventRem.diffDays === 0
-                          ? "bg-amber-50 text-amber-800 border-amber-200"
-                          : "bg-slate-100 text-slate-600 border-slate-200"
-                      }`}
-                    >
-                      {eventRem.display}
-                    </span>
-                  )}
-                </div>
-
                 {/* Service Mapping & Crew Assignments */}
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between text-[11px] font-bold text-text-tertiary uppercase tracking-wider">
@@ -443,6 +990,7 @@ export function OrderVerticalWorkflow({
                         const stagedCrew = serviceCrewDrafts[svcName] ?? displayedCrew;
                         const currentQuery = crewSearchQuery[svcName] ?? "";
                         const trimmedQuery = currentQuery.trim();
+                        const separateDatesForSvc = order.serviceSchedules?.[svcName] || [];
 
                         const matchingCrewForService = hasErp
                           ? allSelectableCrew.filter((m) => {
@@ -476,9 +1024,14 @@ export function OrderVerticalWorkflow({
                             key={svcName}
                             className="relative flex flex-col sm:flex-row sm:items-center justify-between p-2.5 gap-2 hover:bg-slate-50/50 transition"
                           >
-                            <div className="font-semibold text-text-primary text-xs flex items-center gap-2">
-                              <span className="h-1.5 w-1.5 rounded-full bg-brand-blue-primary" />
+                            <div className="font-semibold text-text-primary text-xs flex items-center gap-2 flex-wrap">
+                              <span className="h-1.5 w-1.5 rounded-full bg-brand-blue-primary shrink-0" />
                               <span>{svcName}</span>
+                              {separateDatesForSvc.length > 0 && (
+                                <span className="rounded bg-blue-50 border border-blue-200 px-1.5 py-0.5 text-[10px] font-semibold text-brand-blue-primary">
+                                  {formatMultiDateDisplay(separateDatesForSvc)}
+                                </span>
+                              )}
                             </div>
 
                             {/* Crew Assignment Control for OMS */}
@@ -632,124 +1185,6 @@ export function OrderVerticalWorkflow({
                     </div>
                   )}
                 </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* PHASE 2: Event Day Execution */}
-        <div className="relative group">
-          {/* Timeline Marker */}
-          <div
-            className={`absolute -left-6 sm:-left-8 top-0.5 flex h-6 w-6 sm:h-7 sm:w-7 items-center justify-center rounded-full font-bold text-xs ring-4 ring-white shadow-2xs transition-all ${
-              order.orderStatus === "POST_EVENT_IN_PROGRESS" || order.orderStatus === "COMPLETED"
-                ? "bg-emerald-500 text-white"
-                : activePhaseId === "phase_event_day"
-                ? "bg-brand-blue-primary text-white shadow-sm ring-blue-100 ring-4"
-                : "bg-slate-100 text-slate-400 border border-slate-300"
-            }`}
-          >
-            {order.orderStatus === "POST_EVENT_IN_PROGRESS" || order.orderStatus === "COMPLETED" ? "✓" : "2"}
-          </div>
-
-          <div
-            className={`rounded-2xl border p-4 shadow-2xs transition ${
-              activePhaseId === "phase_event_day"
-                ? "border-blue-200 bg-white ring-1 ring-blue-100/60"
-                : "border-border-default bg-white"
-            }`}
-          >
-            <div
-              className="flex items-center justify-between cursor-pointer select-none"
-              onClick={() => togglePhase("phase_event_day")}
-            >
-              <div className="min-w-0 pr-2">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-text-tertiary">
-                    Phase 02
-                  </span>
-                  <span
-                    className={`inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-bold border ${
-                      order.orderStatus === "POST_EVENT_IN_PROGRESS" || order.orderStatus === "COMPLETED"
-                        ? "bg-emerald-50 text-emerald-800 border-emerald-200"
-                        : isTodayEvent
-                        ? "bg-blue-50 text-brand-blue-primary border-blue-200"
-                        : "bg-slate-100 text-slate-600 border-slate-200"
-                    }`}
-                  >
-                    {order.orderStatus === "POST_EVENT_IN_PROGRESS" || order.orderStatus === "COMPLETED"
-                      ? "Shoot Completed"
-                      : isTodayEvent
-                      ? "Shoot Active Today"
-                      : "Awaiting Event"}
-                  </span>
-                </div>
-                <h3 className="text-sm font-bold text-text-primary mt-0.5">Event Day Execution</h3>
-                <p className="text-xs text-text-secondary mt-0.5">
-                  Shoot coverage, team check-in, and raw footage safeguarding
-                </p>
-              </div>
-              <button
-                type="button"
-                aria-label="Toggle Phase 2"
-                className="rounded-lg p-1 text-text-tertiary hover:bg-slate-100 transition shrink-0"
-              >
-                <svg
-                  className={`h-4 w-4 transition-transform duration-200 ${
-                    expandedPhases.has("phase_event_day") ? "rotate-180" : ""
-                  }`}
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-                </svg>
-              </button>
-            </div>
-
-            {expandedPhases.has("phase_event_day") && (
-              <div className="mt-4 pt-3.5 border-t border-border-default/60 space-y-2.5 text-xs">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-text-tertiary">Event details</span>
-                  {isOms && onSaveSchedule && !editingSchedule && <button type="button" onClick={() => setEditingSchedule(true)} className="rounded border border-border-default bg-white px-2 py-1 text-[10px] font-semibold text-brand-blue-primary hover:border-brand-blue-primary">Edit schedule</button>}
-                </div>
-                {editingSchedule ? (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 rounded-xl border border-brand-blue-soft bg-blue-50/40 p-2.5">
-                    <label className="text-[10px] font-bold text-text-secondary">Event date<input type="date" value={scheduleDateDraft} onChange={(event) => setScheduleDateDraft(event.target.value)} className="mt-1 w-full rounded border border-border-default bg-white px-2 py-1 text-xs text-text-primary" /></label>
-                    <label className="text-[10px] font-bold text-text-secondary">Shoot venue<input type="text" value={scheduleLocationDraft} onChange={(event) => setScheduleLocationDraft(event.target.value)} className="mt-1 w-full rounded border border-border-default bg-white px-2 py-1 text-xs text-text-primary" /></label>
-                    <div className="sm:col-span-2 flex justify-end gap-2"><button type="button" disabled={savingSchedule} onClick={() => setEditingSchedule(false)} className="rounded border border-border-default bg-white px-2.5 py-1 text-[10px] font-semibold">Cancel</button><button type="button" disabled={savingSchedule || !scheduleDateDraft} onClick={() => void (async () => { if (!onSaveSchedule) return; setSavingSchedule(true); try { await onSaveSchedule(scheduleDateDraft, scheduleLocationDraft); setEditingSchedule(false); } finally { setSavingSchedule(false); } })()} className="rounded bg-brand-blue-primary px-2.5 py-1 text-[10px] font-bold text-white disabled:opacity-50">{savingSchedule ? "Saving…" : "Save schedule"}</button></div>
-                  </div>
-                ) : <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-text-secondary">
-                  <div className="rounded-xl bg-slate-50 p-2.5 border border-border-default/60">
-                    <span className="text-[10px] uppercase font-bold text-text-tertiary block">
-                      Shoot Venue
-                    </span>
-                    <span className="font-semibold text-text-primary truncate block">
-                      {order.eventLocation || "Client Venue / Location"}
-                    </span>
-                  </div>
-                  <div className="rounded-xl bg-slate-50 p-2.5 border border-border-default/60">
-                    <span className="text-[10px] uppercase font-bold text-text-tertiary block">
-                      Coverage Status
-                    </span>
-                    <span
-                      className={`font-semibold ${
-                        order.orderStatus === "POST_EVENT_IN_PROGRESS" || order.orderStatus === "COMPLETED"
-                          ? "text-emerald-800"
-                          : isTodayEvent
-                          ? "text-brand-blue-primary"
-                          : "text-text-secondary"
-                      }`}
-                    >
-                      {order.orderStatus === "POST_EVENT_IN_PROGRESS" || order.orderStatus === "COMPLETED"
-                        ? "Shoot completed & wrapped up"
-                        : isTodayEvent
-                        ? "Event underway today"
-                        : `Event date: ${order.eventDate}`}
-                    </span>
-                  </div>
-                </div>}
-
               </div>
             )}
           </div>

@@ -1,7 +1,12 @@
 "use client";
 
 import type { Order, ResourceSuggestion, Task } from "@focoman/types";
-import { calculateOrderAging } from "@/utils/dateUtils";
+import {
+  calculateOrderAging,
+  getEventDaysRemaining,
+  getFinalOrderShootDate,
+  getNextOrPrimaryOrderShootDate,
+} from "@/utils/dateUtils";
 
 export function OmsTurnaroundSlaBanner({
   order,
@@ -10,13 +15,17 @@ export function OmsTurnaroundSlaBanner({
   order: Order;
   tasks: Task[];
 }) {
+  const finalShootDate = getFinalOrderShootDate(order);
+  const nextShootDate = getNextOrPrimaryOrderShootDate(order);
   const aging = calculateOrderAging(
-    order.eventDate,
+    finalShootDate,
     tasks,
     order.orderStatus === "COMPLETED",
     order.updatedAt
   );
-  const upcomingReminder = aging.statusLabel === "Event upcoming in 3 days" ? aging.statusLabel : null;
+  const nextRem = getEventDaysRemaining(nextShootDate);
+  const upcomingReminder =
+    nextRem && nextRem.diffDays === 3 ? "Event upcoming in 3 days" : null;
 
   return (
     <div className="rounded-2xl border border-border-default bg-surface-app/40 p-4 space-y-3">
@@ -56,7 +65,7 @@ export function OmsTurnaroundSlaBanner({
             {aging.isUpcoming ? "0 d" : `${aging.totalAgeDays} Days`}
           </span>
           <span className="text-[9px] text-text-tertiary block mt-0.5 truncate">
-            {aging.isUpcoming ? "Starts after event" : `From ${order.eventDate}`}
+            {aging.isUpcoming ? "Starts after final shoot" : `From ${finalShootDate}`}
           </span>
         </div>
 

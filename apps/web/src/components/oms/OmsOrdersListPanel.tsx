@@ -4,7 +4,11 @@ import type { Order, OrderStatus } from "@focoman/types";
 import { FileSpreadsheet, SlidersHorizontal } from "lucide-react";
 import { useState } from "react";
 import { FocomanSpinner } from "@/components/FocomanSpinner";
-import { getEventDaysRemaining } from "@/utils/dateUtils";
+import {
+  formatMultiDateDisplay,
+  getEventDaysRemaining,
+  getNextOrPrimaryOrderShootDate,
+} from "@/utils/dateUtils";
 import { STATUS_COLORS, STATUS_LABELS } from "./omsConstants";
 
 interface OmsOrdersListPanelProps {
@@ -210,10 +214,10 @@ export function OmsOrdersListPanel({
                     )}
                   </div>
                   <p className="text-xs text-text-secondary mt-1">
-                    {order.eventType} · Event Date: {order.eventDate}
+                    {order.eventType} · Event Date: {formatMultiDateDisplay(order.eventDates, order.eventDate)}
                     {order.orderStatus === "AWAITING_EVENT" &&
                       (() => {
-                        const d = getEventDaysRemaining(order.eventDate);
+                        const d = getEventDaysRemaining(getNextOrPrimaryOrderShootDate(order));
                         return d && d.diffDays > 0 ? ` (${d.label})` : "";
                       })()}
                   </p>

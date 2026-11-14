@@ -96,7 +96,16 @@ export async function updateOrderAction(input: {
   orderId: string;
   studioId: string;
   updates: Partial<
-    Pick<Order, "eventType" | "eventDate" | "eventLocation" | "services" | "packages">
+    Pick<
+      Order,
+      | "eventType"
+      | "eventDate"
+      | "eventDates"
+      | "serviceSchedules"
+      | "eventLocation"
+      | "services"
+      | "packages"
+    >
   >;
   idToken: string;
 }): Promise<{ success: boolean; order?: Order; error?: string }> {

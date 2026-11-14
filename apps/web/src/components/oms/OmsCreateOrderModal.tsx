@@ -366,12 +366,19 @@ export function OmsCreateOrderModal({
               </div>
 
               <div className="relative">
-                <label
-                  htmlFor="register-order-event-date"
-                  className="block text-xs font-bold text-text-primary cursor-pointer"
-                >
-                  Event Date *
-                </label>
+                <div className="flex items-center justify-between">
+                  <label
+                    htmlFor="register-order-event-date"
+                    className="block text-xs font-bold text-text-primary cursor-pointer"
+                  >
+                    Event Date(s) *
+                  </label>
+                  {(newOrderForm.eventDates?.length || 0) > 1 && (
+                    <span className="text-[10px] font-mono font-bold text-brand-blue-primary">
+                      {newOrderForm.eventDates.length} dates selected
+                    </span>
+                  )}
+                </div>
                 <button
                   id="register-order-event-date"
                   type="button"
@@ -379,24 +386,92 @@ export function OmsCreateOrderModal({
                   aria-haspopup="dialog"
                   aria-expanded={isEventDatePickerOpen}
                   onClick={() => {
-                    const base = newOrderForm.eventDate
-                      ? new Date(`${newOrderForm.eventDate}T00:00:00`)
+                    const firstSelected =
+                      newOrderForm.eventDates?.[0] || newOrderForm.eventDate;
+                    const base = firstSelected
+                      ? new Date(`${firstSelected}T00:00:00`)
                       : new Date();
                     setCalendarMonth(new Date(base.getFullYear(), base.getMonth(), 1));
                     setIsEventDatePickerOpen((open) => !open);
                   }}
                   className="mt-1 flex w-full items-center justify-between rounded-xl border border-border-default bg-white px-3.5 py-2 text-left text-xs outline-none transition focus:border-brand-blue-primary focus:ring-1 focus:ring-brand-blue-primary disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  <span className={newOrderForm.eventDate ? "text-text-primary" : "text-text-tertiary"}>
-                    {newOrderForm.eventDate || "Choose event date"}
+                  <span
+                    className={`truncate font-mono ${
+                      newOrderForm.eventDate ? "text-text-primary font-semibold" : "text-text-tertiary font-sans"
+                    }`}
+                  >
+                    {(() => {
+                      const dates =
+                        newOrderForm.eventDates && newOrderForm.eventDates.length > 0
+                          ? newOrderForm.eventDates
+                          : newOrderForm.eventDate
+                          ? [newOrderForm.eventDate]
+                          : [];
+                      if (dates.length === 0) return "Select one or more dates";
+                      if (dates.length === 1) return dates[0];
+                      const sorted = [...dates].sort();
+                      const first = sorted[0];
+                      const last = sorted[sorted.length - 1];
+                      const isContinuous =
+                        Math.round(
+                          (new Date(`${last}T00:00:00`).getTime() -
+                            new Date(`${first}T00:00:00`).getTime()) /
+                            (1000 * 60 * 60 * 24)
+                        ) ===
+                        sorted.length - 1;
+                      return isContinuous
+                        ? `${first} to ${last} (${sorted.length}d)`
+                        : `${sorted.join(", ")}`;
+                    })()}
                   </span>
-                  <span className="text-base leading-none text-text-tertiary" aria-hidden="true">⌄</span>
+                  <span className="text-base leading-none text-text-tertiary ml-1.5 shrink-0" aria-hidden="true">⌄</span>
                 </button>
+
+                {/* Selected Date Chips (when 1+ dates selected) */}
+                {(() => {
+                  const selectedDates =
+                    newOrderForm.eventDates && newOrderForm.eventDates.length > 0
+                      ? newOrderForm.eventDates
+                      : newOrderForm.eventDate
+                      ? [newOrderForm.eventDate]
+                      : [];
+                  if (selectedDates.length === 0) return null;
+                  return (
+                    <div className="mt-1.5 flex flex-wrap gap-1">
+                      {selectedDates.map((d) => (
+                        <span
+                          key={d}
+                          className="inline-flex items-center gap-1 rounded-lg bg-brand-blue-50 border border-brand-blue-soft px-2 py-0.5 text-[10px] font-mono font-bold text-brand-blue-primary"
+                        >
+                          <span>{d}</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const nextDates = selectedDates
+                                .filter((item) => item !== d)
+                                .sort();
+                              setNewOrderForm({
+                                ...newOrderForm,
+                                eventDates: nextDates,
+                                eventDate: nextDates[0] || "",
+                              });
+                            }}
+                            className="hover:text-rose-600 font-sans font-extrabold ml-0.5"
+                            aria-label={`Remove ${d}`}
+                          >
+                            ×
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  );
+                })()}
 
                 {isEventDatePickerOpen && (
                   <div
                     role="dialog"
-                    aria-label="Choose event date"
+                    aria-label="Choose event dates"
                     className="absolute z-30 mt-1.5 w-full rounded-2xl border border-border-default bg-white p-3 shadow-xl animate-in fade-in duration-100"
                   >
                     <div className="mb-2 flex items-center justify-between text-[10px] font-bold text-text-secondary">
@@ -404,19 +479,99 @@ export function OmsCreateOrderModal({
                       <span>{calendarMonth.toLocaleDateString("en-IN", { month: "long", year: "numeric" })}</span>
                       <button type="button" disabled={isSubmitting} onClick={() => setCalendarMonth((month) => new Date(month.getFullYear(), month.getMonth() + 1, 1))} className="rounded px-1.5 py-0.5 hover:bg-surface-app disabled:opacity-50" aria-label="Next month">›</button>
                     </div>
+                    <p className="mb-1.5 text-[10px] text-text-tertiary">
+                      Click dates to select single or multiple event days
+                    </p>
                     <div className="grid grid-cols-7 gap-1 text-center text-[9px] text-text-tertiary">{["S", "M", "T", "W", "T", "F", "S"].map((day, index) => <span key={`${day}-${index}`}>{day}</span>)}</div>
                     <div className="mt-1 grid grid-cols-7 gap-1">
                       {calendarDays.map((day, index) => day === null ? <span key={`pad-${index}`} /> : (() => {
                         const value = formatDate(day);
                         const busy = busyEventDates.includes(value);
-                        const selected = newOrderForm.eventDate === value;
+                        const activeDates =
+                          newOrderForm.eventDates && newOrderForm.eventDates.length > 0
+                            ? newOrderForm.eventDates
+                            : newOrderForm.eventDate
+                            ? [newOrderForm.eventDate]
+                            : [];
+                        const selected = activeDates.includes(value);
                         const isToday = todayValue === value;
-                        return <button key={value} type="button" disabled={isSubmitting} onClick={() => { setNewOrderForm({ ...newOrderForm, eventDate: value }); setIsEventDatePickerOpen(false); }} title={busy ? "This studio already has an event on this date" : isToday ? "Today" : "Select event date"} className={`relative flex h-9 flex-col items-center justify-center rounded text-[10px] font-semibold transition ${selected ? "bg-brand-blue-primary text-white" : isToday ? "bg-brand-blue-50 text-brand-blue-primary ring-1 ring-brand-blue-soft hover:bg-brand-blue-100" : busy ? "bg-amber-50 text-amber-900 ring-1 ring-amber-200 hover:bg-amber-100" : "text-text-primary hover:bg-surface-app"}`}>
-                          <span>{day}</span>{isToday && <span className="text-[7px] leading-none">Today</span>}{busy && <span className="absolute right-1 top-1 h-1 w-1 rounded-full bg-amber-500" aria-label="Existing studio event" />}
-                        </button>;
+                        return (
+                          <button
+                            key={value}
+                            type="button"
+                            disabled={isSubmitting}
+                            onClick={() => {
+                              const exists = activeDates.includes(value);
+                              const nextDates = (
+                                exists
+                                  ? activeDates.filter((d) => d !== value)
+                                  : [...activeDates, value]
+                              ).sort();
+                              setNewOrderForm({
+                                ...newOrderForm,
+                                eventDates: nextDates,
+                                eventDate: nextDates[0] || "",
+                              });
+                            }}
+                            title={
+                              busy
+                                ? "This studio already has an event on this date"
+                                : isToday
+                                ? "Today"
+                                : "Click to toggle event date"
+                            }
+                            className={`relative flex h-9 flex-col items-center justify-center rounded text-[10px] font-semibold transition ${
+                              selected
+                                ? "bg-brand-blue-primary text-white shadow-2xs"
+                                : isToday
+                                ? "bg-brand-blue-50 text-brand-blue-primary ring-1 ring-brand-blue-soft hover:bg-brand-blue-100"
+                                : busy
+                                ? "bg-amber-50 text-amber-900 ring-1 ring-amber-200 hover:bg-amber-100"
+                                : "text-text-primary hover:bg-surface-app"
+                            }`}
+                          >
+                            <span>{day}</span>
+                            {isToday && <span className="text-[7px] leading-none">Today</span>}
+                            {busy && (
+                              <span
+                                className="absolute right-1 top-1 h-1 w-1 rounded-full bg-amber-500"
+                                aria-label="Existing studio event"
+                              />
+                            )}
+                          </button>
+                        );
                       })())}
                     </div>
-                    <p className="mt-2 text-[9px] text-text-tertiary"><span className="mr-1 inline-block h-1 w-1 rounded-full bg-amber-500 align-middle" />Existing studio event</p>
+                    <div className="mt-2.5 pt-2 border-t border-border-default flex items-center justify-between gap-2">
+                      <p className="text-[9px] text-text-tertiary">
+                        <span className="mr-1 inline-block h-1 w-1 rounded-full bg-amber-500 align-middle" />
+                        Existing studio event
+                      </p>
+                      <div className="flex items-center gap-1.5">
+                        {newOrderForm.eventDate && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setNewOrderForm({
+                                ...newOrderForm,
+                                eventDate: "",
+                                eventDates: [],
+                              })
+                            }
+                            className="rounded px-2 py-0.5 text-[10px] font-semibold text-text-secondary hover:bg-surface-app"
+                          >
+                            Clear
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setIsEventDatePickerOpen(false)}
+                          className="rounded-lg bg-brand-blue-primary px-2.5 py-1 text-[10px] font-bold text-white hover:bg-sky-600"
+                        >
+                          Done
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>

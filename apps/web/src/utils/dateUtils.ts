@@ -190,3 +190,106 @@ export function calculateTaskAgeBadge(task: {
     colorClass: "bg-slate-50 text-slate-600 border-slate-200",
   };
 }
+
+/**
+ * Normalizes an array of YYYY-MM-DD strings (plus an optional fallback single date)
+ * into a sorted, deduplicated array of YYYY-MM-DD strings.
+ */
+export function normalizeDateList(
+  dates?: string[] | null,
+  fallbackDate?: string | null
+): string[] {
+  const raw = Array.isArray(dates) && dates.length > 0 ? dates : fallbackDate ? [fallbackDate] : [];
+  const valid = raw
+    .map((d) => (d || "").trim().split("T")[0])
+    .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d));
+  return Array.from(new Set(valid)).sort();
+}
+
+/**
+ * Formats one or more YYYY-MM-DD dates into a compact human-readable label.
+ * Consecutive dates are grouped as ranges (e.g. "2026-11-24 – 2026-11-26 (3 days)" or "2026-11-10, 2026-11-24").
+ */
+export function formatMultiDateDisplay(
+  dates?: string[] | null,
+  fallbackDate?: string | null
+): string {
+  const sorted = normalizeDateList(dates, fallbackDate);
+  if (sorted.length === 0) return "";
+  if (sorted.length === 1) return sorted[0];
+
+  const toUtcMs = (ymd: string) => {
+    const [y, m, d] = ymd.split("-").map(Number);
+    return Date.UTC(y, m - 1, d);
+  };
+
+  const groups: Array<{ start: string; end: string; count: number }> = [];
+  for (const dateStr of sorted) {
+    const last = groups[groups.length - 1];
+    if (!last) {
+      groups.push({ start: dateStr, end: dateStr, count: 1 });
+    } else {
+      const diffDays = Math.round((toUtcMs(dateStr) - toUtcMs(last.end)) / (1000 * 60 * 60 * 24));
+      if (diffDays === 1) {
+        last.end = dateStr;
+        last.count += 1;
+      } else {
+        groups.push({ start: dateStr, end: dateStr, count: 1 });
+      }
+    }
+  }
+
+  const formattedGroups = groups.map((g) => (g.count > 1 ? `${g.start} to ${g.end}` : g.start));
+  return `${formattedGroups.join(", ")} (${sorted.length} days)`;
+}
+
+/**
+ * Collects all scheduled shoot dates across main eventDates/eventDate and serviceSchedules.
+ */
+export function getAllOrderShootDates(order: {
+  eventDate?: string | null;
+  eventDates?: string[] | null;
+  serviceSchedules?: Record<string, string[]> | null;
+}): string[] {
+  const mainDates = normalizeDateList(order.eventDates, order.eventDate);
+  const serviceDates: string[] = [];
+  if (order.serviceSchedules) {
+    for (const list of Object.values(order.serviceSchedules)) {
+      if (Array.isArray(list)) {
+        serviceDates.push(...list);
+      }
+    }
+  }
+  return normalizeDateList([...mainDates, ...serviceDates]);
+}
+
+/**
+ * Returns the final (latest) shoot date across main event dates and service schedules.
+ * Post-event production and SLA turnaround timers start after this final date passes.
+ */
+export function getFinalOrderShootDate(order: {
+  eventDate?: string | null;
+  eventDates?: string[] | null;
+  serviceSchedules?: Record<string, string[]> | null;
+}): string {
+  const all = getAllOrderShootDates(order);
+  if (all.length === 0) return order.eventDate || "";
+  return all[all.length - 1];
+}
+
+/**
+ * Returns the next upcoming shoot date (>= today), or the final shoot date if all dates have passed.
+ */
+export function getNextOrPrimaryOrderShootDate(order: {
+  eventDate?: string | null;
+  eventDates?: string[] | null;
+  serviceSchedules?: Record<string, string[]> | null;
+}): string {
+  const all = getAllOrderShootDates(order);
+  if (all.length === 0) return order.eventDate || "";
+  const now = new Date();
+  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  const upcoming = all.find((d) => d >= todayStr);
+  return upcoming || all[all.length - 1];
+}
+

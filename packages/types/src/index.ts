@@ -180,6 +180,8 @@ export interface CustomerOrderView {
   studioId: string;
   eventType: string;
   eventDate: string;
+  eventDates?: string[];
+  serviceSchedules?: Record<string, string[]>;
   eventLocation?: string;
   services: string[];
   totalAmount: number;
@@ -249,6 +251,7 @@ export interface CustomerTrackingView {
     studioCity?: string;
     studioPhone?: string;
     hasErp?: boolean;
+    canIssueBilling?: boolean;
     studioBillingProfile?: StudioBillingProfile;
     customerName: string;
     customerEmail?: string;
@@ -257,6 +260,8 @@ export interface CustomerTrackingView {
     collaborators?: OrderCollaborator[];
     eventType: string;
     eventDate: string;
+    eventDates?: string[];
+    serviceSchedules?: Record<string, string[]>;
     eventLocation?: string;
     callTime?: string;
     services: string[];
@@ -289,6 +294,8 @@ export interface MemberOrderSummary {
   orderNumber: string;
   eventType: string;
   eventDate: string;
+  eventDates?: string[];
+  serviceSchedules?: Record<string, string[]>;
   eventLocation?: string;
   callTime?: string;
   services: string[];
@@ -552,7 +559,9 @@ export interface Order extends SoftDeletable {
     uid?: string;
   };
   eventType: string;
-  eventDate: string; // YYYY-MM-DD
+  eventDate: string; // YYYY-MM-DD (Primary / earliest date)
+  eventDates?: string[]; // Sorted YYYY-MM-DD main event dates
+  serviceSchedules?: Record<string, string[]>; // Per-service separate shoot dates
   eventLocation?: string;
   callTime?: string;
   locationInfo?: EventLocationInfo;

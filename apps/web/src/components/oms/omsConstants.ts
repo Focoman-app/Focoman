@@ -61,6 +61,7 @@ export const DEFAULT_ORDER_FORM = {
   eventType: "Wedding",
   customEventType: "",
   eventDate: "",
+  eventDates: [] as string[],
   eventLocation: "",
   services: [] as string[],
   customServiceInput: "",

@@ -89,9 +89,27 @@ export async function createOrderCore(rawInput: unknown): Promise<{
     const studioPrefix = prefixLetters(validated.studioId);
     const finalPasskey = orderId;
 
+    const normalizedEventDates = Array.from(
+      new Set(
+        (validated.eventDates && validated.eventDates.length > 0
+          ? validated.eventDates
+          : [validated.eventDate]
+        )
+          .map((d) => d.trim())
+          .filter(Boolean)
+      )
+    ).sort();
+    const primaryEventDate = normalizedEventDates[0] || validated.eventDate;
+    const allInitialDates = [
+      ...normalizedEventDates,
+      ...Object.values(validated.serviceSchedules || {}).flat(),
+    ].sort();
+    const finalInitialDate =
+      allInitialDates[allInitialDates.length - 1] || primaryEventDate;
+
     const todayStr = getStudioCalendarDate(now);
     const initialOrderStatus: OrderStatus =
-      validated.eventDate < todayStr ? "POST_EVENT_IN_PROGRESS" : "AWAITING_EVENT";
+      finalInitialDate < todayStr ? "POST_EVENT_IN_PROGRESS" : "AWAITING_EVENT";
 
     const [existingCustomers, studioMembers, studio, hasErp] = await Promise.all([
       getCustomersByStudio(validated.studioId),
@@ -109,7 +127,7 @@ export async function createOrderCore(rawInput: unknown): Promise<{
 
     const suggestions = hasErp
       ? generateResourceSuggestions(
-          validated.eventDate,
+          primaryEventDate,
           ["PHOTOGRAPHY", "VIDEOGRAPHY", "ALBUM_DESIGN", "PHOTO_EDITING"],
           studioMembers,
           []
@@ -144,7 +162,11 @@ export async function createOrderCore(rawInput: unknown): Promise<{
         ...(customerEmail ? { email: customerEmail } : {}),
       },
       eventType: validated.eventType,
-      eventDate: validated.eventDate,
+      eventDate: primaryEventDate,
+      eventDates: normalizedEventDates,
+      ...(validated.serviceSchedules && Object.keys(validated.serviceSchedules).length > 0
+        ? { serviceSchedules: validated.serviceSchedules }
+        : {}),
       ...(validated.eventLocation ? { eventLocation: validated.eventLocation } : {}),
       services: validated.services,
       packages: validated.packages || [],
@@ -268,7 +290,7 @@ export async function createOrderCore(rawInput: unknown): Promise<{
             customerName: validated.customerName,
             orderId: newOrder.id,
             eventTitle: validated.eventType,
-            eventDate: validated.eventDate,
+            eventDate: primaryEventDate,
             passkey: finalPasskey,
             studioName: studio?.name || validated.studioId,
             studioPhone: studio?.ownerPhone,
@@ -291,6 +313,18 @@ export async function createOrderCore(rawInput: unknown): Promise<{
   }
 }
 
+function getLatestScheduledOrderDate(order: Order): string {
+  const candidates = [
+    ...(Array.isArray(order.eventDates) ? order.eventDates : []),
+    order.eventDate,
+    ...Object.values(order.serviceSchedules || {}).flat(),
+  ]
+    .map((d) => (d || "").trim())
+    .filter(Boolean)
+    .sort();
+  return candidates[candidates.length - 1] || order.eventDate;
+}
+
 export async function getStudioOrdersCore(
   studioSlug: string,
   idToken: string
@@ -302,7 +336,8 @@ export async function getStudioOrdersCore(
 
   const updatedOrders: Order[] = [];
   for (const order of orders) {
-    if (order.orderStatus === "AWAITING_EVENT" && order.eventDate < todayStr) {
+    const latestDate = getLatestScheduledOrderDate(order);
+    if (order.orderStatus === "AWAITING_EVENT" && latestDate < todayStr) {
       const transitioned: Order = {
         ...order,
         orderStatus: "POST_EVENT_IN_PROGRESS",
@@ -342,11 +377,12 @@ export async function getOrderCore(
       return { order: null, tasks: [] };
     }
     const todayStr = getStudioCalendarDate();
+    const latestDate = getLatestScheduledOrderDate(order);
     let currentOrder = order;
-    if (order.orderStatus === "AWAITING_EVENT" && order.eventDate < todayStr) {
+    if (order.orderStatus === "AWAITING_EVENT" && latestDate < todayStr) {
       const autoEventLog: OrderAuditEntry = {
         id: `audit_${Date.now()}_auto_event`,
-        timestamp: `${order.eventDate} 00:00`,
+        timestamp: `${latestDate} 00:00`,
         actorName: "Automated System",
         actorRole: "System",
         action: "Event Date Passed",
@@ -407,7 +443,16 @@ export async function updateOrderCore(input: {
   orderId: string;
   studioId: string;
   updates: Partial<
-    Pick<Order, "eventType" | "eventDate" | "eventLocation" | "services" | "packages">
+    Pick<
+      Order,
+      | "eventType"
+      | "eventDate"
+      | "eventDates"
+      | "serviceSchedules"
+      | "eventLocation"
+      | "services"
+      | "packages"
+    >
   >;
   idToken: string;
 }): Promise<{ success: boolean; order?: Order; error?: string }> {
@@ -423,7 +468,49 @@ export async function updateOrderCore(input: {
       return { success: false, error: "Unauthorized: Order belongs to another studio." };
     }
 
-    const updated = await updateOrder(input.orderId, input.updates);
+    const nextUpdates: Partial<Order> = { ...input.updates };
+    if (input.updates.eventDates && input.updates.eventDates.length > 0) {
+      const sorted = Array.from(
+        new Set(input.updates.eventDates.map((d) => d.trim()).filter(Boolean))
+      ).sort();
+      nextUpdates.eventDates = sorted;
+      nextUpdates.eventDate = sorted[0];
+    } else if (input.updates.eventDate) {
+      nextUpdates.eventDate = input.updates.eventDate;
+      if (!input.updates.eventDates) {
+        nextUpdates.eventDates = [input.updates.eventDate];
+      }
+    }
+
+    if (input.updates.serviceSchedules !== undefined) {
+      const cleanedSchedules: Record<string, string[]> = {};
+      for (const [svc, dates] of Object.entries(input.updates.serviceSchedules)) {
+        const sorted = Array.from(
+          new Set((dates || []).map((d) => d.trim()).filter(Boolean))
+        ).sort();
+        if (sorted.length > 0) {
+          cleanedSchedules[svc] = sorted;
+        }
+      }
+      nextUpdates.serviceSchedules = cleanedSchedules;
+    }
+
+    const mergedOrder: Order = {
+      ...existing,
+      ...nextUpdates,
+    };
+    const latestDate = getLatestScheduledOrderDate(mergedOrder);
+    const todayStr = getStudioCalendarDate();
+    if (mergedOrder.orderStatus === "AWAITING_EVENT" && latestDate < todayStr) {
+      nextUpdates.orderStatus = "POST_EVENT_IN_PROGRESS";
+    } else if (
+      mergedOrder.orderStatus === "POST_EVENT_IN_PROGRESS" &&
+      latestDate >= todayStr
+    ) {
+      nextUpdates.orderStatus = "AWAITING_EVENT";
+    }
+
+    const updated = await updateOrder(input.orderId, nextUpdates);
     return { success: true, order: updated || undefined };
   } catch (err: unknown) {
     console.error("[updateOrderAction] Error:", err);

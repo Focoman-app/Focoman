@@ -659,6 +659,10 @@ export default function OmsPage({
       ),
       eventType: resolvedEventType,
       eventDate: newOrderForm.eventDate,
+      eventDates:
+        newOrderForm.eventDates && newOrderForm.eventDates.length > 0
+          ? newOrderForm.eventDates
+          : [newOrderForm.eventDate],
       eventLocation: newOrderForm.eventLocation.trim() || undefined,
       services: newOrderForm.services,
       estimatedPrice: parsedFinalPrice,
@@ -712,14 +716,24 @@ export default function OmsPage({
     }
   };
 
-  const handleSaveOrderSchedule = async (eventDate: string, eventLocation: string) => {
+  const handleSaveOrderSchedule = async (
+    eventDate: string,
+    eventLocation: string,
+    eventDates?: string[],
+    serviceSchedules?: Record<string, string[]>
+  ) => {
     if (!selected) return;
     const token = (await getIdToken(false)) ?? workspaceToken;
     if (!token) throw new Error("Authentication error. Please sign in again.");
     const res = await updateOrderAction({
       orderId: selected.id,
       studioId: studioSlug,
-      updates: { eventDate, eventLocation: eventLocation.trim() },
+      updates: {
+        eventDate,
+        ...(eventDates !== undefined ? { eventDates } : {}),
+        eventLocation: eventLocation.trim(),
+        ...(serviceSchedules !== undefined ? { serviceSchedules } : {}),
+      },
       idToken: token,
     });
     if (!res.success || !res.order) throw new Error(res.error || "Failed to save event schedule.");
@@ -1650,6 +1664,21 @@ export default function OmsPage({
             onAssignTaskCrew={handleAssignTaskCrew}
             onMarkOfflineReviewReady={handleMarkTaskOfflineReviewReady}
             onSaveSchedule={handleSaveOrderSchedule}
+            busyEventDates={orders
+              .filter((order) => !order.isDeleted && order.orderStatus !== "CANCELLED")
+              .flatMap((order) => {
+                const main =
+                  order.eventDates && order.eventDates.length > 0
+                    ? order.eventDates
+                    : order.eventDate
+                    ? [order.eventDate]
+                    : [];
+                const svc = order.serviceSchedules
+                  ? Object.values(order.serviceSchedules).flat()
+                  : [];
+                return Array.from(new Set([...main, ...svc]));
+              })
+              .filter(Boolean)}
             hasErp={hasErp}
           />
 
@@ -1831,7 +1860,18 @@ export default function OmsPage({
         calculateOrderPrice={calculateOrderPrice}
         busyEventDates={orders
           .filter((order) => !order.isDeleted && order.orderStatus !== "CANCELLED")
-          .map((order) => order.eventDate)
+          .flatMap((order) => {
+            const main =
+              order.eventDates && order.eventDates.length > 0
+                ? order.eventDates
+                : order.eventDate
+                ? [order.eventDate]
+                : [];
+            const svc = order.serviceSchedules
+              ? Object.values(order.serviceSchedules).flat()
+              : [];
+            return Array.from(new Set([...main, ...svc]));
+          })
           .filter(Boolean)}
         hasCrm={hasCrm}
         hasWhatsAppOperations={hasWhatsAppOperations}

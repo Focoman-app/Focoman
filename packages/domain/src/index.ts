@@ -169,6 +169,10 @@ export function toCustomerOrderView(order: Order, studioName: string): CustomerO
     studioId: order.studioId,
     eventType: order.eventType,
     eventDate: order.eventDate,
+    ...(order.eventDates && order.eventDates.length > 0 ? { eventDates: order.eventDates } : {}),
+    ...(order.serviceSchedules && Object.keys(order.serviceSchedules).length > 0
+      ? { serviceSchedules: order.serviceSchedules }
+      : {}),
     eventLocation: order.eventLocation || order.locationInfo?.address,
     services: order.services,
     totalAmount: breakdown.confirmedPrice,
@@ -196,6 +200,7 @@ export function toCustomerTrackingView(
     studioCity?: string;
     studioPhone?: string;
     hasErp?: boolean;
+    canIssueBilling?: boolean;
     studioBillingProfile?: CustomerTrackingView['order']['studioBillingProfile'];
     staffEmails?: string[];
     staffUids?: string[];
@@ -216,6 +221,7 @@ export function toCustomerTrackingView(
       studioCity: studioInfo?.studioCity,
       studioPhone: studioInfo?.studioPhone,
       hasErp: studioInfo?.hasErp,
+      canIssueBilling: studioInfo?.canIssueBilling,
       studioBillingProfile: studioInfo?.studioBillingProfile,
       customerName: order.customer.name,
       customerEmail: order.customer.email,
@@ -224,6 +230,10 @@ export function toCustomerTrackingView(
       collaborators: order.collaborators,
       eventType: order.eventType,
       eventDate: order.eventDate,
+      ...(order.eventDates && order.eventDates.length > 0 ? { eventDates: order.eventDates } : {}),
+      ...(order.serviceSchedules && Object.keys(order.serviceSchedules).length > 0
+        ? { serviceSchedules: order.serviceSchedules }
+        : {}),
       eventLocation: order.eventLocation || order.locationInfo?.address,
       services: order.services,
       packages: order.packages,

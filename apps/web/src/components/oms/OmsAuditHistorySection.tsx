@@ -2,6 +2,8 @@
 
 import type { Order, Studio, Task } from "@focoman/types";
 import { getStudioCalendarDate, getStudioTimestampIST } from "@focoman/domain";
+import { getEffectiveStudioFeatures } from "@/lib/proEntitlements";
+import { getFinalOrderShootDate } from "@/utils/dateUtils";
 
 export function OmsAuditHistorySection({
   order,
@@ -12,6 +14,13 @@ export function OmsAuditHistorySection({
   tasks: Task[];
   studio: Studio;
 }) {
+  const hasErp = getEffectiveStudioFeatures(
+    studio?.ownerEmail,
+    studio?.features,
+    studio?.planInfo
+  ).erp;
+  const finalShootDate = getFinalOrderShootDate(order);
+
   const formatAuditStamp = (val?: string | null): string => {
     if (!val) return "-";
     return getStudioTimestampIST(val);
@@ -78,16 +87,16 @@ export function OmsAuditHistorySection({
   // 4. Synthesize Event Date Passed (System Action)
   const todayCalendar = getStudioCalendarDate();
   if (
-    (order.eventDate < todayCalendar || order.orderStatus !== "AWAITING_EVENT") &&
+    (finalShootDate < todayCalendar || order.orderStatus !== "AWAITING_EVENT") &&
     !logEntries.some((e) => e.action.includes("Event Date Passed"))
   ) {
     logEntries.push({
       id: "synth_event_passed",
-      timestamp: `${order.eventDate} 00:00`,
+      timestamp: `${finalShootDate} 00:00`,
       actorName: "Automated System",
       actorRole: "System",
       action: "Event Date Passed",
-      details: `Event date (${order.eventDate}) reached — Post-event production workflow started automatically`,
+      details: `Event date (${finalShootDate}) reached — Post-event production workflow started automatically`,
     });
   }
 
@@ -122,8 +131,8 @@ export function OmsAuditHistorySection({
     });
   }
 
-  // 7. Synthesize Assigned Resources (Staff assignments)
-  if (order.assignedResources && order.assignedResources.length > 0) {
+  // 7. Synthesize Assigned Resources (Staff assignments - ERP only)
+  if (hasErp && order.assignedResources && order.assignedResources.length > 0) {
     order.assignedResources.forEach((res) => {
       if (
         !logEntries.some(
@@ -144,11 +153,36 @@ export function OmsAuditHistorySection({
 
   // 8. Synthesize Meaningful Task Progress
   if (tasks && tasks.length > 0) {
+    if (!hasErp) {
+      // Free Studio (No ERP): Emit one common log for all tasks assigned to the Studio Owner
+      const ownerAssignee =
+        tasks.find(
+          (t) =>
+            Boolean(t.assignedMemberName) &&
+            !t.assignedMemberName.toLowerCase().includes("unassigned")
+        )?.assignedMemberName ||
+        studio?.ownerName ||
+        "Studio Owner";
+      if (!logEntries.some((e) => e.action === "Tasks Assigned")) {
+        logEntries.push({
+          id: `synth_task_assign_common_${order.id}`,
+          timestamp: formatAuditStamp(tasks[0]?.createdAt || order.createdAt),
+          actorName: studio?.ownerName || "Studio Owner",
+          actorRole: "Owner",
+          action: "Tasks Assigned",
+          details: `Assigned all ${tasks.length} production workflow task${
+            tasks.length === 1 ? "" : "s"
+          } to ${ownerAssignee}`,
+        });
+      }
+    }
+
     tasks.forEach((t) => {
       const hasAssignee =
         Boolean(t.assignedMemberName) &&
         !t.assignedMemberName.toLowerCase().includes("unassigned");
       if (
+        hasErp &&
         hasAssignee &&
         !logEntries.some((e) =>
           e.details.includes(`Assigned task "${t.title}" to ${t.assignedMemberName}`)
@@ -177,7 +211,7 @@ export function OmsAuditHistorySection({
           actorName: hasAssignee
             ? t.assignedMemberName
             : studio?.ownerName || "Studio Owner",
-          actorRole: hasAssignee ? "Member" : "Owner",
+          actorRole: hasErp && hasAssignee ? "Member" : "Owner",
           action: "Task Status Updated",
           details: `Updated task "${t.title}" status to ${t.status}${
             t.reworkNotes ? ` · Notes: ${t.reworkNotes}` : ""
