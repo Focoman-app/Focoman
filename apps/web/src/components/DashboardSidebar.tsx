@@ -247,7 +247,7 @@ export function DashboardSidebar({ studioSlug, role, plan, studioName, studioLog
     <div className="flex h-full flex-col bg-[#181B20] text-slate-300">
       {/* Logo Header (In sync with dark side nav) */}
       <div className="flex items-center justify-between border-b border-[#262A32] bg-[#181B20] px-5 py-3.5 shrink-0">
-        <Link href="/" className="flex items-center shrink-0" title="Focoman Home">
+        <Link href="/dashboard" className="flex items-center shrink-0" title="Open default studio dashboard">
           <FocomanLogo className="h-8 sm:h-9 w-auto" showStudiosSuffix={true} variant="dark" />
         </Link>
         {onLinkClick && (
@@ -442,8 +442,18 @@ export function DashboardSidebar({ studioSlug, role, plan, studioName, studioLog
         })}
       </nav>
 
-      {/* Bottom: Sign Out */}
+      {/* Bottom: Public landing page and sign out */}
       <div className="border-t border-[#262A32] px-3 py-3 flex flex-col gap-2">
+        <Link
+          href="/"
+          onClick={onLinkClick}
+          className="flex w-full items-center gap-2 rounded-xl border border-transparent px-3 py-2 text-left text-xs font-medium text-slate-400 transition hover:bg-[#22262E] hover:text-slate-200"
+        >
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4m-4 0h4" />
+          </svg>
+          Landing Page
+        </Link>
         <button
           onClick={() => {
             if (onLinkClick) onLinkClick();
@@ -474,7 +484,7 @@ export function DashboardSidebar({ studioSlug, role, plan, studioName, studioLog
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
             </svg>
           </button>
-          <Link href="/" className="flex items-center shrink-0" title="Focoman Home">
+          <Link href="/dashboard" className="flex items-center shrink-0" title="Open default studio dashboard">
             <FocomanLogo className="h-6 sm:h-7 w-auto shrink-0" showStudiosSuffix={true} variant="dark" />
           </Link>
         </div>

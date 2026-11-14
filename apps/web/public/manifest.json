@@ -2,7 +2,7 @@
   "name": "Focoman",
   "short_name": "Focoman",
   "description": "Business operating system for photography studios",
-  "start_url": "/",
+  "start_url": "/dashboard",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#ea580c",

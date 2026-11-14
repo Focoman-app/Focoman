@@ -124,11 +124,8 @@ export async function clearDefaultWorkspace(
  * 3. If unset locally, checks Firestore server preference.
  *    - If found on server and valid in active workspaces: saves to localStorage, returns it.
  *    - If server has __cleared__, respects it.
- * 4. If unset everywhere:
- *    - Auto-defaults to first available active workspace.
- *    - Persists to both localStorage and Firestore so ALL pages are in sync!
- *    - Broadcasts change.
- *    - Returns firstStudioId.
+ * 4. If unset everywhere, returns null so the caller can show the workspace
+ *    selector. A default is only persisted after an explicit user choice.
  */
 export async function resolveAndSyncDefaultWorkspace(
   uid: string,
@@ -187,14 +184,8 @@ export async function resolveAndSyncDefaultWorkspace(
     return serverPref;
   }
 
-  // 4. Neither local nor server has a preference
-  // If user has active workspaces, auto-select the first one as default
-  if (activeWorkspaces.length > 0) {
-    const firstStudioId = activeWorkspaces[0].studioId;
-    await setDefaultWorkspace(uid, firstStudioId, idToken);
-    return firstStudioId;
-  }
-
+  // 4. Neither local nor server has a preference. Do not silently choose or
+  // persist a workspace: callers must route the user to the selector.
   return null;
 }
 

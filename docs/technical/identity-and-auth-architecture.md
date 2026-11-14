@@ -259,11 +259,13 @@ Following Google authentication, navigation resolves deterministically based on 
 
 | Active Memberships Count | Routing Destination |
 | :--- | :--- |
-| **0 Memberships** | `/onboarding` (Shows `Register Your Studio` and `Join an Existing Studio`) |
-| **1 Membership** | `/{studioSlug}/dashboard` directly (respecting role-scoped dashboard view) |
-| **> 1 Memberships** | `/workspaces` (Workspace Selector showing all studios, roles, and registration options) |
+| **0 Memberships** | `/workspaces` (Shows `Register Your Studio` and `Join an Existing Studio`) |
+| **1 Membership with a default workspace** | `/{studioSlug}/dashboard` directly (respecting role-scoped dashboard view) |
+| **1 Membership without a default workspace** | `/workspaces` (Workspace Selector showing all studios, roles, and registration options) |
+| **> 1 Memberships with a default workspace** | `/{defaultStudioSlug}/dashboard` directly |
+| **> 1 Memberships without a default workspace** | `/workspaces` (Workspace Selector showing all studios, roles, and registration options) |
 
-A workspace switcher in the dashboard navigation header allows instant switching between authorized studio workspaces at any time.
+A workspace switcher in the dashboard navigation header allows instant switching between authorized studio workspaces at any time. The PWA application entry point is `/dashboard`; it resolves the default workspace using this routing table. The public landing page remains available at `/`, but is never an implicit in-app home destination.
 
 ---
 

@@ -3,8 +3,8 @@
 import { getUserLegalConsent, saveUserLegalConsent } from "@focoman/db";
 import { requireVerifiedUser } from "@/lib/serverAuth";
 
-export const CURRENT_TERMS_VERSION = "2026-11-10";
-export const CURRENT_PRIVACY_VERSION = "2026-11-10";
+const CURRENT_TERMS_VERSION = "2026-11-10";
+const CURRENT_PRIVACY_VERSION = "2026-11-10";
 
 export async function recordNewUserLegalConsentAction(input: {
   idToken: string;
