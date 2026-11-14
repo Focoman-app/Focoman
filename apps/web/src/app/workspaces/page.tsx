@@ -272,7 +272,7 @@ export default function WorkspacesPage() {
                   Your personal profile is active. Choose how you would like to use Focoman:
                 </p>
 
-                <div className="mt-8 grid gap-4 sm:grid-cols-2 max-w-2xl mx-auto text-left">
+                <div className="mt-8 grid gap-4 sm:grid-cols-3 max-w-3xl mx-auto text-left">
                   {/* Option 1: Studio Owner (Primary Target) */}
                   <Link
                     href="/onboarding/register-studio"
@@ -306,6 +306,23 @@ export default function WorkspacesPage() {
                     </div>
                     <span className="mt-4 inline-flex items-center text-xs font-bold text-brand-purple-primary group-hover:underline">
                       Join with Invite Code →
+                    </span>
+                  </Link>
+
+                  <Link
+                    href="/track"
+                    className="flex flex-col justify-between rounded-2xl border-2 border-brand-blue-primary/30 bg-brand-blue-background/30 p-6 transition hover:border-brand-blue-primary hover:bg-brand-blue-background/60 shadow-2xs group"
+                  >
+                    <div>
+                      <h3 className="text-sm font-bold text-brand-blue-primary group-hover:text-sky-700">
+                        I&apos;m a Customer
+                      </h3>
+                      <p className="mt-1 text-xs text-text-secondary leading-relaxed">
+                        View orders linked to your Google account or track an order with its access code.
+                      </p>
+                    </div>
+                    <span className="mt-4 inline-flex items-center text-xs font-bold text-brand-blue-primary group-hover:underline">
+                      Track Your Orders →
                     </span>
                   </Link>
 

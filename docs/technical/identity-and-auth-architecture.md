@@ -271,11 +271,19 @@ A workspace switcher in the dashboard navigation header allows instant switching
 
 ## 11. Customer Identity & Order Tracking Isolation
 
-Customers booking photography services are **NOT** part of the internal Focoman user identity system in Phase 1:
-- Customers do **not** sign up for a Focoman account.
-- Customers do **not** authenticate via Google or Firebase Auth.
-- Customer order access is granted exclusively through the **Guest Tracking Passkey** (e.g. `FOC-AB12CD` or Order Number).
-- Client phone numbers and emails stored on Orders exist solely as CRM contact records.
+Customers may track an order as a guest using its passkey. A customer can also
+sign in with the Google email recorded on an order and claim that order to their
+Firebase UID. This optional customer identity is not a studio membership and
+does not grant studio access. It only lists the customer's own claimed or
+email-matched orders across studios in the customer tracking area.
+
+- Guest tracking remains available through the customer order passkey (for
+  example, `FOC-AB12CD`).
+- A customer Google account has no workspace role and cannot access studio
+  navigation, CRM records, or other customers' orders.
+- Claiming requires the signed-in Google email to match the order's customer
+  email, or a valid passkey for an unclaimed order.
+- Client phone numbers and emails stored on Orders remain CRM contact records.
 
 ---
 
@@ -285,5 +293,7 @@ The following historical concepts are formally classified as **SUPERSEDED / ARCH
 
 1. **Owner-Created Member Credentials**: Any mechanism where a studio owner specifies a username and password for crew members is superseded by Google Authentication + Invitation Token linking.
 2. **Separate Studio Login Portals**: Any pattern requiring distinct login URLs or distinct accounts per studio is superseded by the unified Google identity with multi-studio membership switching.
-3. **Customer Firebase Accounts**: Any requirement to register customers into Firebase Auth for order status tracking is superseded by the lightweight passkey tracking model.
+3. **Customer Studio Memberships**: Customers never receive a studio
+membership from order claiming. A claimed customer identity is limited to that
+customer's own order-tracking list.
 4. **Custom Platform Passwords / Legacy Tokens**: Completely eliminated in favor of Firebase Auth ID tokens verified server-side via Firebase Admin SDK.
