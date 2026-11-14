@@ -8,6 +8,8 @@ import {
   getMembershipsByStudio,
   updateStudio,
   softDeleteStudio,
+  permanentlyDeleteStudioData,
+  getDeletedStudiosByOwner,
   leaveStudioMembership,
   restoreStudio,
   getFirestoreServerInstance,
@@ -17,7 +19,14 @@ import {
   saveStudioPackage,
   softDeleteStudioPackage,
 } from "@focoman/db";
-import { Studio, StudioMembership, StudioPlan, StudioServiceConfig, StudioPackage } from "@focoman/types";
+import {
+  Studio,
+  StudioMembership,
+  StudioPlan,
+  StudioServiceConfig,
+  StudioPackage,
+  DeletedStudioRecoveryInfo,
+} from "@focoman/types";
 import { PLAN_CAPABILITIES } from "@focoman/config";
 import { requireVerifiedUser, requireStudioMember } from "@/lib/serverAuth";
 import { requireCapability } from "@/lib/entitlementAuth";
@@ -334,18 +343,184 @@ export async function resetStudioWhatsappConfigAction(
   }
 }
 
-export async function deleteStudioAction(
-  studioSlug: string,
-  idToken: string,
-  _options?: { permanent?: boolean }
+export async function getDeletedStudiosAction(
+  idToken: string
+): Promise<{ success: boolean; studios: DeletedStudioRecoveryInfo[]; error?: string }> {
+  try {
+    const decoded = await requireVerifiedUser(idToken);
+    const studios = await getDeletedStudiosByOwner(decoded.uid, decoded.email);
+    return { success: true, studios };
+  } catch (err: unknown) {
+    console.error("[getDeletedStudiosAction] Error:", err);
+    return {
+      success: false,
+      studios: [],
+      error: err instanceof Error ? err.message : "Failed to load deleted studios.",
+    };
+  }
+}
+
+export async function getRecoverableAccountStatusAction(
+  idToken: string
+): Promise<{
+  success: boolean;
+  hasRecoverableData: boolean;
+  accountClosureRequestedAt?: string | null;
+  remainingDays: number;
+  scheduledDeletionAt?: string | null;
+  studios: DeletedStudioRecoveryInfo[];
+  error?: string;
+}> {
+  try {
+    const decoded = await requireVerifiedUser(idToken);
+    const firestore = getFirestoreServerInstance();
+    const [studios, activeMemberships, prefSnap] = await Promise.all([
+      getDeletedStudiosByOwner(decoded.uid, decoded.email),
+      getMembershipsByUid(decoded.uid, decoded.email),
+      firestore.collection("user_preferences").doc(decoded.uid).get(),
+    ]);
+
+    const prefData = prefSnap.exists ? prefSnap.data() : null;
+    const accountClosureRequestedAt = (prefData?.accountClosureRequestedAt as string | undefined) || null;
+
+    // Show recovery prompt on login if the user has recoverable deleted studios
+    // from a closed account (or has no active workspaces and has recoverable deleted studios)
+    const hasRecoverableData =
+      studios.length > 0 && (Boolean(accountClosureRequestedAt) || activeMemberships.length === 0);
+
+    const remainingDays =
+      studios.length > 0 ? Math.max(...studios.map((s) => s.remainingDays)) : 0;
+    const scheduledDeletionAt = studios[0]?.scheduledDeletionAt || null;
+
+    return {
+      success: true,
+      hasRecoverableData,
+      accountClosureRequestedAt,
+      remainingDays,
+      scheduledDeletionAt,
+      studios,
+    };
+  } catch (err: unknown) {
+    console.error("[getRecoverableAccountStatusAction] Error:", err);
+    return {
+      success: false,
+      hasRecoverableData: false,
+      remainingDays: 0,
+      studios: [],
+      error: err instanceof Error ? err.message : "Failed to check recoverable account data.",
+    };
+  }
+}
+
+export async function recoverDeletedAccountAction(
+  idToken: string
+): Promise<{
+  success: boolean;
+  restoredCount: number;
+  firstStudioId?: string;
+  error?: string;
+}> {
+  try {
+    const decoded = await requireVerifiedUser(idToken);
+    const firestore = getFirestoreServerInstance();
+    const deletedStudios = await getDeletedStudiosByOwner(decoded.uid, decoded.email);
+
+    let restoredCount = 0;
+    let firstStudioId: string | undefined;
+
+    for (const ds of deletedStudios) {
+      const ok = await restoreStudio(ds.id);
+      if (ok) {
+        restoredCount += 1;
+        if (!firstStudioId) firstStudioId = ds.id;
+      }
+    }
+
+    await firestore
+      .collection("user_preferences")
+      .doc(decoded.uid)
+      .set(
+        {
+          accountClosureRequestedAt: null,
+          ...(firstStudioId ? { defaultStudioId: firstStudioId } : {}),
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true }
+      );
+
+    return { success: true, restoredCount, firstStudioId };
+  } catch (err: unknown) {
+    console.error("[recoverDeletedAccountAction] Error:", err);
+    return {
+      success: false,
+      restoredCount: 0,
+      error: err instanceof Error ? err.message : "Failed to recover account data.",
+    };
+  }
+}
+
+export async function startNewProfileAfterDeletionAction(
+  idToken: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const decoded = await requireVerifiedUser(idToken);
-    await requireStudioMember(decoded.uid, studioSlug, "STUDIO_OWNER");
+    const firestore = getFirestoreServerInstance();
+    const deletedStudios = await getDeletedStudiosByOwner(decoded.uid, decoded.email);
 
-    // Browser-initiated closure stays recoverable for the configured window.
-    // Permanent cleanup is an administrative operation, not a client request.
-    await softDeleteStudio(studioSlug, decoded.uid);
+    for (const ds of deletedStudios) {
+      await permanentlyDeleteStudioData(ds.id);
+    }
+
+    await firestore
+      .collection("user_preferences")
+      .doc(decoded.uid)
+      .set(
+        {
+          accountClosureRequestedAt: null,
+          defaultStudioId: null,
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true }
+      );
+
+    return { success: true };
+  } catch (err: unknown) {
+    console.error("[startNewProfileAfterDeletionAction] Error:", err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Failed to start new profile.",
+    };
+  }
+}
+
+export async function deleteStudioAction(
+  studioSlug: string,
+  idToken: string,
+  options?: { permanent?: boolean }
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const decoded = await requireVerifiedUser(idToken);
+    const cleanSlug = studioSlug.trim().toLowerCase();
+
+    // Verify ownership (active membership or owner of a soft-deleted studio)
+    const firestore = getFirestoreServerInstance();
+    const studioSnap = await firestore.collection("studios").doc(cleanSlug).get();
+    const studioData = studioSnap.exists ? (studioSnap.data() as Studio) : null;
+    const isDirectOwner =
+      studioData &&
+      (studioData.ownerId === decoded.uid ||
+        (decoded.email &&
+          studioData.ownerEmail?.toLowerCase() === decoded.email.toLowerCase()));
+
+    if (!isDirectOwner) {
+      await requireStudioMember(decoded.uid, cleanSlug, "STUDIO_OWNER");
+    }
+
+    if (options?.permanent) {
+      await permanentlyDeleteStudioData(cleanSlug);
+    } else {
+      await softDeleteStudio(cleanSlug, decoded.uid);
+    }
     return { success: true };
   } catch (err: unknown) {
     console.error("[deleteStudioAction] Error:", err);
@@ -383,12 +558,38 @@ export async function restoreStudioAction(
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const decoded = await requireVerifiedUser(idToken);
-    const membership = await getMembershipByUidAndStudio(decoded.uid, studioSlug);
-    if (!membership || membership.role !== "STUDIO_OWNER") {
-      throw new Error("Only the studio owner can restore this workspace.");
+    const cleanSlug = studioSlug.trim().toLowerCase();
+    const firestore = getFirestoreServerInstance();
+    const studioSnap = await firestore.collection("studios").doc(cleanSlug).get();
+
+    if (!studioSnap.exists) {
+      return { success: false, error: "Studio not found." };
     }
 
-    await restoreStudio(studioSlug);
+    const studioData = studioSnap.data() as Studio;
+    const isOwnerByStudio =
+      studioData.ownerId === decoded.uid ||
+      (Boolean(decoded.email) &&
+        studioData.ownerEmail?.toLowerCase() === decoded.email?.toLowerCase());
+
+    if (!isOwnerByStudio) {
+      const memSnap = await firestore
+        .collection("memberships")
+        .where("uid", "==", decoded.uid)
+        .where("studioId", "==", cleanSlug)
+        .get();
+      const hasOwnerMembership = memSnap.docs.some(
+        (d) => (d.data() as StudioMembership).role === "STUDIO_OWNER"
+      );
+      if (!hasOwnerMembership) {
+        throw new Error("Only the studio owner can restore this workspace.");
+      }
+    }
+
+    const restored = await restoreStudio(cleanSlug);
+    if (!restored) {
+      return { success: false, error: "Studio could not be restored." };
+    }
     return { success: true };
   } catch (err: unknown) {
     console.error("[restoreStudioAction] Error:", err);
@@ -442,58 +643,99 @@ export async function selectStudioPlanAction(
 }
 
 /**
- * Starts account closure while preserving sole-owner workspaces for the
- * configured recovery window. Permanent cleanup is not a browser action.
+ * Closes the user account. By default, sole-owner workspaces enter the 30-day
+ * recovery window. When options.permanent is true ("Full instant delete"),
+ * all sole-owner studios, studio data, and user records are immediately erased.
  */
-export async function deleteUserAccountAction(idToken: string): Promise<{
+export async function deleteUserAccountAction(
+  idToken: string,
+  options?: { permanent?: boolean }
+): Promise<{
   success: boolean;
   error?: string;
 }> {
   try {
     const decoded = await requireVerifiedUser(idToken);
     const uid = decoded.uid;
+    const isPermanent = Boolean(options?.permanent);
     const firestore = getFirestoreServerInstance();
 
-    // 1. Fetch all memberships for this user
-    const memberships = await getMembershipsByUid(uid);
+    // 1. Fetch all active memberships for this user
+    const memberships = await getMembershipsByUid(uid, decoded.email);
+    const processedStudios = new Set<string>();
 
-    // 2. For studios where this user is the STUDIO_OWNER:
+    // 2. Process active memberships
     for (const m of memberships) {
+      const sid = m.studioId.toLowerCase();
+      processedStudios.add(sid);
       if (m.role === "STUDIO_OWNER") {
         try {
-          const studioMembers = await getMembershipsByStudio(m.studioId);
+          const studioMembers = await getMembershipsByStudio(sid);
           const otherActiveOwners = studioMembers.filter(
             (sm) => sm.uid !== uid && sm.role === "STUDIO_OWNER" && sm.status === "ACTIVE"
           );
 
           if (otherActiveOwners.length === 0) {
-            // Sole-owner workspaces remain recoverable under the Privacy Policy.
-            await softDeleteStudio(m.studioId, uid);
+            if (isPermanent) {
+              await permanentlyDeleteStudioData(sid);
+            } else {
+              await softDeleteStudio(sid, uid);
+            }
           } else {
-            // Co-owned studio: Leave membership so studio remains with remaining owner
-            await leaveStudioMembership(uid, m.studioId);
+            await leaveStudioMembership(uid, sid);
           }
         } catch (e) {
-          console.warn(`[deleteUserAccountAction] Close studio ${m.studioId} warning:`, e);
+          console.warn(`[deleteUserAccountAction] Close studio ${sid} warning:`, e);
         }
       } else {
         try {
-          await leaveStudioMembership(uid, m.studioId);
+          await leaveStudioMembership(uid, sid);
         } catch (e) {
-          console.warn(`[deleteUserAccountAction] Leave studio ${m.studioId} warning:`, e);
+          console.warn(`[deleteUserAccountAction] Leave studio ${sid} warning:`, e);
         }
       }
     }
 
-    // 3. Record the request without deleting the account identity. This allows
-    // an authorised recovery request during the workspace recovery period.
-    try {
-      await firestore.collection("user_preferences").doc(uid).set({
-        accountClosureRequestedAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      }, { merge: true });
-    } catch (e) {
-      console.warn("[deleteUserAccountAction] Record closure request warning:", e);
+    // 3. When Full Instant Delete is selected, also purge any soft-deleted studios owned by this user
+    // and remove user-level documents and memberships
+    if (isPermanent) {
+      try {
+        const deletedStudios = await getDeletedStudiosByOwner(uid, decoded.email);
+        for (const ds of deletedStudios) {
+          const sid = ds.id.toLowerCase();
+          if (!processedStudios.has(sid)) {
+            processedStudios.add(sid);
+            await permanentlyDeleteStudioData(sid);
+          }
+        }
+      } catch (e) {
+        console.warn("[deleteUserAccountAction] Purge soft-deleted studios warning:", e);
+      }
+
+      try {
+        await firestore.collection("user_preferences").doc(uid).delete();
+      } catch (e) {
+        console.warn("[deleteUserAccountAction] Delete user_preferences warning:", e);
+      }
+
+      try {
+        await firestore.collection("user_legal_consents").doc(uid).delete();
+      } catch (e) {
+        console.warn("[deleteUserAccountAction] Delete user_legal_consents warning:", e);
+      }
+    } else {
+      // Record the closure request while preserving the 30-day recovery window
+      try {
+        await firestore.collection("user_preferences").doc(uid).set(
+          {
+            accountClosureRequestedAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          },
+          { merge: true }
+        );
+      } catch (e) {
+        console.warn("[deleteUserAccountAction] Record closure request warning:", e);
+      }
     }
 
     return { success: true };

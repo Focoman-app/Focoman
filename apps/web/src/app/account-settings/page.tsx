@@ -1,15 +1,27 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Navbar } from "@/components/Navbar";
 import { FocomanLoadingState } from "@/components/FocomanSpinner";
 import { subscribeToAuthState, signOutUser } from "@/lib/firebaseAuth";
 import { getCustomerAuthorizedOrdersHistoryAction } from "@/actions/customerActions";
-import { CustomerOrderView, StudioMembership, Studio } from "@focoman/types";
+import {
+  CustomerOrderView,
+  StudioMembership,
+  Studio,
+  DeletedStudioRecoveryInfo,
+} from "@focoman/types";
 import { User, updateProfile } from "firebase/auth";
-import { getUserWorkspacesAction, getStudioAction, deleteUserAccountAction } from "@/actions/studioActions";
+import {
+  getUserWorkspacesAction,
+  getStudioAction,
+  deleteUserAccountAction,
+  getDeletedStudiosAction,
+  restoreStudioAction,
+  deleteStudioAction,
+} from "@/actions/studioActions";
 import {
   resolveAndSyncDefaultWorkspace,
   setDefaultWorkspace,
@@ -25,10 +37,19 @@ export default function AccountSettingsPage() {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [defaultStudio, setDefaultStudio] = useState<string | null>(null);
   const [workspaces, setWorkspaces] = useState<StudioMembership[]>([]);
-  const [defaultStudioDetails, setDefaultStudioDetails] = useState<Studio | null>(null);
+  const [studioPlanRows, setStudioPlanRows] = useState<
+    Array<{ studioId: string; studioName: string; planLabel: "Free" | "Starter" | "Professional" }>
+  >([]);
   const [selectedDefaultStudio, setSelectedDefaultStudio] = useState<string>("");
   const [defaultSaveLoading, setDefaultSaveLoading] = useState(false);
   const [defaultSaveSuccess, setDefaultSaveSuccess] = useState(false);
+
+  // Deleted Studios (Recovery Window)
+  const [deletedStudios, setDeletedStudios] = useState<DeletedStudioRecoveryInfo[]>([]);
+  const [restoringStudioId, setRestoringStudioId] = useState<string | null>(null);
+  const [purgingStudioId, setPurgingStudioId] = useState<string | null>(null);
+  const [deletedStudioMessage, setDeletedStudioMessage] = useState<string | null>(null);
+  const [deletedStudioError, setDeletedStudioError] = useState<string | null>(null);
 
   // Profile editing
   const [isEditingName, setIsEditingName] = useState(false);
@@ -38,9 +59,87 @@ export default function AccountSettingsPage() {
 
   // Account Deletion
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [instantDeleteAccount, setInstantDeleteAccount] = useState(false);
   const [deleteConfirmationInput, setDeleteConfirmationInput] = useState("");
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const resolvePlanLabel = (studio?: Studio | null): "Free" | "Starter" | "Professional" => {
+    const plan = studio?.planInfo?.plan;
+    const caps = studio?.planInfo?.selectedCapabilities || [];
+    if (
+      plan === "PROFESSIONAL" ||
+      plan === "COMPLETE" ||
+      caps.some((c) => ["WHATSAPP_OPERATIONS", "WHATSAPP_BOT", "BUSINESS_REPORTS", "ANALYTICS_ADVANCED"].includes(c))
+    ) {
+      return "Professional";
+    }
+    if (
+      plan === "STARTER" ||
+      caps.some((c) => c !== "OMS_BASIC" && c !== "OMS_CORE")
+    ) {
+      return "Starter";
+    }
+    return "Free";
+  };
+
+  const formatDeletionSchedule = (iso: string): string => {
+    try {
+      return new Intl.DateTimeFormat("en-IN", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: true,
+      }).format(new Date(iso));
+    } catch {
+      return iso;
+    }
+  };
+
+  const loadWorkspacesAndDeletedStudios = useCallback(async (currentUser: User) => {
+    const token = await currentUser.getIdToken();
+    const [workspacesData, deletedRes] = await Promise.all([
+      getUserWorkspacesAction(token),
+      getDeletedStudiosAction(token),
+    ]);
+
+    const activeWorkspaces = workspacesData || [];
+    setWorkspaces(activeWorkspaces);
+    if (deletedRes.success) {
+      setDeletedStudios(deletedRes.studios);
+    }
+
+    const initialDefault = await resolveAndSyncDefaultWorkspace(currentUser.uid, activeWorkspaces, token);
+    setDefaultStudio(initialDefault);
+    if (initialDefault) {
+      setSelectedDefaultStudio(initialDefault);
+    } else if (activeWorkspaces.length > 0) {
+      setSelectedDefaultStudio(activeWorkspaces[0].studioId);
+    }
+
+    const rows = await Promise.all(
+      activeWorkspaces.map(async (w) => {
+        if (w.role === "STUDIO_OWNER") {
+          const studioRes = await getStudioAction(w.studioId, token);
+          if (studioRes.success && studioRes.studio) {
+            return {
+              studioId: w.studioId,
+              studioName: studioRes.studio.name || w.studioName || w.studioId,
+              planLabel: resolvePlanLabel(studioRes.studio),
+            };
+          }
+        }
+        return {
+          studioId: w.studioId,
+          studioName: w.studioName || w.studioId,
+          planLabel: "Free" as const,
+        };
+      })
+    );
+    setStudioPlanRows(rows);
+  }, []);
 
   useEffect(() => {
     const unsubscribe = subscribeToAuthState(async (currentUser) => {
@@ -53,34 +152,16 @@ export default function AccountSettingsPage() {
 
       setDisplayNameInput(currentUser.displayName || "");
 
-      // Handle default studio fetching later
-
       setHistoryLoading(true);
       try {
         const token = await currentUser.getIdToken();
-        const [ordersRes, workspacesData] = await Promise.all([
+        const [ordersRes] = await Promise.all([
           getCustomerAuthorizedOrdersHistoryAction(token),
-          getUserWorkspacesAction(token),
+          loadWorkspacesAndDeletedStudios(currentUser),
         ]);
 
         if (ordersRes.success && ordersRes.history) {
           setOrders(ordersRes.history);
-        }
-        if (workspacesData) {
-          setWorkspaces(workspacesData);
-        }
-        
-        const initialDefault = await resolveAndSyncDefaultWorkspace(currentUser.uid, workspacesData || [], token);
-        setDefaultStudio(initialDefault);
-        if (initialDefault) {
-          setSelectedDefaultStudio(initialDefault);
-          const studioRes = await getStudioAction(initialDefault, token);
-          if (studioRes.success && studioRes.studio) {
-            setDefaultStudioDetails(studioRes.studio);
-          }
-        } else if (workspacesData && workspacesData.length > 0) {
-          setSelectedDefaultStudio(workspacesData[0].studioId);
-          setDefaultStudioDetails(null);
         }
       } catch (err) {
         console.error("Failed to load customer order history", err);
@@ -89,28 +170,63 @@ export default function AccountSettingsPage() {
       }
     });
     return () => unsubscribe();
-  }, [router]);
+  }, [router, loadWorkspacesAndDeletedStudios]);
 
   // Subscribe to default workspace changes across tabs and in-tab
   useEffect(() => {
     if (!user) return;
-    const unsub = subscribeToDefaultWorkspaceChanges(user.uid, async (newDefault) => {
+    const unsub = subscribeToDefaultWorkspaceChanges(user.uid, (newDefault) => {
       setDefaultStudio(newDefault);
       if (newDefault) {
         setSelectedDefaultStudio(newDefault);
-        try {
-          const token = await user.getIdToken();
-          const studioRes = await getStudioAction(newDefault, token);
-          if (studioRes.success && studioRes.studio) {
-            setDefaultStudioDetails(studioRes.studio);
-          }
-        } catch {}
-      } else {
-        setDefaultStudioDetails(null);
       }
     });
     return () => unsub();
   }, [user]);
+
+  const handleRestoreDeletedStudio = async (studioId: string, studioName: string) => {
+    if (!user) return;
+    setRestoringStudioId(studioId);
+    setDeletedStudioError(null);
+    setDeletedStudioMessage(null);
+    try {
+      const token = await user.getIdToken();
+      const res = await restoreStudioAction(studioId, token);
+      if (!res.success) {
+        setDeletedStudioError(res.error || "Failed to restore studio.");
+      } else {
+        await loadWorkspacesAndDeletedStudios(user);
+        setDeletedStudioMessage(`Restored "${studioName}" (/${studioId}) to active workspaces.`);
+        setTimeout(() => setDeletedStudioMessage(null), 4000);
+      }
+    } catch (err: unknown) {
+      setDeletedStudioError(err instanceof Error ? err.message : "Failed to restore studio.");
+    } finally {
+      setRestoringStudioId(null);
+    }
+  };
+
+  const handleInstantDeleteRemainingStudio = async (studioId: string, studioName: string) => {
+    if (!user) return;
+    setPurgingStudioId(studioId);
+    setDeletedStudioError(null);
+    setDeletedStudioMessage(null);
+    try {
+      const token = await user.getIdToken();
+      const res = await deleteStudioAction(studioId, token, { permanent: true });
+      if (!res.success) {
+        setDeletedStudioError(res.error || "Failed to permanently delete studio.");
+      } else {
+        setDeletedStudios((prev) => prev.filter((s) => s.id !== studioId));
+        setDeletedStudioMessage(`Permanently deleted "${studioName}" and all associated data.`);
+        setTimeout(() => setDeletedStudioMessage(null), 4000);
+      }
+    } catch (err: unknown) {
+      setDeletedStudioError(err instanceof Error ? err.message : "Failed to permanently delete studio.");
+    } finally {
+      setPurgingStudioId(null);
+    }
+  };
 
   const handleSaveName = async () => {
     if (!user || !displayNameInput.trim()) return;
@@ -134,14 +250,9 @@ export default function AccountSettingsPage() {
     if (studioId === "") {
       await clearDefaultWorkspace(user.uid, token);
       setDefaultStudio(null);
-      setDefaultStudioDetails(null);
     } else {
       await setDefaultWorkspace(user.uid, studioId, token);
       setDefaultStudio(studioId);
-      const studioRes = await getStudioAction(studioId, token);
-      if (studioRes.success && studioRes.studio) {
-        setDefaultStudioDetails(studioRes.studio);
-      }
     }
   };
 
@@ -182,7 +293,7 @@ export default function AccountSettingsPage() {
 
     try {
       const token = await user.getIdToken();
-      const res = await deleteUserAccountAction(token);
+      const res = await deleteUserAccountAction(token, { permanent: instantDeleteAccount });
 
       if (res.success) {
         await clearDefaultWorkspace(user.uid);
@@ -411,62 +522,158 @@ export default function AccountSettingsPage() {
           </div>
         </div>
 
-        {/* Panel 1.5: Plan Subscription (Shown if default studio selected) */}
-        {defaultStudioDetails && (
+        {/* Panel 1.5: Subscription Plan Details Table (All Studios) */}
+        {studioPlanRows.length > 0 && (
           <div className="rounded-3xl border border-border-default bg-white p-6 shadow-sm sm:p-8 space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border-divider pb-4">
               <div>
                 <h2 className="text-lg font-bold text-text-primary">Subscription Plan Details</h2>
                 <p className="text-xs text-text-secondary mt-0.5">
-                  Current active plan for <b>{defaultStudioDetails.name}</b>.
+                  Active plan for each of your studios.
                 </p>
               </div>
-              <span className={`rounded-full px-3 py-1 text-xs font-bold ${
-                (defaultStudioDetails.planInfo?.selectedCapabilities && defaultStudioDetails.planInfo.selectedCapabilities.length > 0) ||
-                defaultStudioDetails.planInfo?.plan === 'COMPLETE' ||
-                defaultStudioDetails.planInfo?.plan === 'PROFESSIONAL' ||
-                defaultStudioDetails.planInfo?.plan === 'STARTER'
-                  ? 'bg-brand-blue-primary text-white'
-                  : 'bg-slate-100 text-slate-700'
-              }`}>
-                {(defaultStudioDetails.planInfo?.selectedCapabilities && defaultStudioDetails.planInfo.selectedCapabilities.length > 0) ||
-                defaultStudioDetails.planInfo?.plan === 'COMPLETE' ||
-                defaultStudioDetails.planInfo?.plan === 'PROFESSIONAL'
-                  ? defaultStudioDetails.planInfo?.plan === 'STARTER'
-                    ? 'STARTER PLAN'
-                    : 'PROFESSIONAL PLAN'
-                  : 'FREE PLAN'}
-              </span>
-            </div>
-            
-            <div className="space-y-2">
-              <h3 className="text-xs font-bold text-text-primary">Selected Modules</h3>
-              <div className="flex flex-wrap gap-2">
-                {defaultStudioDetails.planInfo?.selectedCapabilities && defaultStudioDetails.planInfo.selectedCapabilities.length > 0 ? (
-                  defaultStudioDetails.planInfo.selectedCapabilities.map(cap => (
-                    <span key={cap} className="rounded-md bg-green-50 px-2.5 py-1 text-[11px] font-bold text-green-700 border border-green-200">
-                      {cap.replace(/_/g, " ")}
-                    </span>
-                  ))
-                ) : (
-                  <span className="text-xs text-text-tertiary">
-                    No extra modules selected. Core Order Management (OMS) is included free.
-                  </span>
-                )}
-              </div>
-            </div>
-            <div className="pt-2 flex items-center gap-4">
               <Link
-                href={`/checkout?studio=${defaultStudioDetails.id}`}
+                href="/checkout"
                 className="text-xs font-bold text-brand-blue-primary hover:underline inline-flex items-center gap-1"
               >
-                <span>
-                  {(defaultStudioDetails.planInfo?.selectedCapabilities && defaultStudioDetails.planInfo.selectedCapabilities.length > 0)
-                    ? "Review Plan →"
-                    : "View Plans →"}
-                </span>
+                <span>View Plans →</span>
               </Link>
             </div>
+
+            <div className="overflow-hidden rounded-2xl border border-border-default">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-surface-app border-b border-border-default text-text-secondary">
+                  <tr>
+                    <th className="px-4 py-3 font-bold">Studio</th>
+                    <th className="px-4 py-3 font-bold">Plan</th>
+                    <th className="px-4 py-3 font-bold text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border-divider bg-white">
+                  {studioPlanRows.map((row) => (
+                    <tr key={row.studioId}>
+                      <td className="px-4 py-3 font-semibold text-text-primary">
+                        {row.studioName}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span
+                          className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-bold ${
+                            row.planLabel === "Professional"
+                              ? "bg-brand-blue-primary text-white"
+                              : row.planLabel === "Starter"
+                              ? "bg-brand-orange-background text-brand-orange-primary border border-brand-orange-soft"
+                              : "bg-slate-100 text-slate-700"
+                          }`}
+                        >
+                          {row.planLabel}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <Link
+                          href={`/checkout?studio=${encodeURIComponent(row.studioId)}`}
+                          className="font-bold text-brand-blue-primary hover:underline"
+                        >
+                          {row.planLabel === "Free" ? "Upgrade" : "Manage"}
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* Panel 1.75: Deleted Studios (Recovery Window) */}
+        {(deletedStudios.length > 0 || deletedStudioMessage || deletedStudioError) && (
+          <div className="rounded-3xl border border-amber-200 bg-white p-6 shadow-sm sm:p-8 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border-divider pb-4">
+              <div>
+                <h2 className="text-lg font-bold text-text-primary">Deleted Studios</h2>
+                <p className="text-xs text-text-secondary mt-0.5">
+                  Workspaces in the 30-day recovery window before permanent removal.
+                </p>
+              </div>
+              <span className="text-xs font-semibold text-amber-800 tabular-nums">
+                {deletedStudios.length} {deletedStudios.length === 1 ? "studio" : "studios"} pending deletion
+              </span>
+            </div>
+
+            {deletedStudioMessage && (
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs font-semibold text-emerald-800">
+                ✓ {deletedStudioMessage}
+              </div>
+            )}
+
+            {deletedStudioError && (
+              <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs font-semibold text-red-700">
+                {deletedStudioError}
+              </div>
+            )}
+
+            {deletedStudios.length === 0 ? (
+              <p className="text-xs text-text-secondary py-2">
+                No studios are currently pending deletion.
+              </p>
+            ) : (
+              <div className="divide-y divide-border-divider rounded-2xl border border-border-default bg-surface-app/40">
+                {deletedStudios.map((ds) => {
+                  const isRestoring = restoringStudioId === ds.id;
+                  const isPurging = purgingStudioId === ds.id;
+                  return (
+                    <div
+                      key={ds.id}
+                      className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 text-xs"
+                    >
+                      <div className="space-y-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-bold text-text-primary text-sm">{ds.name}</span>
+                          <span aria-hidden="true" className="text-text-tertiary">·</span>
+                          <span className="font-mono text-text-secondary">/{ds.id}</span>
+                          {ds.city && (
+                            <>
+                              <span aria-hidden="true" className="text-text-tertiary">·</span>
+                              <span className="text-text-secondary">{ds.city}</span>
+                            </>
+                          )}
+                        </div>
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-amber-900 tabular-nums">
+                          <span className="font-bold">
+                            Recoverable within {ds.remainingDays} {ds.remainingDays === 1 ? "day" : "days"}
+                          </span>
+                          <span aria-hidden="true" className="text-text-tertiary">·</span>
+                          <span className="text-text-secondary">
+                            Scheduled for deletion on{" "}
+                            <span className="font-semibold text-text-primary">
+                              {formatDeletionSchedule(ds.scheduledDeletionAt)}
+                            </span>
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => handleRestoreDeletedStudio(ds.id, ds.name)}
+                          disabled={isRestoring || isPurging}
+                          className="rounded-xl bg-brand-blue-primary px-3.5 py-2 text-xs font-bold text-white hover:bg-brand-blue-hover transition cursor-pointer disabled:opacity-50 whitespace-nowrap"
+                        >
+                          {isRestoring ? "Restoring..." : "Restore Studio"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleInstantDeleteRemainingStudio(ds.id, ds.name)}
+                          disabled={isRestoring || isPurging}
+                          className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-bold text-red-600 hover:bg-red-100 transition cursor-pointer disabled:opacity-50 whitespace-nowrap"
+                        >
+                          {isPurging ? "Deleting..." : "Delete Now"}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
 
@@ -573,13 +780,14 @@ export default function AccountSettingsPage() {
             <div>
               <h4 className="text-base font-extrabold text-text-primary">Close User Account</h4>
               <p className="text-xs text-text-secondary mt-1 max-w-xl">
-                Close the account and deactivate sole-owner workspaces. Workspace data remains recoverable for 30 days under the Privacy Policy.
+                Close the account and delete all owned studios. Workspace data remains recoverable for 30 days unless full instant delete is selected.
               </p>
             </div>
             <button
               type="button"
               onClick={() => {
                 setShowDeleteModal(true);
+                setInstantDeleteAccount(false);
                 setDeleteConfirmationInput("");
                 setDeleteError(null);
               }}
@@ -593,7 +801,7 @@ export default function AccountSettingsPage() {
         {/* Account Closure Confirmation Modal */}
         {showDeleteModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
-            <div className="w-full max-w-md rounded-3xl bg-white p-6 sm:p-7 shadow-2xl border border-red-200 animate-in fade-in duration-150 space-y-5">
+            <div className="w-full max-w-md rounded-3xl bg-white p-6 sm:p-7 shadow-2xl border border-red-200 animate-in fade-in duration-150 space-y-4">
               <div className="flex items-start justify-between">
                 <h3 className="text-base font-extrabold text-text-primary">Close User Account</h3>
                 <button
@@ -607,12 +815,30 @@ export default function AccountSettingsPage() {
                 </button>
               </div>
 
-              <div className="rounded-2xl border border-red-200 bg-red-50/60 p-4 text-xs text-red-900 space-y-1.5 leading-relaxed">
-                <p className="font-bold">Warning: this removes access from the current session.</p>
+              <div className="rounded-2xl border border-red-200 bg-red-50/60 p-3.5 text-xs text-red-900 space-y-1 leading-relaxed">
+                <p className="font-bold">Warning: this closes your account and removes session access.</p>
                 <p>
-                  Sole-owner workspaces enter a 30-day recovery period. Contact support through the Privacy Policy if restoration is needed during that period.
+                  {instantDeleteAccount
+                    ? "All owned studios and all associated data will be permanently deleted immediately."
+                    : "Owned studios enter a 30-day recovery window before permanent deletion."}
                 </p>
               </div>
+
+              <label className="flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50/40 p-3 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={instantDeleteAccount}
+                  onChange={(e) => setInstantDeleteAccount(e.target.checked)}
+                  disabled={isDeleting}
+                  className="mt-0.5 h-4 w-4 rounded border-red-300 text-red-600 focus:ring-red-500 cursor-pointer"
+                />
+                <span className="text-xs text-red-950 leading-snug">
+                  <span className="font-bold block">Full instant delete</span>
+                  <span className="text-[11px] text-red-800">
+                    Immediately remove all studios and associated data without timeline.
+                  </span>
+                </span>
+              </label>
 
               {deleteError && (
                 <div className="rounded-xl border border-red-300 bg-red-50 p-3 text-xs font-semibold text-red-700">
@@ -649,7 +875,11 @@ export default function AccountSettingsPage() {
                   disabled={deleteConfirmationInput.trim().toLowerCase() !== "delete" || isDeleting}
                   className="rounded-xl bg-red-600 px-5 py-2 text-xs font-bold text-white hover:bg-red-700 active:scale-[0.98] transition disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shadow-xs"
                 >
-                  {isDeleting ? "Closing Account..." : "Close Account"}
+                  {isDeleting
+                    ? "Closing Account..."
+                    : instantDeleteAccount
+                    ? "Delete Immediately"
+                    : "Close Account"}
                 </button>
               </div>
             </div>

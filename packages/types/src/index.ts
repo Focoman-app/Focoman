@@ -397,6 +397,15 @@ export interface Studio extends SoftDeletable {
   updatedAt: string;
 }
 
+export interface DeletedStudioRecoveryInfo {
+  id: string;
+  name: string;
+  city: string;
+  deletedAt: string;
+  scheduledDeletionAt: string;
+  remainingDays: number;
+}
+
 export interface StudioMember extends SoftDeletable {
   id: string;
   studioId: string;

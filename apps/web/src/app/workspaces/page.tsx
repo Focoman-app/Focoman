@@ -7,9 +7,20 @@ import { Navbar } from "@/components/Navbar";
 import { BackButton } from "@/components/BackButton";
 import { FocomanLoadingState, FocomanSpinner } from "@/components/FocomanSpinner";
 import { subscribeToAuthState, signInWithGoogle, signOutUser, syncServerSession } from "@/lib/firebaseAuth";
-import { getUserWorkspacesAction, deleteStudioAction, leaveStudioAction } from "@/actions/studioActions";
+import {
+  getUserWorkspacesAction,
+  deleteStudioAction,
+  leaveStudioAction,
+  getRecoverableAccountStatusAction,
+  recoverDeletedAccountAction,
+  startNewProfileAfterDeletionAction,
+} from "@/actions/studioActions";
 import { getMyPendingInvitationsAction } from "@/actions/memberActions";
-import { StudioInvitationSummary, StudioMembership } from "@focoman/types";
+import {
+  StudioInvitationSummary,
+  StudioMembership,
+  DeletedStudioRecoveryInfo,
+} from "@focoman/types";
 import { User } from "firebase/auth";
 import {
   resolveAndSyncDefaultWorkspace,
@@ -26,16 +37,40 @@ export default function WorkspacesPage() {
   const [pendingInvitations, setPendingInvitations] = useState<StudioInvitationSummary[]>([]);
   const [loadingWorkspaces, setLoadingWorkspaces] = useState(false);
 
+  // Recoverable account data state
+  const [recoverableStudios, setRecoverableStudios] = useState<DeletedStudioRecoveryInfo[]>([]);
+  const [recoverableRemainingDays, setRecoverableRemainingDays] = useState<number>(0);
+  const [recoverableScheduledDate, setRecoverableScheduledDate] = useState<string | null>(null);
+  const [isRecoveringData, setIsRecoveringData] = useState(false);
+  const [isStartingNewProfile, setIsStartingNewProfile] = useState(false);
+
   // Default workspace state
   const [defaultStudioId, setDefaultStudioId] = useState<string | null>(null);
 
   // Deletion modal state
   const [targetWorkspaceToDelete, setTargetWorkspaceToDelete] = useState<StudioMembership | null>(null);
+  const [instantDeleteWorkspace, setInstantDeleteWorkspace] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [successToast, setSuccessToast] = useState<string | null>(null);
 
   const [authError, setAuthError] = useState<string | null>(null);
+
+  const formatScheduledDate = (iso: string | null): string => {
+    if (!iso) return "";
+    try {
+      return new Intl.DateTimeFormat("en-IN", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: true,
+      }).format(new Date(iso));
+    } catch {
+      return iso;
+    }
+  };
 
   useEffect(() => {
     const unsubscribe = subscribeToAuthState(async (user) => {
@@ -49,12 +84,21 @@ export default function WorkspacesPage() {
 
         // CHG-011: Pass the Firebase ID token (JWT), not the UID — identity is verified server-side.
         const idToken = await user.getIdToken();
-        const [data, invitations] = await Promise.all([
+        const [data, invitations, recoveryStatus] = await Promise.all([
           getUserWorkspacesAction(idToken),
           getMyPendingInvitationsAction(idToken),
+          getRecoverableAccountStatusAction(idToken),
         ]);
         setWorkspaces(data);
         setPendingInvitations(invitations);
+
+        if (recoveryStatus.success && recoveryStatus.studios.length > 0) {
+          setRecoverableStudios(recoveryStatus.studios);
+          setRecoverableRemainingDays(recoveryStatus.remainingDays);
+          setRecoverableScheduledDate(recoveryStatus.scheduledDeletionAt || null);
+        } else {
+          setRecoverableStudios([]);
+        }
 
         const initialDefault = await resolveAndSyncDefaultWorkspace(user.uid, data, idToken);
         setDefaultStudioId(initialDefault);
@@ -63,6 +107,7 @@ export default function WorkspacesPage() {
       } else {
         setWorkspaces([]);
         setPendingInvitations([]);
+        setRecoverableStudios([]);
         setDefaultStudioId(null);
       }
     });
@@ -77,6 +122,46 @@ export default function WorkspacesPage() {
     });
     return () => unsub();
   }, [currentUser]);
+
+  const handleRecoverAllData = async () => {
+    if (!currentUser) return;
+    setIsRecoveringData(true);
+    try {
+      const idToken = await currentUser.getIdToken();
+      const res = await recoverDeletedAccountAction(idToken);
+      if (res.success) {
+        const updatedWorkspaces = await getUserWorkspacesAction(idToken);
+        setWorkspaces(updatedWorkspaces);
+        setRecoverableStudios([]);
+        if (res.firstStudioId) {
+          await setDefaultWorkspace(currentUser.uid, res.firstStudioId, idToken);
+          setDefaultStudioId(res.firstStudioId);
+        }
+        setSuccessToast("Your recently deleted studio data has been recovered.");
+        setTimeout(() => setSuccessToast(null), 4000);
+      }
+    } finally {
+      setIsRecoveringData(false);
+    }
+  };
+
+  const handleStartFreshProfile = async () => {
+    if (!currentUser) return;
+    setIsStartingNewProfile(true);
+    try {
+      const idToken = await currentUser.getIdToken();
+      const res = await startNewProfileAfterDeletionAction(idToken);
+      if (res.success) {
+        setRecoverableStudios([]);
+        await clearDefaultWorkspace(currentUser.uid, idToken);
+        setDefaultStudioId(null);
+        setSuccessToast("Started as a fresh profile. Previous deleted studio data was permanently removed.");
+        setTimeout(() => setSuccessToast(null), 4000);
+      }
+    } finally {
+      setIsStartingNewProfile(false);
+    }
+  };
 
   const handleSetDefault = async (studioId: string) => {
     if (!currentUser) return;
@@ -106,7 +191,9 @@ export default function WorkspacesPage() {
       
       let res;
       if (isOwner) {
-        res = await deleteStudioAction(targetWorkspaceToDelete.studioId, idToken);
+        res = await deleteStudioAction(targetWorkspaceToDelete.studioId, idToken, {
+          permanent: instantDeleteWorkspace,
+        });
       } else {
         res = await leaveStudioAction(targetWorkspaceToDelete.studioId, idToken);
       }
@@ -119,24 +206,38 @@ export default function WorkspacesPage() {
 
       // Update local state
       setWorkspaces((prev) => prev.filter((w) => w.studioId !== targetWorkspaceToDelete.studioId));
-      if (defaultStudioId === targetWorkspaceToDelete.studioId) {
+      if (defaultStudioId === targetGlobalDefault(defaultStudioId, targetWorkspaceToDelete.studioId)) {
         await clearDefaultWorkspace(currentUser.uid, idToken);
         setDefaultStudioId(null);
       }
 
+      if (isOwner && !instantDeleteWorkspace) {
+        const recoveryStatus = await getRecoverableAccountStatusAction(idToken);
+        if (recoveryStatus.success) {
+          setRecoverableStudios(recoveryStatus.studios);
+          setRecoverableRemainingDays(recoveryStatus.remainingDays);
+          setRecoverableScheduledDate(recoveryStatus.scheduledDeletionAt || null);
+        }
+      }
+
       setSuccessToast(
         isOwner 
-          ? `Studio "${targetWorkspaceToDelete.studioName || targetWorkspaceToDelete.studioId}" deleted successfully!`
+          ? `Studio "${targetWorkspaceToDelete.studioName || targetWorkspaceToDelete.studioId}" ${instantDeleteWorkspace ? "permanently deleted" : "moved to 30-day recovery"}!`
           : `Left studio "${targetWorkspaceToDelete.studioName || targetWorkspaceToDelete.studioId}" successfully!`
       );
       setTimeout(() => setSuccessToast(null), 4000);
       setTargetWorkspaceToDelete(null);
+      setInstantDeleteWorkspace(false);
     } catch (err: unknown) {
       setDeleteError(err instanceof Error ? err.message : "An unexpected error occurred.");
     } finally {
       setIsDeleting(false);
     }
   };
+
+  function targetGlobalDefault(currentDefault: string | null, deletedId: string) {
+    return currentDefault === deletedId ? currentDefault : "__no_match__";
+  }
 
   useEffect(() => {
     if (!loadingUser && !currentUser) {
@@ -226,6 +327,49 @@ export default function WorkspacesPage() {
                   ✕
                 </button>
               </div>
+            )}
+
+            {!loadingWorkspaces && recoverableStudios.length > 0 && (
+              <section className="rounded-3xl border border-amber-200 bg-white p-6 shadow-sm space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="space-y-1">
+                    <span className="text-xs font-bold uppercase tracking-widest text-amber-700">
+                      Recently Deleted Data Available
+                    </span>
+                    <h2 className="text-base font-extrabold text-text-primary">
+                      Your recently deleted data is present and recoverable within{" "}
+                      <span className="tabular-nums">
+                        {recoverableRemainingDays} {recoverableRemainingDays === 1 ? "day" : "days"}
+                      </span>
+                    </h2>
+                    <p className="text-xs text-text-secondary tabular-nums">
+                      {recoverableScheduledDate
+                        ? `Scheduled for permanent deletion on ${formatScheduledDate(recoverableScheduledDate)}. `
+                        : ""}
+                      You can recover your studio data now or start as a new profile.
+                    </p>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={handleRecoverAllData}
+                      disabled={isRecoveringData || isStartingNewProfile}
+                      className="rounded-xl bg-brand-blue-primary px-4 py-2.5 text-xs font-bold text-white hover:bg-brand-blue-hover transition cursor-pointer disabled:opacity-50 whitespace-nowrap"
+                    >
+                      {isRecoveringData ? "Recovering..." : "Recover Data"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleStartFreshProfile}
+                      disabled={isRecoveringData || isStartingNewProfile}
+                      className="rounded-xl border border-border-default bg-white px-4 py-2.5 text-xs font-bold text-text-primary hover:bg-surface-app transition cursor-pointer disabled:opacity-50 whitespace-nowrap"
+                    >
+                      {isStartingNewProfile ? "Starting New Profile..." : "Start as New Profile"}
+                    </button>
+                  </div>
+                </div>
+              </section>
             )}
 
             {!loadingWorkspaces && pendingInvitations.length > 0 && (
@@ -455,7 +599,7 @@ export default function WorkspacesPage() {
               <p className="mt-2 text-xs text-text-secondary leading-relaxed">
                 {targetWorkspaceToDelete.role === "STUDIO_OWNER" ? (
                   <>
-                    Are you sure you want to close <span className="font-bold text-text-primary">{targetWorkspaceToDelete.studioName || targetWorkspaceToDelete.studioId}</span> (<span className="font-mono">/{targetWorkspaceToDelete.studioId}</span>)? It will be unavailable and may be restored by an authorised owner within 30 days.
+                    Are you sure you want to delete <span className="font-bold text-text-primary">{targetWorkspaceToDelete.studioName || targetWorkspaceToDelete.studioId}</span> (<span className="font-mono">/{targetWorkspaceToDelete.studioId}</span>)?
                   </>
                 ) : (
                   <>
@@ -464,6 +608,23 @@ export default function WorkspacesPage() {
                 )}
               </p>
 
+              {targetWorkspaceToDelete.role === "STUDIO_OWNER" && (
+                <label className="mt-4 flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50/40 p-3 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={instantDeleteWorkspace}
+                    onChange={(e) => setInstantDeleteWorkspace(e.target.checked)}
+                    disabled={isDeleting}
+                    className="mt-0.5 h-4 w-4 rounded border-red-300 text-red-600 focus:ring-red-500 cursor-pointer"
+                  />
+                  <span className="text-xs text-red-950 leading-snug">
+                    <span className="font-bold block">Full instant delete</span>
+                    <span className="text-[11px] text-red-800">
+                      Immediately remove all associated studio data without timeline.
+                    </span>
+                  </span>
+                </label>
+              )}
 
               {deleteError && (
                 <div className="mt-3 rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700">
@@ -476,6 +637,7 @@ export default function WorkspacesPage() {
                   type="button"
                   onClick={() => {
                     setTargetWorkspaceToDelete(null);
+                    setInstantDeleteWorkspace(false);
                     setDeleteError(null);
                   }}
                   disabled={isDeleting}
@@ -495,7 +657,7 @@ export default function WorkspacesPage() {
                       Processing...
                     </>
                   ) : targetWorkspaceToDelete.role === "STUDIO_OWNER" ? (
-                    "Yes, Delete Workspace"
+                    instantDeleteWorkspace ? "Delete Immediately" : "Yes, Delete Workspace"
                   ) : (
                     "Yes, Leave Workspace"
                   )}

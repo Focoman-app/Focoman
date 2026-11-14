@@ -60,7 +60,11 @@ import {
 import { OmsAuditHistorySection } from "@/components/oms/OmsAuditHistorySection";
 import { OmsPaymentSummarySection } from "@/components/oms/OmsPaymentSummarySection";
 import { OmsCreateOrderModal } from "@/components/oms/OmsCreateOrderModal";
-import { OmsOrderActionDialogs } from "@/components/oms/OmsOrderActionDialogs";
+import {
+  OmsOrderActionDialogs,
+  type OmsNoticeDialogState,
+} from "@/components/oms/OmsOrderActionDialogs";
+import { MinimalBillingModal } from "@/components/billing/MinimalBillingModal";
 
 export default function OmsPage({
   params,
@@ -197,6 +201,13 @@ export default function OmsPage({
   // In-App Soft-Delete Dialog State
   const [deleteTargetOrder, setDeleteTargetOrder] = useState<Order | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  // In-App Focoman Notice Modal State & Billing Modal State
+  const [noticeDialog, setNoticeDialog] = useState<OmsNoticeDialogState | null>(null);
+  const [billingModalState, setBillingModalState] = useState<{
+    tab: "INVOICE" | "RECEIPT";
+    receiptId?: string;
+  } | null>(null);
 
   const [studioCustomers, setStudioCustomers] = useState<Customer[]>([]);
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
@@ -693,7 +704,11 @@ export default function OmsPage({
       );
       await loadOrders();
     } else if (!res.success) {
-      alert(res.error || "Failed to update task status");
+      setNoticeDialog({
+        title: "Unable to Update Task",
+        message: res.error || "Failed to update task status.",
+        tone: "error",
+      });
     }
   };
 
@@ -884,26 +899,45 @@ export default function OmsPage({
         return true;
       } else {
         setOrders(previousOrders);
-        alert(res.error || "Failed to update payment status");
+        setNoticeDialog({
+          title: "Payment Update Failed",
+          message: res.error || "Failed to update payment status.",
+          tone: "error",
+        });
         return false;
       }
     } catch (err: unknown) {
       setIsUpdatingPayment(false);
       setOrders(previousOrders);
-      alert(
-        err instanceof Error ? err.message : "Failed to update payment status"
-      );
+      setNoticeDialog({
+        title: "Payment Update Failed",
+        message:
+          err instanceof Error ? err.message : "Failed to update payment status.",
+        tone: "error",
+      });
       return false;
     }
   };
 
   const handleSendPaymentReminder = async () => {
     if (!selected || isSendingReminder) return;
+    if (!selected.customer?.email?.trim()) {
+      setNoticeDialog({
+        title: "Customer Email Required",
+        message: "No customer email address registered for this order.",
+        tone: "error",
+      });
+      return;
+    }
     setIsSendingReminder(true);
     try {
       const token = (await getIdToken(false)) ?? workspaceToken;
       if (!token) {
-        alert("Authentication error. Please sign in again.");
+        setNoticeDialog({
+          title: "Authentication Required",
+          message: "Authentication error. Please sign in again.",
+          tone: "error",
+        });
         setIsSendingReminder(false);
         return;
       }
@@ -914,16 +948,27 @@ export default function OmsPage({
       });
       setIsSendingReminder(false);
       if (res.success) {
-        alert(res.message || "Payment reminder email sent successfully!");
+        setNoticeDialog({
+          title: "Payment Reminder Sent",
+          message: res.message || "Payment reminder email sent successfully!",
+          tone: "success",
+        });
         await loadOrders();
       } else {
-        alert(res.error || "Failed to send payment reminder email.");
+        setNoticeDialog({
+          title: "Unable to Send Reminder",
+          message: res.error || "Failed to send payment reminder email.",
+          tone: "error",
+        });
       }
     } catch (err: unknown) {
       setIsSendingReminder(false);
-      alert(
-        err instanceof Error ? err.message : "Failed to send payment reminder."
-      );
+      setNoticeDialog({
+        title: "Unable to Send Reminder",
+        message:
+          err instanceof Error ? err.message : "Failed to send payment reminder.",
+        tone: "error",
+      });
     }
   };
 
@@ -1072,7 +1117,11 @@ export default function OmsPage({
         prev.map((o) => (o.id === res.order!.id ? res.order! : o))
       );
     } else {
-      alert(res.error || "Failed to assign resource");
+      setNoticeDialog({
+        title: "Unable to Assign Resource",
+        message: res.error || "Failed to assign resource.",
+        tone: "error",
+      });
     }
   };
 
@@ -1140,7 +1189,11 @@ export default function OmsPage({
       setEditingCrewService(null);
       setActiveCrewDropdown(null);
     } else {
-      alert(res.error || "Failed to assign crew member");
+      setNoticeDialog({
+        title: "Unable to Assign Crew",
+        message: res.error || "Failed to assign crew member.",
+        tone: "error",
+      });
     }
   };
 
@@ -1184,7 +1237,11 @@ export default function OmsPage({
       setEditingCrewService(null);
       setActiveCrewDropdown(null);
     } else {
-      alert(res.error || "Failed to unassign crew member");
+      setNoticeDialog({
+        title: "Unable to Unassign Crew",
+        message: res.error || "Failed to unassign crew member.",
+        tone: "error",
+      });
     }
   };
 
@@ -1260,7 +1317,11 @@ export default function OmsPage({
         prev.map((t) => (t.id === taskId ? res.task! : t))
       );
     } else {
-      alert(res.error || "Failed to assign crew to task");
+      setNoticeDialog({
+        title: "Unable to Assign Task Crew",
+        message: res.error || "Failed to assign crew to task.",
+        tone: "error",
+      });
     }
   };
 
@@ -1341,7 +1402,11 @@ export default function OmsPage({
       setCancelTargetOrder(null);
       setCancelReason("");
     } else {
-      alert(res.error || "Failed to cancel order");
+      setNoticeDialog({
+        title: "Unable to Cancel Order",
+        message: res.error || "Failed to cancel order.",
+        tone: "error",
+      });
     }
   };
 
@@ -1369,7 +1434,11 @@ export default function OmsPage({
       }
       setDeleteTargetOrder(null);
     } else {
-      alert(res.error || "Failed to delete order");
+      setNoticeDialog({
+        title: "Unable to Delete Order",
+        message: res.error || "Failed to delete order.",
+        tone: "error",
+      });
     }
   };
 
@@ -1431,7 +1500,15 @@ export default function OmsPage({
   }, [orders, statusFilter, query, sortBy]);
 
   const handleExportOmsExcel = useCallback(() => {
-    exportOmsOrdersToExcel(studioSlug, filtered);
+    try {
+      exportOmsOrdersToExcel(studioSlug, filtered);
+    } catch (error) {
+      setNoticeDialog({
+        title: "Export Failed",
+        message: error instanceof Error ? error.message : "Export failed.",
+        tone: "error",
+      });
+    }
   }, [filtered, studioSlug]);
 
   const handleSaveDriveDeliverables = useCallback(
@@ -1582,6 +1659,11 @@ export default function OmsPage({
           {/* 3. Payment and Pricing Summary */}
           <OmsPaymentSummarySection
             selected={selected}
+            canIssueBilling={canExportOrders}
+            onOpenInvoice={() => setBillingModalState({ tab: "INVOICE" })}
+            onOpenReceipt={(receiptKey) =>
+              setBillingModalState({ tab: "RECEIPT", receiptId: receiptKey })
+            }
             isEditingPricing={isEditingPricing}
             onCancelEditingPricing={() => {
               setIsEditingPricing(false);
@@ -1755,7 +1837,7 @@ export default function OmsPage({
         hasWhatsAppOperations={hasWhatsAppOperations}
       />
 
-      {/* In-App Cancellation & Soft-Delete Dialogs */}
+      {/* In-App Cancellation, Soft-Delete & Notice Dialogs */}
       <OmsOrderActionDialogs
         cancelTargetOrder={cancelTargetOrder}
         onCloseCancelModal={() => setCancelTargetOrder(null)}
@@ -1767,7 +1849,38 @@ export default function OmsPage({
         onCloseDeleteModal={() => setDeleteTargetOrder(null)}
         isDeleting={isDeleting}
         onConfirmDeleteOrder={handleConfirmDeleteOrder}
+        noticeDialog={noticeDialog}
+        onCloseNoticeDialog={() => setNoticeDialog(null)}
       />
+
+      {/* Focoman Internal Billing Modal (Invoice or Receipt) */}
+      {selected && billingModalState && (
+        <MinimalBillingModal
+          isOpen={Boolean(billingModalState)}
+          onClose={() => setBillingModalState(null)}
+          studioId={studioSlug}
+          studioName={studio?.name || studioSlug}
+          initialTab={billingModalState.tab}
+          initialReceiptId={billingModalState.receiptId}
+          canEditProfile={true}
+          onSaveBillingProfile={handleSaveStudioBillingProfile}
+          order={{
+            id: selected.id,
+            orderNumber: selected.orderNumber,
+            eventType: selected.eventType,
+            eventDate: selected.eventDate,
+            eventLocation: selected.eventLocation,
+            services: selected.services,
+            packages: selected.packages,
+            customerName: selected.customer.name,
+            customerPhone: selected.customer.phone,
+            customerEmail: selected.customer.email,
+            paymentStatus: selected.paymentStatus,
+            pricing: selected.pricing,
+            createdAt: selected.createdAt,
+          }}
+        />
+      )}
 
       {/* Studio ERP Member Wizard Dialog */}
       <AddCrewMemberModal

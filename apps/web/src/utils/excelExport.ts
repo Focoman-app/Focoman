@@ -424,9 +424,7 @@ export function buildExcelWorkbook(sheets: ExcelSheetSpec<any>[]): Uint8Array {
 
 export function exportWorkbookToExcel(filenameBase: string, sheets: ExcelSheetSpec<any>[]): void {
   if (typeof window === 'undefined') throw new Error('Downloads require a browser.');
-  let zipBytes: Uint8Array;
-  try { zipBytes = buildExcelWorkbook(sheets); }
-  catch (error) { window.alert(error instanceof Error ? error.message : 'Export failed.'); return; }
+  const zipBytes = buildExcelWorkbook(sheets);
   const blob = new Blob([zipBytes.buffer as ArrayBuffer], {
     type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   });

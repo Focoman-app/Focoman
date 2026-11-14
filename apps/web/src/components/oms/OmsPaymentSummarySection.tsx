@@ -1,11 +1,14 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import type { Order, OrderInstallment, PaymentStatus } from "@focoman/types";
 import { calculateOrderPaymentBreakdown } from "@focoman/domain";
-import { FileText, Receipt } from "lucide-react";
 
 interface OmsPaymentSummarySectionProps {
   selected: Order;
+  canIssueBilling?: boolean;
+  onOpenInvoice?: () => void;
+  onOpenReceipt?: (receiptKey: string) => void;
   isEditingPricing: boolean;
   onCancelEditingPricing: () => void;
   onStartEditingPricing: () => void;
@@ -50,6 +53,9 @@ interface OmsPaymentSummarySectionProps {
 
 export function OmsPaymentSummarySection({
   selected,
+  canIssueBilling = false,
+  onOpenInvoice,
+  onOpenReceipt,
   isEditingPricing,
   onCancelEditingPricing,
   onStartEditingPricing,
@@ -85,6 +91,28 @@ export function OmsPaymentSummarySection({
   onChangeNewInstallmentProofFile,
   onSavePricing,
 }: OmsPaymentSummarySectionProps) {
+  const [showPlanNote, setShowPlanNote] = useState(false);
+
+  useEffect(() => {
+    setShowPlanNote(false);
+  }, [selected.id, canIssueBilling]);
+
+  const handleInvoiceClick = () => {
+    if (!canIssueBilling) {
+      setShowPlanNote(true);
+      return;
+    }
+    onOpenInvoice?.();
+  };
+
+  const handleReceiptClick = (receiptKey: string) => {
+    if (!canIssueBilling) {
+      setShowPlanNote(true);
+      return;
+    }
+    onOpenReceipt?.(receiptKey);
+  };
+
   return (
     <div>
       <div className="flex items-center justify-between">
@@ -136,11 +164,15 @@ export function OmsPaymentSummarySection({
               )}
               <button
                 type="button"
-                disabled
-                className="rounded-lg border border-border-default bg-white px-2.5 py-1 text-[11px] font-semibold text-text-secondary shadow-2xs transition flex items-center gap-1 disabled:cursor-not-allowed disabled:opacity-50"
+                aria-disabled={!canIssueBilling}
+                onClick={handleInvoiceClick}
+                className={`rounded-lg border border-border-default bg-white px-2.5 py-1 text-[11px] font-semibold text-text-secondary shadow-2xs transition flex items-center ${
+                  canIssueBilling
+                    ? "hover:text-brand-blue-primary hover:border-brand-blue-primary hover:bg-blue-50/50 cursor-pointer"
+                    : "opacity-50 cursor-not-allowed"
+                }`}
               >
-                <FileText className="h-3 w-3 text-brand-blue-primary" />
-                <span>Invoice and Receipts</span>
+                <span>Invoice</span>
               </button>
               <button
                 type="button"
@@ -156,6 +188,11 @@ export function OmsPaymentSummarySection({
           )}
         </div>
       </div>
+      {showPlanNote && !canIssueBilling && (
+        <p className="mt-1.5 text-right text-[11px] font-medium text-amber-800">
+          Included in Professional Plan
+        </p>
+      )}
 
       <div className="mt-2 space-y-2.5 rounded-2xl bg-surface-app p-4 border border-border-default text-xs">
         {isEditingPricing ? (
@@ -504,10 +541,14 @@ export function OmsPaymentSummarySection({
                     {breakdown.advanceAmount > 0 && (
                       <button
                         type="button"
-                        disabled
-                        className="inline-flex items-center gap-1 rounded border border-border-default bg-white px-2 py-0.5 text-[10px] font-semibold text-text-secondary disabled:cursor-not-allowed disabled:opacity-50"
+                        aria-disabled={!canIssueBilling}
+                        onClick={() => handleReceiptClick("advance")}
+                        className={`inline-flex items-center rounded border border-border-default bg-white px-2 py-0.5 text-[10px] font-semibold text-text-secondary transition ${
+                          canIssueBilling
+                            ? "hover:text-brand-blue-primary hover:border-brand-blue-primary hover:bg-blue-50/50 cursor-pointer"
+                            : "opacity-50 cursor-not-allowed"
+                        }`}
                       >
-                        <Receipt className="h-2.5 w-2.5" />
                         <span>Receipt</span>
                       </button>
                     )}
@@ -538,10 +579,16 @@ export function OmsPaymentSummarySection({
                           <div className="flex items-center gap-2">
                             <button
                               type="button"
-                              disabled
-                              className="inline-flex items-center gap-1 rounded border border-border-default bg-white px-2 py-0.5 text-[10px] font-semibold text-text-secondary disabled:cursor-not-allowed disabled:opacity-50"
+                              aria-disabled={!canIssueBilling}
+                              onClick={() =>
+                                handleReceiptClick(inst.id ? `installment:${inst.id}` : "advance")
+                              }
+                              className={`inline-flex items-center rounded border border-border-default bg-white px-2 py-0.5 text-[10px] font-semibold text-text-secondary transition ${
+                                canIssueBilling
+                                  ? "hover:text-brand-blue-primary hover:border-brand-blue-primary hover:bg-blue-50/50 cursor-pointer"
+                                  : "opacity-50 cursor-not-allowed"
+                              }`}
                             >
-                              <Receipt className="h-2.5 w-2.5" />
                               <span>Receipt</span>
                             </button>
                             <span className="font-mono font-bold text-text-primary tabular-nums">

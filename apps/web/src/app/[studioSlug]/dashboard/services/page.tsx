@@ -101,7 +101,7 @@ function ServicesContent() {
       }
     }
     loadData();
-  }, [studioSlug, getIdToken]);
+  }, [studioSlug, getIdToken, studio.configuredServices]);
 
   const hasChanges = useMemo(() => {
     if (isOnboarding) return true;

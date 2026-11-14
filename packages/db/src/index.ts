@@ -13,6 +13,7 @@ import type {
   PaymentRecord,
   StudioLead,
   UserLegalConsent,
+  DeletedStudioRecoveryInfo,
 } from '@focoman/types';
 import { RECOVERY_WINDOW_DAYS } from '@focoman/config';
 
@@ -341,6 +342,114 @@ export async function hardDeleteStudio(studioId: string): Promise<boolean> {
   return await archiveStudioToHeadless(studioId);
 }
 
+/**
+ * Immediately and permanently removes a studio document and ALL associated studio data
+ * across every studio-scoped collection without keeping any retention or recovery timeline.
+ */
+export async function permanentlyDeleteStudioData(studioId: string): Promise<boolean> {
+  const firestore = getFirestoreServerInstance();
+  const sid = studioId.toLowerCase();
+
+  const studioScopedCollections = [
+    'orders',
+    'tasks',
+    'payments',
+    'customers',
+    'members',
+    'memberships',
+    'invitations',
+    'studio_packages',
+    'leads',
+    'billingDocuments',
+    'billingDocumentKeys',
+    'billingCounters',
+  ];
+
+  for (const colName of studioScopedCollections) {
+    try {
+      const snap = await firestore.collection(colName).where('studioId', '==', sid).get();
+      if (!snap.empty) {
+        const docs = snap.docs;
+        for (let i = 0; i < docs.length; i += 400) {
+          const batch = firestore.batch();
+          const chunk = docs.slice(i, i + 400);
+          chunk.forEach((d) => batch.delete(d.ref));
+          await batch.commit();
+        }
+      }
+    } catch (err) {
+      console.warn(`[permanentlyDeleteStudioData] Error deleting from ${colName} for studio ${sid}:`, err);
+    }
+  }
+
+  try {
+    await firestore.collection('studios').doc(sid).delete();
+  } catch (err) {
+    console.warn(`[permanentlyDeleteStudioData] Error deleting studio doc for ${sid}:`, err);
+  }
+
+  return true;
+}
+
+export async function getDeletedStudiosByOwner(
+  uid: string,
+  email?: string
+): Promise<DeletedStudioRecoveryInfo[]> {
+  if (!uid) return [];
+  const firestore = getFirestoreServerInstance();
+  const seenIds = new Set<string>();
+  const results: DeletedStudioRecoveryInfo[] = [];
+
+  const collectFromDocs = (docs: FirebaseFirestore.QueryDocumentSnapshot[]) => {
+    for (const doc of docs) {
+      const studio = doc.data() as Studio;
+      const sid = (studio.id || doc.id).toLowerCase();
+      if (!studio.isDeleted || seenIds.has(sid)) continue;
+      if (!studio.deletedAt || !isWithinRecoveryWindow(studio.deletedAt)) continue;
+
+      seenIds.add(sid);
+      const deletedTime = new Date(studio.deletedAt).getTime();
+      const scheduledTime = deletedTime + RECOVERY_WINDOW_DAYS * 24 * 60 * 60 * 1000;
+      const remainingDays = Math.max(
+        0,
+        Math.ceil((scheduledTime - Date.now()) / (24 * 60 * 60 * 1000))
+      );
+
+      results.push({
+        id: studio.id || doc.id,
+        name: studio.name || studio.id || doc.id,
+        city: studio.city || '',
+        deletedAt: studio.deletedAt,
+        scheduledDeletionAt: new Date(scheduledTime).toISOString(),
+        remainingDays,
+      });
+    }
+  };
+
+  try {
+    const byOwnerUid = await firestore.collection('studios').where('ownerId', '==', uid).get();
+    collectFromDocs(byOwnerUid.docs);
+  } catch (err) {
+    console.warn('[getDeletedStudiosByOwner] Error querying by ownerId:', err);
+  }
+
+  if (email && email.trim()) {
+    try {
+      const byOwnerEmail = await firestore
+        .collection('studios')
+        .where('ownerEmail', '==', email.trim())
+        .get();
+      collectFromDocs(byOwnerEmail.docs);
+    } catch (err) {
+      console.warn('[getDeletedStudiosByOwner] Error querying by ownerEmail:', err);
+    }
+  }
+
+  return results.sort(
+    (a, b) => new Date(b.deletedAt).getTime() - new Date(a.deletedAt).getTime()
+  );
+}
+
 export async function leaveStudioMembership(uid: string, studioId: string): Promise<boolean> {
   const firestore = getFirestoreServerInstance();
   const sid = studioId.toLowerCase();
@@ -363,7 +472,8 @@ export async function leaveStudioMembership(uid: string, studioId: string): Prom
 
 export async function restoreStudio(studioId: string): Promise<boolean> {
   const firestore = getFirestoreServerInstance();
-  const docRef = firestore.collection('studios').doc(studioId);
+  const sid = studioId.toLowerCase();
+  const docRef = firestore.collection('studios').doc(sid);
   const doc = await docRef.get();
   if (!doc.exists) return false;
   const data = doc.data() as Studio;
@@ -380,7 +490,7 @@ export async function restoreStudio(studioId: string): Promise<boolean> {
 
   const memberships = await firestore
     .collection('memberships')
-    .where('studioId', '==', studioId.toLowerCase())
+    .where('studioId', '==', sid)
     .where('status', '==', 'INACTIVE')
     .get();
   if (!memberships.empty) {
@@ -389,6 +499,25 @@ export async function restoreStudio(studioId: string): Promise<boolean> {
       batch.update(membership.ref, { status: 'ACTIVE', updatedAt: now });
     });
     await batch.commit();
+  } else if (data.ownerId) {
+    // Ensure owner membership exists and is active upon restoration
+    const ownerMemId = `${sid}_${data.ownerId}`;
+    await firestore
+      .collection('memberships')
+      .doc(ownerMemId)
+      .set(
+        {
+          id: ownerMemId,
+          studioId: sid,
+          studioName: data.name || sid,
+          uid: data.ownerId,
+          role: 'STUDIO_OWNER',
+          status: 'ACTIVE',
+          joinedAt: data.createdAt || now,
+          updatedAt: now,
+        },
+        { merge: true }
+      );
   }
   return true;
 }

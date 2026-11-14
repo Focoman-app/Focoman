@@ -2,6 +2,12 @@
 
 import type { Order } from "@focoman/types";
 
+export interface OmsNoticeDialogState {
+  title: string;
+  message: string;
+  tone?: "error" | "success" | "info";
+}
+
 interface OmsOrderActionDialogsProps {
   cancelTargetOrder: Order | null;
   onCloseCancelModal: () => void;
@@ -13,6 +19,8 @@ interface OmsOrderActionDialogsProps {
   onCloseDeleteModal: () => void;
   isDeleting: boolean;
   onConfirmDeleteOrder: () => void;
+  noticeDialog?: OmsNoticeDialogState | null;
+  onCloseNoticeDialog?: () => void;
 }
 
 export function OmsOrderActionDialogs({
@@ -26,6 +34,8 @@ export function OmsOrderActionDialogs({
   onCloseDeleteModal,
   isDeleting,
   onConfirmDeleteOrder,
+  noticeDialog,
+  onCloseNoticeDialog,
 }: OmsOrderActionDialogsProps) {
   return (
     <>
@@ -146,6 +156,60 @@ export function OmsOrderActionDialogs({
           </div>
         </div>
       )}
+
+      {/* In-App Focoman Notice Dialog (replaces browser alert pop-ups) */}
+      {noticeDialog && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="oms-notice-dialog-title"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs"
+        >
+          <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl border border-border-default animate-in fade-in duration-150">
+            <div className="flex items-center justify-between pb-3 border-b border-border-default">
+              <h3
+                id="oms-notice-dialog-title"
+                className={`text-base font-bold ${
+                  noticeDialog.tone === "error"
+                    ? "text-status-error"
+                    : noticeDialog.tone === "success"
+                    ? "text-status-success"
+                    : "text-text-primary"
+                }`}
+              >
+                {noticeDialog.title}
+              </h3>
+              <button
+                type="button"
+                onClick={onCloseNoticeDialog}
+                className="text-text-tertiary hover:text-text-primary p-1.5 rounded-lg hover:bg-surface-app transition"
+                aria-label="Close notice"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="py-4">
+              <p className="text-xs text-text-secondary leading-relaxed">
+                {noticeDialog.message}
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end pt-3 border-t border-border-default">
+              <button
+                type="button"
+                onClick={onCloseNoticeDialog}
+                className="btn-brand-blue px-5 py-2 text-xs font-bold"
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
+

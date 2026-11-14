@@ -42,6 +42,7 @@ function SettingsPageContent() {
 
   // Delete / Leave Studio Modal State
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [instantDelete, setInstantDelete] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
@@ -152,7 +153,7 @@ function SettingsPageContent() {
 
       let res;
       if (isOwner) {
-        res = await deleteStudioAction(studioSlug, token);
+        res = await deleteStudioAction(studioSlug, token, { permanent: instantDelete });
       } else {
         res = await leaveStudioAction(studioSlug, token);
       }
@@ -476,6 +477,7 @@ function SettingsPageContent() {
                   type="button"
                   onClick={() => {
                     setShowDeleteModal(true);
+                    setInstantDelete(false);
                     setDeleteError(null);
                   }}
                   className="rounded-xl bg-red-600 px-4 py-2.5 text-xs font-bold text-white hover:bg-red-700 transition shadow-xs cursor-pointer"
@@ -509,7 +511,7 @@ function SettingsPageContent() {
             <p className="mt-2 text-xs text-text-secondary leading-relaxed">
               {isOwner ? (
                 <>
-                  Are you sure you want to close <span className="font-bold text-text-primary">{name || studioSlug}</span> (<span className="font-mono">/{studioSlug}</span>)? It removes access for members and remains recoverable for 30 days.
+                  Are you sure you want to delete <span className="font-bold text-text-primary">{name || studioSlug}</span> (<span className="font-mono">/{studioSlug}</span>)?
                 </>
               ) : (
                 <>
@@ -518,7 +520,37 @@ function SettingsPageContent() {
               )}
             </p>
 
-            {isOwner && <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50/70 p-3.5 text-xs text-amber-950 leading-tight">This workspace remains recoverable for 30 days. Its identifier cannot be reused during that period.</div>}
+            {isOwner && (
+              <>
+                <div
+                  className={`mt-4 rounded-xl border p-3.5 text-xs leading-tight ${
+                    instantDelete
+                      ? "border-red-200 bg-red-50/70 text-red-950"
+                      : "border-amber-200 bg-amber-50/70 text-amber-950"
+                  }`}
+                >
+                  {instantDelete
+                    ? "All studio data will be permanently removed immediately with no recovery window."
+                    : "Recoverable for 30 days in Account Settings before permanent deletion."}
+                </div>
+
+                <label className="mt-3 flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50/40 p-3 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={instantDelete}
+                    onChange={(e) => setInstantDelete(e.target.checked)}
+                    disabled={isDeleting}
+                    className="mt-0.5 h-4 w-4 rounded border-red-300 text-red-600 focus:ring-red-500 cursor-pointer"
+                  />
+                  <span className="text-xs text-red-950 leading-snug">
+                    <span className="font-bold block">Full instant delete</span>
+                    <span className="text-[11px] text-red-800">
+                      Immediately remove all associated studio data without timeline.
+                    </span>
+                  </span>
+                </label>
+              </>
+            )}
 
             {deleteError && (
               <div className="mt-3 rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700">
@@ -531,6 +563,7 @@ function SettingsPageContent() {
                 type="button"
                 onClick={() => {
                   setShowDeleteModal(false);
+                  setInstantDelete(false);
                   setDeleteError(null);
                 }}
                 disabled={isDeleting}
@@ -550,7 +583,7 @@ function SettingsPageContent() {
                     Processing...
                   </>
                 ) : isOwner ? (
-                  "Yes, Delete Studio"
+                  instantDelete ? "Delete Immediately" : "Yes, Delete Studio"
                 ) : (
                   "Yes, Leave Studio"
                 )}
