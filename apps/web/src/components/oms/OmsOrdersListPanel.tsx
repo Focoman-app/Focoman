@@ -24,7 +24,9 @@ interface OmsOrdersListPanelProps {
   sortBy: "DATE_ASC" | "DATE_DESC" | "PRICE_ASC" | "PRICE_DESC";
   onChangeSortBy: (sort: "DATE_ASC" | "DATE_DESC" | "PRICE_ASC" | "PRICE_DESC") => void;
   onExportExcel: () => void;
+  canExport: boolean;
   onOpenCreateModal: () => void;
+  hasLeads: boolean;
   leadsCount?: number;
   onSwitchToLeads?: () => void;
 }
@@ -45,7 +47,9 @@ export function OmsOrdersListPanel({
   sortBy,
   onChangeSortBy,
   onExportExcel,
+  canExport,
   onOpenCreateModal,
+  hasLeads,
   leadsCount = 0,
   onSwitchToLeads,
 }: OmsOrdersListPanelProps) {
@@ -70,6 +74,16 @@ export function OmsOrdersListPanel({
             </button>
             <button
               type="button"
+              onClick={() => setFiltersOpen((open) => !open)}
+              aria-expanded={filtersOpen}
+              aria-controls="oms-order-filters"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-border-default bg-white px-3 py-1.5 text-xs font-bold text-text-secondary hover:border-brand-blue-primary hover:text-text-primary transition"
+            >
+              <SlidersHorizontal className="h-3.5 w-3.5" />
+              Filters
+            </button>
+            {canExport && <button
+              type="button"
               onClick={onExportExcel}
               disabled={filtered.length === 0}
               className="rounded-xl border border-border-default bg-white px-3.5 py-2 text-xs font-bold text-text-primary hover:bg-surface-app hover:border-brand-blue-primary transition inline-flex items-center gap-1.5 shadow-2xs disabled:opacity-50 cursor-pointer"
@@ -77,11 +91,11 @@ export function OmsOrdersListPanel({
             >
               <FileSpreadsheet className="h-3.5 w-3.5 text-brand-blue-primary" />
               <span>Export Excel</span>
-            </button>
+            </button>}
           </div>
         </div>
 
-        <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-border-default pt-3.5">
+        {hasLeads && <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-border-default pt-3.5">
           <div className="inline-flex rounded-xl border border-border-default bg-surface-app p-1">
             <button
               type="button"
@@ -97,17 +111,7 @@ export function OmsOrdersListPanel({
               Leads ({leadsCount})
             </button>
           </div>
-          <button
-            type="button"
-            onClick={() => setFiltersOpen((open) => !open)}
-            aria-expanded={filtersOpen}
-            aria-controls="oms-order-filters"
-            className="inline-flex items-center gap-1.5 rounded-xl border border-border-default bg-white px-3 py-1.5 text-xs font-bold text-text-secondary hover:border-brand-blue-primary hover:text-text-primary transition"
-          >
-            <SlidersHorizontal className="h-3.5 w-3.5" />
-            Filters
-          </button>
-        </div>
+        </div>}
 
         {filtersOpen && (
           <div id="oms-order-filters" className="mt-3 flex flex-col sm:flex-row gap-2.5">

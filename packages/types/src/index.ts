@@ -101,6 +101,16 @@ export interface SoftDeletable {
   deletedBy?: string | null;
 }
 
+export interface UserLegalConsent {
+  uid: string;
+  termsVersion: string;
+  privacyVersion: string;
+  termsAcceptedAt: string;
+  privacyAcceptedAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface StudioPackage extends SoftDeletable {
   id: string;
   studioId: string;

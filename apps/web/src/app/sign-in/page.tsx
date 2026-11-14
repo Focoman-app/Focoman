@@ -1,349 +1,150 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
-import Link from "next/link";
-import {
-  signInWithGoogle,
-  signInWithGooglePopup,
-  handleRedirectAuth,
-  subscribeToAuthState,
-  syncServerSession,
-} from "@/lib/firebaseAuth";
+import { useCallback, useEffect, useRef, useState, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
+import { getAdditionalUserInfo, type User, type UserCredential } from "firebase/auth";
+import { clearLegalConsentAuthState, handleRedirectAuth, hasPendingLegalConsent, markLegalConsentAuthCandidate, markLegalConsentPending, signInWithGoogle, signInWithGooglePopup, subscribeToAuthState, syncServerSession } from "@/lib/firebaseAuth";
+import { recordNewUserLegalConsentAction } from "@/actions/legalConsentActions";
 import { Navbar } from "@/components/Navbar";
 import { BackButton } from "@/components/BackButton";
 import { FocomanSpinner } from "@/components/FocomanSpinner";
+import { LegalDocumentContent, type LegalDocumentKind } from "@/components/legal/LegalDocumentContent";
+
+function LegalDocument({ kind, onRead }: { kind: LegalDocumentKind; onRead: () => void }) {
+  const terms = kind === "terms";
+  return <details open className="rounded-xl border border-border-default bg-white"><summary className="cursor-pointer px-4 py-3 text-sm font-bold text-text-primary">{terms ? "Terms and Conditions" : "Privacy Policy"}</summary><div className="max-h-56 overflow-y-auto border-t border-border-divider px-4 py-3 text-xs leading-5 text-text-secondary" onScroll={(event) => { const node = event.currentTarget; if (node.scrollTop + node.clientHeight >= node.scrollHeight - 4) onRead(); }}>
+    <div className="space-y-3 [&_h2]:font-bold [&_h2]:text-text-primary [&_p]:mt-2"><LegalDocumentContent kind={kind} /></div>
+  </div></details>;
+}
 
 function SignInContent() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const redirectUrl = searchParams.get("redirect");
   const autoSync = searchParams.get("autoSync");
-
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const [showTroubleOptions, setShowTroubleOptions] = useState(false);
-  const [acceptedLegalTerms, setAcceptedLegalTerms] = useState(false);
+  const [pendingConsent, setPendingConsent] = useState<User | null>(null);
+  const [termsRead, setTermsRead] = useState(false);
+  const [privacyRead, setPrivacyRead] = useState(false);
+  const [accepted, setAccepted] = useState(false);
+  const [submittingConsent, setSubmittingConsent] = useState(false);
+  const interactiveAttempt = useRef(false);
+  const consentPending = useRef(typeof window !== "undefined" && hasPendingLegalConsent());
 
-  useEffect(() => {
-    let isMounted = true;
-
-    // Check if returning from a Google OAuth redirect
-    handleRedirectAuth()
-      .then(async (credential) => {
-        const hadPendingRedirect =
-          typeof window !== "undefined" &&
-          sessionStorage.getItem("focoman_auth_redirect_pending") === "true";
-        if (typeof window !== "undefined") {
-          sessionStorage.removeItem("focoman_auth_redirect_pending");
-        }
-
-        if (credential?.user && isMounted) {
-          const savedTarget =
-            typeof window !== "undefined"
-              ? sessionStorage.getItem("focoman_auth_redirect")
-              : null;
-          if (typeof window !== "undefined") {
-            sessionStorage.removeItem("focoman_auth_redirect");
-          }
-
-          const effectiveTarget = redirectUrl || savedTarget || "/dashboard";
-          const finalUrl = autoSync
-            ? `${effectiveTarget}${effectiveTarget.includes("?") ? "&" : "?"}autoSync=true`
-            : effectiveTarget;
-
-          window.location.href = finalUrl;
-        } else if (hadPendingRedirect && !credential?.user && isMounted) {
-          setAuthError("Sign-in completed without session credentials. Please try signing in again.");
-          setIsSigningIn(false);
-        }
-      })
-      .catch((err) => {
-        if (typeof window !== "undefined") {
-          sessionStorage.removeItem("focoman_auth_redirect_pending");
-        }
-        if (isMounted) {
-          const msg = err instanceof Error ? err.message : String(err);
-          setAuthError(msg || "Failed to process Google sign-in.");
-          setIsSigningIn(false);
-        }
-      });
-
-    // Listen to active auth state
-    const unsubscribe = subscribeToAuthState(async (user) => {
-      if (user && isMounted) {
-        if (typeof window !== "undefined") {
-          sessionStorage.removeItem("focoman_auth_redirect_pending");
-        }
-        await syncServerSession();
-        const savedTarget =
-          typeof window !== "undefined"
-            ? sessionStorage.getItem("focoman_auth_redirect")
-            : null;
-        if (typeof window !== "undefined") {
-          sessionStorage.removeItem("focoman_auth_redirect");
-        }
-
-        const effectiveTarget = redirectUrl || savedTarget || "/dashboard";
-        const finalUrl = autoSync
-          ? `${effectiveTarget}${effectiveTarget.includes("?") ? "&" : "?"}autoSync=true`
-          : effectiveTarget;
-
-        window.location.href = finalUrl;
-      }
-    });
-
-    return () => {
-      isMounted = false;
-      unsubscribe();
-    };
-  }, [router, redirectUrl, autoSync]);
-
-  const handleGoogleSignIn = async () => {
-    if (!acceptedLegalTerms) {
-      setAuthError("Please confirm that you agree to the Terms of Service and Privacy Policy.");
+  const getTarget = useCallback(() => {
+    const saved = typeof window !== "undefined" ? sessionStorage.getItem("focoman_auth_redirect") : null;
+    const target = redirectUrl || saved || "/dashboard";
+    return autoSync ? `${target}${target.includes("?") ? "&" : "?"}autoSync=true` : target;
+  }, [autoSync, redirectUrl]);
+  const continueToTarget = useCallback(() => {
+    if (typeof window !== "undefined") {
+      const target = getTarget();
+      sessionStorage.removeItem("focoman_auth_redirect");
+      sessionStorage.removeItem("focoman_auth_redirect_pending");
+      window.location.href = target;
+    }
+  }, [getTarget]);
+  const handleCredential = useCallback(async (credential: UserCredential) => {
+    if (getAdditionalUserInfo(credential)?.isNewUser) {
+      consentPending.current = true;
+      markLegalConsentPending();
+      setPendingConsent(credential.user);
+      setIsSigningIn(false);
       return;
     }
+    clearLegalConsentAuthState();
+    await syncServerSession(true);
+    continueToTarget();
+  }, [continueToTarget]);
+
+  useEffect(() => {
+    let mounted = true;
+    let redirectResolved = false;
+    let redirectCredentialHandled = false;
+    let observedUser: User | null = null;
+    const unsubscribe = subscribeToAuthState(async (user) => {
+      observedUser = user;
+      if (user && hasPendingLegalConsent()) {
+        consentPending.current = true;
+        setPendingConsent(user);
+        setIsSigningIn(false);
+        return;
+      }
+      if (!user || !mounted || !redirectResolved || redirectCredentialHandled || interactiveAttempt.current || consentPending.current) return;
+      await syncServerSession();
+      if (mounted) continueToTarget();
+    });
+    handleRedirectAuth().then(async (credential) => {
+      redirectResolved = true;
+      if (!mounted) return;
+      if (credential?.user) {
+        redirectCredentialHandled = true;
+        await handleCredential(credential);
+      } else if (typeof window !== "undefined" && sessionStorage.getItem("focoman_auth_redirect_pending") === "true") {
+        sessionStorage.removeItem("focoman_auth_redirect_pending");
+        clearLegalConsentAuthState();
+        setAuthError("Sign-in completed without session credentials. Please try signing in again.");
+        setIsSigningIn(false);
+      } else if (observedUser && !interactiveAttempt.current && !consentPending.current) {
+        await syncServerSession();
+        if (mounted) continueToTarget();
+      }
+    }).catch((error) => {
+      if (!mounted) return;
+      if (typeof window !== "undefined") sessionStorage.removeItem("focoman_auth_redirect_pending");
+      setAuthError(error instanceof Error ? error.message : "Failed to process Google sign-in.");
+      setIsSigningIn(false);
+    });
+    return () => { mounted = false; unsubscribe(); };
+  }, [continueToTarget, handleCredential]);
+
+  const startGoogleSignIn = async (alternate = false) => {
     try {
+      interactiveAttempt.current = true;
       setIsSigningIn(true);
       setAuthError(null);
-
+      markLegalConsentAuthCandidate();
       if (typeof window !== "undefined") {
         if (redirectUrl) sessionStorage.setItem("focoman_auth_redirect", redirectUrl);
         sessionStorage.setItem("focoman_auth_redirect_pending", "true");
       }
-
-      const res = await signInWithGoogle();
-      if (res && "user" in res && res.user) {
-        if (typeof window !== "undefined") sessionStorage.removeItem("focoman_auth_redirect_pending");
-        const savedTarget =
-          typeof window !== "undefined"
-            ? sessionStorage.getItem("focoman_auth_redirect")
-            : null;
-        if (typeof window !== "undefined") sessionStorage.removeItem("focoman_auth_redirect");
-
-        const effectiveTarget = redirectUrl || savedTarget || "/dashboard";
-        const finalUrl = autoSync
-          ? `${effectiveTarget}${effectiveTarget.includes("?") ? "&" : "?"}autoSync=true`
-          : effectiveTarget;
-
-        window.location.href = finalUrl;
-      }
-    } catch (err: unknown) {
+      const credential = alternate ? await signInWithGooglePopup() : await signInWithGoogle();
+      if (credential?.user) await handleCredential(credential);
+    } catch (error) {
       if (typeof window !== "undefined") sessionStorage.removeItem("focoman_auth_redirect_pending");
+      clearLegalConsentAuthState();
+      const message = error instanceof Error ? error.message : "Sign-in request could not be completed.";
+      if (!message.includes("auth/popup-closed-by-user") && !message.includes("auth/cancelled-popup-request")) setAuthError(message);
       setIsSigningIn(false);
-      const errorMessage = err instanceof Error ? err.message : String(err);
-      if (errorMessage.includes("auth/unauthorized-domain")) {
-        const domain = typeof window !== "undefined" ? window.location.hostname : "current domain";
-        setAuthError(`Domain "${domain}" is not authorized in Firebase settings.`);
-      } else if (
-        !errorMessage.includes("auth/popup-closed-by-user") &&
-        !errorMessage.includes("auth/cancelled-popup-request")
-      ) {
-        setAuthError(errorMessage || "Sign-in request could not be completed.");
-      }
+      interactiveAttempt.current = false;
     }
   };
-
-  const handleGoogleAlternateSignIn = async () => {
-    if (!acceptedLegalTerms) {
-      setAuthError("Please confirm that you agree to the Terms of Service and Privacy Policy.");
-      return;
-    }
+  const submitConsent = async () => {
+    if (!pendingConsent || !termsRead || !privacyRead || !accepted) return;
+    setSubmittingConsent(true);
+    setAuthError(null);
     try {
-      setIsSigningIn(true);
-      setAuthError(null);
-      const res = await signInWithGooglePopup();
-      if (res?.user) {
-        if (typeof window !== "undefined") sessionStorage.removeItem("focoman_auth_redirect_pending");
-        const savedTarget =
-          typeof window !== "undefined"
-            ? sessionStorage.getItem("focoman_auth_redirect")
-            : null;
-        if (typeof window !== "undefined") sessionStorage.removeItem("focoman_auth_redirect");
-
-        const effectiveTarget = redirectUrl || savedTarget || "/dashboard";
-        const finalUrl = autoSync
-          ? `${effectiveTarget}${effectiveTarget.includes("?") ? "&" : "?"}autoSync=true`
-          : effectiveTarget;
-
-        window.location.href = finalUrl;
-      }
-    } catch (err: unknown) {
-      setIsSigningIn(false);
-      const errorMessage = err instanceof Error ? err.message : String(err);
-      if (
-        !errorMessage.includes("auth/popup-closed-by-user") &&
-        !errorMessage.includes("auth/cancelled-popup-request")
-      ) {
-        setAuthError(errorMessage || "Sign-in request failed. Please try again.");
-      }
+      const result = await recordNewUserLegalConsentAction({ idToken: await pendingConsent.getIdToken(), termsRead, privacyRead, accepted });
+      if (!result.success) throw new Error(result.error);
+      consentPending.current = false;
+      clearLegalConsentAuthState();
+      await syncServerSession(true);
+      continueToTarget();
+    } catch (error) {
+      setAuthError(error instanceof Error ? error.message : "Unable to save legal consent.");
+      setSubmittingConsent(false);
     }
   };
 
-  return (
-    <div className="w-full max-w-lg rounded-3xl border border-border-default bg-white p-8 shadow-sm sm:p-12">
-      <div className="text-center">
-        <span className="text-xs font-bold uppercase tracking-widest text-brand-blue-primary">
-          {redirectUrl ? "Order Association" : "Operational Access"}
-        </span>
-        <h1 className="mt-2 text-2xl font-extrabold tracking-tight text-text-primary sm:text-3xl">
-          {redirectUrl ? "Sign In to Your Account" : "Studio Workspace Access"}
-        </h1>
-        <p className="mx-auto mt-2 text-sm text-text-secondary">
-          {redirectUrl
-            ? "Sign in with Google to link this order and view real-time deliverables."
-            : "Sign in to access your studio operations and team dashboard."}
-        </p>
-      </div>
+  if (pendingConsent) {
+    const canAgree = termsRead && privacyRead;
+    return <div className="w-full max-w-3xl rounded-3xl border border-border-default bg-white p-6 shadow-sm sm:p-8"><div className="text-center"><p className="text-xs font-bold uppercase tracking-widest text-brand-blue-primary">New account</p><h1 className="mt-2 text-2xl font-extrabold text-text-primary">Review before creating your account</h1><p className="mt-2 text-sm text-text-secondary">Read both documents to enable agreement and continue.</p></div><div className="mt-6 space-y-4"><LegalDocument kind="terms" onRead={() => setTermsRead(true)} /><LegalDocument kind="privacy" onRead={() => setPrivacyRead(true)} /></div><label className={`mt-5 flex items-start gap-3 rounded-xl border p-4 text-sm ${canAgree ? "border-border-default bg-surface-app/50 cursor-pointer" : "border-border-divider bg-slate-50 text-text-tertiary cursor-not-allowed"}`}><input type="checkbox" disabled={!canAgree || submittingConsent} checked={accepted} onChange={(event) => setAccepted(event.target.checked)} className="mt-0.5 h-4 w-4 shrink-0" /><span>I have read and agree to the Terms and Conditions and Privacy Policy.</span></label>{authError && <p role="alert" className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700">{authError}</p>}<button type="button" disabled={!accepted || submittingConsent} onClick={() => void submitConsent()} className="mt-5 inline-flex w-full items-center justify-center rounded-xl bg-brand-blue-primary px-5 py-3 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50">{submittingConsent ? "Saving agreement..." : "Accept and continue"}</button></div>;
+  }
 
-      <div className="mx-auto mt-8">
-        <div className="rounded-2xl border border-border-default bg-gray-50/50 p-6 sm:p-8 text-center">
-          <h2 className="text-lg font-bold text-text-primary">
-            Sign In to Focoman
-          </h2>
-
-          {/* Account closure notice */}
-          {searchParams.get("deleted") === "true" && (
-            <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3.5 text-xs font-semibold text-emerald-800 text-left">
-              Your account closure request was recorded and this session has been signed out. Sole-owner workspaces remain recoverable for 30 days.
-            </div>
-          )}
-
-          {/* Conditional rendering: If there is an auth error, hide standard sign-in & trouble options, showing only Alternate method card */}
-          {authError ? (
-            <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50/80 p-5 text-xs text-left space-y-3.5 shadow-xs animate-in fade-in">
-              <div className="space-y-1">
-                <p className="font-bold text-sm text-amber-950">Sign in failed</p>
-                <p className="text-amber-800 leading-relaxed font-medium">{authError}</p>
-              </div>
-
-              <div className="pt-2 border-t border-amber-200/80">
-                <button
-                  type="button"
-                  onClick={() => setAuthError(null)}
-                  className="mb-2 w-full rounded-xl border border-amber-300 bg-white py-2.5 px-4 text-xs font-bold text-amber-900 hover:bg-amber-100 transition"
-                >
-                  Review sign-in options
-                </button>
-                <button
-                  type="button"
-                  onClick={handleGoogleAlternateSignIn}
-                  disabled={isSigningIn}
-                  className="w-full rounded-xl bg-text-primary text-white font-bold py-3 px-4 text-xs shadow-sm hover:bg-black active:translate-y-[1px] transition text-center cursor-pointer flex items-center justify-center gap-2 disabled:opacity-60"
-                >
-                  {isSigningIn ? (
-                    <>
-                      <FocomanSpinner size="xs" />
-                      <span>Opening Alternate Window...</span>
-                    </>
-                  ) : (
-                    <span>Try alternate method</span>
-                  )}
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="mt-6 flex flex-col items-center gap-3.5">
-              <label className="flex w-full items-start gap-2.5 rounded-xl border border-border-default bg-surface-app/50 p-3 text-left text-[11px] leading-5 text-text-secondary cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={acceptedLegalTerms}
-                  onChange={(event) => setAcceptedLegalTerms(event.target.checked)}
-                  className="mt-0.5 h-4 w-4 shrink-0 rounded border-border-default text-brand-blue-primary focus:ring-brand-blue-primary"
-                />
-                <span>
-                  I agree to the <Link href="/terms" className="font-semibold text-brand-blue-primary underline">Terms of Service</Link> and acknowledge the <Link href="/privacy" className="font-semibold text-brand-blue-primary underline">Privacy Policy</Link>.
-                </span>
-              </label>
-              {/* Primary Sign-In Button */}
-              <button
-                type="button"
-                onClick={handleGoogleSignIn}
-                disabled={isSigningIn || !acceptedLegalTerms}
-                className="inline-flex w-full justify-center items-center gap-3 rounded-xl border border-border-default bg-white px-6 py-3 text-sm font-bold text-text-primary shadow-xs transition hover:bg-gray-50 hover:shadow-sm disabled:opacity-60 cursor-pointer"
-              >
-                {isSigningIn ? (
-                  <>
-                    <FocomanSpinner size="xs" />
-                    <span>Connecting to Google...</span>
-                  </>
-                ) : (
-                  <>
-                    <svg className="h-5 w-5" viewBox="0 0 24 24">
-                      <path
-                        fill="#4285F4"
-                        d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z"
-                      />
-                      <path
-                        fill="#34A853"
-                        d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.34 24 12 24z"
-                      />
-                      <path
-                        fill="#FBBC05"
-                        d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 9.99 0 12s.45 3.82 1.25 5.42l4.03-3.15z"
-                      />
-                      <path
-                        fill="#EA4335"
-                        d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.34 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"
-                      />
-                    </svg>
-                    <span>Continue with Google</span>
-                  </>
-                )}
-              </button>
-
-              {/* Trouble signing in toggle option (Hidden initially, shown only if user clicks) */}
-              {!showTroubleOptions ? (
-                <button
-                  type="button"
-                  onClick={() => setShowTroubleOptions(true)}
-                  className="text-[11px] font-medium text-text-tertiary hover:text-text-secondary transition cursor-pointer mt-1"
-                >
-                  Having trouble signing in?
-                </button>
-              ) : (
-                <div className="w-full mt-1 p-3 bg-white border border-border-default rounded-xl space-y-2 text-center animate-in fade-in">
-                  <p className="text-[11px] text-text-secondary">If same-tab redirection is restricted in your browser:</p>
-                  <button
-                    type="button"
-                    onClick={handleGoogleAlternateSignIn}
-                    disabled={isSigningIn || !acceptedLegalTerms}
-                    className="w-full rounded-lg bg-text-primary text-white font-bold py-2 px-3 text-xs shadow-xs hover:bg-black transition text-center cursor-pointer"
-                  >
-                    Try alternate method
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-
-          <p className="text-[10px] sm:text-xs text-text-tertiary max-w-xs mx-auto mt-6">Your selection is required before continuing with Google sign-in.</p>
-        </div>
-      </div>
-    </div>
-  );
+  return <div className="w-full max-w-lg rounded-3xl border border-border-default bg-white p-8 shadow-sm sm:p-12"><div className="text-center"><span className="text-xs font-bold uppercase tracking-widest text-brand-blue-primary">{redirectUrl ? "Order Association" : "Operational Access"}</span><h1 className="mt-2 text-2xl font-extrabold tracking-tight text-text-primary sm:text-3xl">{redirectUrl ? "Sign In to Your Account" : "Studio Workspace Access"}</h1><p className="mx-auto mt-2 text-sm text-text-secondary">{redirectUrl ? "Sign in with Google to link this order and view real-time deliverables." : "Sign in to access your studio operations and team dashboard."}</p></div><div className="mx-auto mt-8 rounded-2xl border border-border-default bg-gray-50/50 p-6 text-center sm:p-8"><h2 className="text-lg font-bold text-text-primary">Sign In to Focoman</h2>{searchParams.get("deleted") === "true" && <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3.5 text-left text-xs font-semibold text-emerald-800">Your account closure request was recorded and this session has been signed out. Sole-owner workspaces remain recoverable for 30 days.</div>}{authError ? <div className="mt-6 space-y-3 rounded-2xl border border-amber-200 bg-amber-50/80 p-5 text-left text-xs"><p className="font-bold text-sm text-amber-950">Sign in failed</p><p className="text-amber-800">{authError}</p><button type="button" onClick={() => setAuthError(null)} className="w-full rounded-xl border border-amber-300 bg-white py-2.5 text-xs font-bold text-amber-900">Review sign-in options</button><button type="button" onClick={() => void startGoogleSignIn(true)} disabled={isSigningIn} className="w-full rounded-xl bg-text-primary px-4 py-3 text-xs font-bold text-white disabled:opacity-60">Try alternate method</button></div> : <div className="mt-6 flex flex-col items-center gap-3.5"><button type="button" onClick={() => void startGoogleSignIn()} disabled={isSigningIn} className="inline-flex w-full items-center justify-center gap-3 rounded-xl border border-border-default bg-white px-6 py-3 text-sm font-bold text-text-primary shadow-xs disabled:opacity-60">{isSigningIn ? <><FocomanSpinner size="xs" /><span>Connecting to Google...</span></> : <span>Continue with Google</span>}</button>{!showTroubleOptions ? <button type="button" onClick={() => setShowTroubleOptions(true)} className="mt-1 text-[11px] font-medium text-text-tertiary">Having trouble signing in?</button> : <div className="w-full rounded-xl border border-border-default bg-white p-3"><p className="mb-2 text-[11px] text-text-secondary">If same-tab redirection is restricted in your browser:</p><button type="button" onClick={() => void startGoogleSignIn(true)} disabled={isSigningIn} className="w-full rounded-lg bg-text-primary py-2 text-xs font-bold text-white">Try alternate method</button></div>}</div>}<p className="mx-auto mt-6 max-w-xs text-[10px] text-text-tertiary">New accounts review and accept the Terms and Privacy Policy after Google sign-in.</p></div></div>;
 }
 
 export default function SignInPage() {
-  return (
-    <div className="min-h-screen bg-surface-app text-text-primary selection:bg-brand-blue-soft flex flex-col">
-      <Navbar />
-
-      <main className="flex-1 flex flex-col items-center justify-center p-4 py-12">
-        <div className="w-full max-w-lg mb-6 self-start md:self-auto md:w-full">
-          <BackButton fallbackHref="/" />
-        </div>
-        <Suspense
-          fallback={
-            <div className="w-full max-w-lg rounded-3xl border border-border-default bg-white p-8 text-center text-sm text-text-secondary">
-              Loading authentication portal...
-            </div>
-          }
-        >
-          <SignInContent />
-        </Suspense>
-      </main>
-    </div>
-  );
+  return <div className="min-h-screen bg-surface-app text-text-primary selection:bg-brand-blue-soft flex flex-col"><Navbar /><main className="flex-1 flex flex-col items-center justify-center p-4 py-12"><div className="w-full max-w-3xl mb-6 self-start md:self-auto"><BackButton fallbackHref="/" /></div><Suspense fallback={<div className="w-full max-w-lg rounded-3xl border border-border-default bg-white p-8 text-center text-sm text-text-secondary">Loading authentication portal...</div>}><SignInContent /></Suspense></main></div>;
 }

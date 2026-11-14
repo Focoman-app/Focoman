@@ -27,6 +27,46 @@ let inFlightSync: Promise<boolean> | null = null;
 let lastSyncedToken: string | null = null;
 let redirectHandlingPromise: Promise<UserCredential | null> | null = null;
 
+const LEGAL_CONSENT_AUTH_CANDIDATE_KEY = 'focoman_legal_consent_auth_candidate';
+const LEGAL_CONSENT_PENDING_KEY = 'focoman_legal_consent_pending';
+
+/**
+ * A sign-in page marks an interactive Google attempt before Firebase can emit
+ * an auth-state event. This keeps the global session synchronizer from
+ * establishing a server session until that page has identified an existing
+ * identity or stored a new user's legal consent.
+ */
+export function markLegalConsentAuthCandidate(): void {
+  if (typeof window !== 'undefined') {
+    sessionStorage.setItem(LEGAL_CONSENT_AUTH_CANDIDATE_KEY, 'true');
+  }
+}
+
+export function markLegalConsentPending(): void {
+  if (typeof window !== 'undefined') {
+    sessionStorage.removeItem(LEGAL_CONSENT_AUTH_CANDIDATE_KEY);
+    sessionStorage.setItem(LEGAL_CONSENT_PENDING_KEY, 'true');
+  }
+}
+
+export function hasPendingLegalConsent(): boolean {
+  if (typeof window === 'undefined') return false;
+  return sessionStorage.getItem(LEGAL_CONSENT_PENDING_KEY) === 'true';
+}
+
+function isLegalConsentSessionDeferred(): boolean {
+  if (typeof window === 'undefined') return false;
+  return sessionStorage.getItem(LEGAL_CONSENT_AUTH_CANDIDATE_KEY) === 'true'
+    || hasPendingLegalConsent();
+}
+
+export function clearLegalConsentAuthState(): void {
+  if (typeof window !== 'undefined') {
+    sessionStorage.removeItem(LEGAL_CONSENT_AUTH_CANDIDATE_KEY);
+    sessionStorage.removeItem(LEGAL_CONSENT_PENDING_KEY);
+  }
+}
+
 /**
  * Synchronizes client-side Firebase Auth credentials with the server-side
  * HTTP session cookie (`__session`).
@@ -36,6 +76,7 @@ let redirectHandlingPromise: Promise<UserCredential | null> | null = null;
  */
 export async function syncServerSession(force = false): Promise<boolean> {
   if (typeof window === "undefined") return false;
+  if (isLegalConsentSessionDeferred()) return false;
   const origin = window.location.origin;
 
   if (!auth.currentUser) {

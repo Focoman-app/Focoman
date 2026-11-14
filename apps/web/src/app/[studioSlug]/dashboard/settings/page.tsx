@@ -70,14 +70,6 @@ function SettingsPageContent() {
   const [logoError, setLogoError] = useState<string | null>(null);
   const [website, setWebsite] = useState((studio.website || "").replace(/^https?:\/\//i, ""));
   const [instagram, setInstagram] = useState(studio.instagram || "");
-  const [features, setFeatures] = useState(studio.features || {
-    oms: true,
-    crm: true,
-    erp: true,
-    whatsapp: true,
-    reports: true,
-  });
-
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -165,7 +157,6 @@ function SettingsPageContent() {
           logoUrl,
           website: formattedWebsite,
           instagram,
-          features,
         },
         idToken: token,
       });
@@ -353,7 +344,7 @@ function SettingsPageContent() {
   return (
     <div className="px-4 py-6 sm:px-6 sm:py-8 lg:px-8 space-y-8 max-w-4xl pb-16">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-border-divider pb-6">
+      <div className="flex flex-col items-center gap-4 border-b border-border-divider pb-6 text-center">
         <div>
           <div className="flex items-center gap-2">
             <span className="text-xs font-bold uppercase tracking-wider text-brand-blue-primary">
@@ -367,22 +358,14 @@ function SettingsPageContent() {
             Settings
           </h1>
           <p className="mt-1 text-xs text-text-secondary">
-            Configure studio preferences, services catalog, operational capabilities, and account settings.
+            Configure studio preferences, services catalog, plan information, and account settings.
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
-          <Link
-            href="/workspaces"
-            className="rounded-xl border border-border-default bg-white px-3.5 py-2 text-xs font-semibold text-text-secondary hover:bg-surface-app transition"
-          >
-            ← All Workspaces
-          </Link>
-        </div>
       </div>
 
       {/* Tabs Switcher */}
-      <div className="flex border-b border-border-default gap-3">
+      <div className="flex justify-center border-b border-border-default gap-3">
         <button
           type="button"
           onClick={() => handleTabSwitch("studio")}
@@ -444,13 +427,13 @@ function SettingsPageContent() {
       {/* TAB 1: STUDIO SETTINGS                                    */}
       {/* ========================================================= */}
       {activeTab === "studio" && (
-        <div className="space-y-8">
+        <div className="flex flex-col gap-8">
           {/* 1. Default Studio Workspace Preference */}
-          <div className="rounded-3xl border border-border-default bg-white p-6 shadow-sm sm:p-8 space-y-4">
+          <div className="order-3 rounded-3xl border border-border-default bg-white p-6 shadow-sm sm:p-8 space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div>
                 <div className="flex items-center gap-2">
-                  <h2 className="text-base font-bold text-text-primary">Default Workspace Routing</h2>
+                  <h2 className="text-base font-bold text-text-primary">Default Workspace Information</h2>
                   {isDefaultStudio && (
                     <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 border border-emerald-300 px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-emerald-800">
                       Default Active
@@ -485,7 +468,7 @@ function SettingsPageContent() {
           </div>
 
           {/* 2. Services & Packages Catalog Section */}
-          <div className="rounded-3xl border border-border-default bg-white p-6 shadow-sm sm:p-8 space-y-4">
+          <div className="order-2 rounded-3xl border border-border-default bg-white p-6 shadow-sm sm:p-8 space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div>
                 <div className="flex items-center gap-2">
@@ -508,7 +491,7 @@ function SettingsPageContent() {
           </div>
 
           {/* 3. Studio Profile & Identity (Owner Only) */}
-          <div className="rounded-3xl border border-border-default bg-white p-6 shadow-sm sm:p-8 space-y-6">
+          <div className="order-1 rounded-3xl border border-border-default bg-white p-6 shadow-sm sm:p-8 space-y-6">
             <div>
               <h2 className="text-base font-bold text-text-primary">Studio Profile &amp; Identity</h2>
               <p className="mt-1 text-xs text-text-secondary">
@@ -633,48 +616,6 @@ function SettingsPageContent() {
                 </div>
               </div>
 
-              {/* Operational Modules & Capabilities */}
-              <div className="pt-4 border-t border-border-divider space-y-3">
-                <h3 className="text-xs font-bold text-text-primary uppercase tracking-wider">
-                  Operational Modules &amp; Capabilities
-                </h3>
-                <div className="grid gap-3 sm:grid-cols-3">
-                  {[
-                    { key: "oms", label: "OMS (Order Management)", desc: "Pipelines, deliverables, drive sync" },
-                    { key: "crm", label: "CRM (Customer Relations)", desc: "Clients, inquiries, contracts" },
-                    { key: "erp", label: "ERP (Crew Operations)", desc: "Crew scheduling, equipment, tasks" },
-                    { key: "whatsapp", label: "WhatsApp Alerts", desc: "Automated event alerts & updates" },
-                    { key: "reports", label: "Business Reports", desc: "Financial analytics and trends" },
-                  ].map((mod) => (
-                    <label
-                      key={mod.key}
-                      className={`flex flex-col justify-between p-3.5 rounded-2xl border transition cursor-pointer ${
-                        features[mod.key as keyof typeof features]
-                          ? "border-brand-blue-primary/40 bg-sky-50/50"
-                          : "border-border-default bg-surface-app"
-                      }`}
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <span className="text-xs font-bold text-text-primary">{mod.label}</span>
-                        <input
-                          type="checkbox"
-                          checked={Boolean(features[mod.key as keyof typeof features])}
-                          onChange={(e) =>
-                            setFeatures({
-                              ...features,
-                              [mod.key]: e.target.checked,
-                            })
-                          }
-                          disabled={!isOwner || isSaving}
-                          className="mt-0.5 rounded text-brand-blue-primary focus:ring-brand-blue-primary"
-                        />
-                      </div>
-                      <span className="text-[11px] text-text-secondary mt-1">{mod.desc}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-
               {saveSuccess && (
                 <p className="text-xs font-semibold text-emerald-600 bg-emerald-50 p-2.5 rounded-xl border border-emerald-200">
                   ✓ Studio settings updated successfully.
@@ -701,8 +642,36 @@ function SettingsPageContent() {
             </form>
           </div>
 
-          {/* 4. Danger Zone: Delete Studio (Owner) or Leave Studio (Member) */}
-          <div className="rounded-3xl border border-red-200 bg-red-50/40 p-6 shadow-sm sm:p-8 space-y-4">
+          {/* 4. Plan Information */}
+          <div className="order-4 rounded-3xl border border-border-default bg-white p-6 shadow-sm sm:p-8 space-y-4">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-base font-bold text-text-primary">Plan Information</h2>
+                <p className="mt-1 text-xs text-text-secondary max-w-xl leading-relaxed">
+                  Your current plan and included features are shown here. Plan changes are managed from checkout.
+                </p>
+              </div>
+              <Link
+                href={`/checkout?studio=${studioSlug}`}
+                className="inline-flex items-center justify-center rounded-xl bg-brand-blue-primary px-4 py-2.5 text-xs font-bold text-white hover:bg-brand-blue-hover transition shadow-xs"
+              >
+                Upgrade Plan →
+              </Link>
+            </div>
+            <div className="rounded-2xl border border-border-default bg-surface-app p-4 text-xs">
+              <p className="font-bold text-text-primary">{studio.planInfo?.plan || "FREE"} Plan</p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {(studio.planInfo?.selectedCapabilities || ["OMS_CORE"]).map((capability) => (
+                  <span key={capability} className="rounded-md border border-brand-blue-light bg-brand-blue-background px-2 py-1 text-[10px] font-bold text-brand-blue-primary">
+                    {capability.replace(/_/g, " ")}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* 5. Danger Zone: Delete Studio (Owner) or Leave Studio (Member) */}
+          <div className="order-5 rounded-3xl border border-red-200 bg-red-50/40 p-6 shadow-sm sm:p-8 space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div>
                 <h2 className="text-base font-bold text-red-950">
@@ -741,7 +710,7 @@ function SettingsPageContent() {
           <div className="rounded-3xl border border-border-default bg-white p-6 shadow-sm sm:p-8 space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-border-divider pb-6">
               <div>
-                <h2 className="text-base font-bold text-text-primary">Personal Profile</h2>
+                <h2 className="text-base font-bold text-text-primary">Account Profile Details</h2>
                 <p className="mt-1 text-xs text-text-secondary">
                   Your identity across all studio workspaces in Focoman.
                 </p>
@@ -839,14 +808,7 @@ function SettingsPageContent() {
           {/* 2. Global Default Workspace Selector */}
           <div className="rounded-3xl border border-border-default bg-white p-6 shadow-sm sm:p-8 space-y-4">
             <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-base font-bold text-text-primary">Primary Default Workspace</h2>
-                {defaultStudioId && (
-                  <span className="inline-flex items-center rounded-full bg-emerald-100 border border-emerald-300 px-2.5 py-0.5 text-[10px] font-extrabold uppercase text-emerald-800">
-                    Active Default: /{defaultStudioId}
-                  </span>
-                )}
-              </div>
+              <h2 className="text-base font-bold text-text-primary">Default Workspace Information</h2>
               <p className="mt-1 text-xs text-text-secondary leading-relaxed">
                 Choose which studio workspace opens automatically when you navigate to /dashboard or launch Focoman.
               </p>

@@ -81,7 +81,8 @@ export default function OmsPage({
     studio?.features,
     studio?.planInfo
   );
-  const hasCrm = Boolean(studio?.features?.crm);
+  const hasCrm = effectiveFeatures.crm;
+  const canExportOrders = effectiveFeatures.reports;
   const hasErp = effectiveFeatures.erp;
   const hasWhatsAppOperations = effectiveFeatures.whatsapp;
   const hasDriveReview = Boolean(studio?.features?.driveReview);
@@ -497,7 +498,7 @@ export default function OmsPage({
             getStudioCustomersAction(studioSlug, token),
             getStudioMembersAction(studioSlug, token).catch(() => []),
             getStudioServicesAction(studioSlug, token).catch(() => null),
-            getStudioLeadsAction(studioSlug, token).catch(() => null),
+            hasCrm ? getStudioLeadsAction(studioSlug, token).catch(() => null) : Promise.resolve(null),
           ]);
         setOrders(data);
         setStudioCustomers(customersData);
@@ -522,7 +523,7 @@ export default function OmsPage({
         setLoading(false);
       }
     },
-    [studioSlug, workspaceToken, getIdToken]
+    [studioSlug, workspaceToken, getIdToken, hasCrm]
   );
 
   useEffect(() => {
@@ -547,7 +548,7 @@ export default function OmsPage({
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
     const urlSection = params.get("section") || params.get("tab");
-    if (urlSection && urlSection.toLowerCase() === "leads") {
+    if (hasCrm && urlSection && urlSection.toLowerCase() === "leads") {
       setOmsSection("LEADS");
     }
     const urlOrderId = params.get("orderId");
@@ -561,7 +562,13 @@ export default function OmsPage({
       setOmsSection("ORDERS");
       handleOpenCreateModal();
     }
-  }, [handleOpenCreateModal]);
+  }, [handleOpenCreateModal, hasCrm]);
+
+  useEffect(() => {
+    if (!hasCrm && omsSection === "LEADS") {
+      setOmsSection("ORDERS");
+    }
+  }, [hasCrm, omsSection]);
 
   const handleCreateOrder = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1473,7 +1480,7 @@ export default function OmsPage({
 
   return (
     <div className="flex h-full bg-surface-app">
-      {omsSection === "LEADS" ? (
+      {hasCrm && omsSection === "LEADS" ? (
         <OmsLeadsPanel
           studioSlug={studioSlug}
           ordersCount={orders.length}
@@ -1509,7 +1516,9 @@ export default function OmsPage({
             sortBy={sortBy}
             onChangeSortBy={setSortBy}
             onExportExcel={handleExportOmsExcel}
+            canExport={canExportOrders}
             onOpenCreateModal={handleOpenCreateModal}
+            hasLeads={hasCrm}
             leadsCount={leads.length}
             onSwitchToLeads={() => setOmsSection("LEADS")}
           />

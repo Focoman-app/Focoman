@@ -12,6 +12,7 @@ import type {
   StudioPackage,
   PaymentRecord,
   StudioLead,
+  UserLegalConsent,
 } from '@focoman/types';
 import { RECOVERY_WINDOW_DAYS } from '@focoman/config';
 
@@ -84,6 +85,21 @@ export function isWithinRecoveryWindow(deletedAt?: string | null, windowDays = R
   const deletedTime = new Date(deletedAt).getTime();
   const maxAllowedTime = deletedTime + windowDays * 24 * 60 * 60 * 1000;
   return Date.now() <= maxAllowedTime;
+}
+
+// ============================================================================
+// USER LEGAL CONSENT
+// ============================================================================
+
+export async function getUserLegalConsent(uid: string): Promise<UserLegalConsent | null> {
+  if (!uid) return null;
+  const snapshot = await getFirestoreServerInstance().collection('user_legal_consents').doc(uid).get();
+  return snapshot.exists ? snapshot.data() as UserLegalConsent : null;
+}
+
+export async function saveUserLegalConsent(consent: UserLegalConsent): Promise<UserLegalConsent> {
+  await getFirestoreServerInstance().collection('user_legal_consents').doc(consent.uid).set(consent, { merge: true });
+  return consent;
 }
 
 // ============================================================================
