@@ -1,62 +1,28 @@
 "use client";
 
 import { useState, useEffect, Suspense } from "react";
-import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useStudioWorkspace } from "@/components/StudioWorkspaceProvider";
-import { updateProfile } from "firebase/auth";
-import { signOutUser } from "@/lib/firebaseAuth";
 import {
   updateStudioAction,
   deleteStudioAction,
   leaveStudioAction,
-  getUserWorkspacesAction,
-  deleteUserAccountAction,
 } from "@/actions/studioActions";
-import { StudioMembership } from "@focoman/types";
 import {
   setDefaultWorkspace,
   clearDefaultWorkspace,
   getLocalDefaultWorkspace,
   subscribeToDefaultWorkspaceChanges,
-  resolveAndSyncDefaultWorkspace,
 } from "@/lib/workspaceDefaults";
 
 function SettingsPageContent() {
   const params = useParams();
   const router = useRouter();
-  const searchParams = useSearchParams();
   const studioSlug = (params.studioSlug as string) || "";
   const { studio, user, getIdToken } = useStudioWorkspace();
 
   const isOwner = studio.ownerId === user?.uid || studio.ownerEmail?.toLowerCase() === user?.email?.toLowerCase();
-
-  // Tab State
-  const tabParam = searchParams.get("tab");
-  const [activeTab, setActiveTab] = useState<"studio" | "account">(
-    tabParam === "account" ? "account" : "studio"
-  );
-
-  useEffect(() => {
-    if (tabParam === "account") {
-      setActiveTab("account");
-    } else if (tabParam === "studio") {
-      setActiveTab("studio");
-    }
-  }, [tabParam]);
-
-  const handleTabSwitch = (tab: "studio" | "account") => {
-    setActiveTab(tab);
-    if (typeof window !== "undefined") {
-      const url = new URL(window.location.href);
-      if (tab === "account") {
-        url.searchParams.set("tab", "account");
-      } else {
-        url.searchParams.delete("tab");
-      }
-      window.history.replaceState({}, "", url.toString());
-    }
-  };
 
   // -------------------------------------------------------------
   // STUDIO SETTINGS STATE
@@ -209,138 +175,6 @@ function SettingsPageContent() {
     }
   };
 
-  // -------------------------------------------------------------
-  // ACCOUNT SETTINGS STATE
-  // -------------------------------------------------------------
-  const [displayNameInput, setDisplayNameInput] = useState(user?.displayName || "");
-  const [isEditingName, setIsEditingName] = useState(false);
-  const [nameSaveLoading, setNameSaveLoading] = useState(false);
-  const [nameSaveSuccess, setNameSaveSuccess] = useState(false);
-
-  const [workspaces, setWorkspaces] = useState<StudioMembership[]>([]);
-  const [defaultStudioId, setDefaultStudioId] = useState<string | null>(null);
-  const [selectedDefaultStudio, setSelectedDefaultStudio] = useState<string>(studioSlug);
-  const [defaultSaveLoading, setDefaultSaveLoading] = useState(false);
-  const [defaultSaveSuccess, setDefaultSaveSuccess] = useState(false);
-
-  // Delete Account State
-  const [showDeleteAccountModal, setShowDeleteAccountModal] = useState(false);
-  const [deleteAccountInput, setDeleteAccountInput] = useState("");
-  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
-  const [deleteAccountError, setDeleteAccountError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!user) return;
-    setDisplayNameInput(user.displayName || "");
-    let mounted = true;
-    getIdToken().then(async (token) => {
-      if (!token || !mounted) return;
-      try {
-        const list = await getUserWorkspacesAction(token);
-        if (mounted && list) {
-          setWorkspaces(list);
-          const initialDefault = await resolveAndSyncDefaultWorkspace(user.uid, list, token);
-          setDefaultStudioId(initialDefault);
-          if (initialDefault) {
-            setSelectedDefaultStudio(initialDefault);
-          } else if (list.length > 0) {
-            setSelectedDefaultStudio(list[0].studioId);
-          }
-        }
-      } catch (e) {
-        console.warn("Failed to load user workspaces:", e);
-      }
-    });
-    return () => {
-      mounted = false;
-    };
-  }, [user, getIdToken]);
-
-  const handleSaveName = async () => {
-    if (!user || !displayNameInput.trim()) return;
-    setNameSaveLoading(true);
-    setNameSaveSuccess(false);
-    try {
-      await updateProfile(user, { displayName: displayNameInput.trim() });
-      setNameSaveSuccess(true);
-      setIsEditingName(false);
-      setTimeout(() => setNameSaveSuccess(false), 3000);
-    } catch (err) {
-      console.error("Failed to update profile name:", err);
-    } finally {
-      setNameSaveLoading(false);
-    }
-  };
-
-  const handleSaveDefaultWorkspace = async () => {
-    if (!user || !selectedDefaultStudio) return;
-    setDefaultSaveLoading(true);
-    setDefaultSaveSuccess(false);
-    try {
-      const token = await getIdToken();
-      await setDefaultWorkspace(user.uid, selectedDefaultStudio, token || undefined);
-      setDefaultStudioId(selectedDefaultStudio);
-      setDefaultSaveSuccess(true);
-      setTimeout(() => setDefaultSaveSuccess(false), 2500);
-    } finally {
-      setDefaultSaveLoading(false);
-    }
-  };
-
-  const handleClearDefaultWorkspace = async () => {
-    if (!user) return;
-    setDefaultSaveLoading(true);
-    try {
-      const token = await getIdToken();
-      await clearDefaultWorkspace(user.uid, token || undefined);
-      setDefaultStudioId(null);
-    } finally {
-      setDefaultSaveLoading(false);
-    }
-  };
-
-  const handleSignOutUser = async () => {
-    try {
-      await signOutUser();
-    } catch (err) {
-      console.error("[Settings] Sign out error:", err);
-    }
-    router.push("/");
-  };
-
-  const handleDeleteAccount = async () => {
-    if (!user) return;
-    if (deleteAccountInput.trim().toLowerCase() !== "delete") return;
-    setIsDeletingAccount(true);
-    setDeleteAccountError(null);
-    try {
-      const token = await getIdToken();
-      if (!token) throw new Error("Authentication token unavailable.");
-      const res = await deleteUserAccountAction(token);
-      if (res.success) {
-        if (typeof window !== "undefined") {
-          try {
-            Object.keys(localStorage).forEach((key) => {
-              if (key.startsWith("focoman_")) {
-                localStorage.removeItem(key);
-              }
-            });
-          } catch (e) {
-            console.warn("[handleDeleteAccount] Failed to clear local storage:", e);
-          }
-        }
-        await signOutUser();
-        router.replace("/sign-in?deleted=true");
-      } else {
-        setDeleteAccountError(res.error || "Failed to delete account. Please try again.");
-        setIsDeletingAccount(false);
-      }
-    } catch (err: unknown) {
-      setDeleteAccountError(err instanceof Error ? err.message : "Failed to delete account. Please try again.");
-      setIsDeletingAccount(false);
-    }
-  };
-
   return (
     <div className="px-4 py-6 sm:px-6 sm:py-8 lg:px-8 space-y-8 max-w-4xl pb-16">
       {/* Header */}
@@ -355,56 +189,13 @@ function SettingsPageContent() {
             </span>
           </div>
           <h1 className="mt-1 text-2xl sm:text-3xl font-extrabold text-text-primary">
-            Settings
+            Studio Settings
           </h1>
           <p className="mt-1 text-xs text-text-secondary">
-            Configure studio preferences, services catalog, plan information, and account settings.
+            Configure studio preferences, services catalog, and plan information.
           </p>
         </div>
 
-      </div>
-
-      {/* Tabs Switcher */}
-      <div className="flex justify-center border-b border-border-default gap-3">
-        <button
-          type="button"
-          onClick={() => handleTabSwitch("studio")}
-          className={`pb-3 px-3 text-xs font-bold transition border-b-2 flex items-center gap-2 cursor-pointer ${
-            activeTab === "studio"
-              ? "border-brand-blue-primary text-brand-blue-primary"
-              : "border-transparent text-text-secondary hover:text-text-primary"
-          }`}
-        >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
-            />
-          </svg>
-          <span>Studio Settings</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => handleTabSwitch("account")}
-          className={`pb-3 px-3 text-xs font-bold transition border-b-2 flex items-center gap-2 cursor-pointer ${
-            activeTab === "account"
-              ? "border-brand-blue-primary text-brand-blue-primary"
-              : "border-transparent text-text-secondary hover:text-text-primary"
-          }`}
-        >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-            />
-          </svg>
-          <span>Account Settings</span>
-        </button>
       </div>
 
       {defaultToast && (
@@ -423,11 +214,7 @@ function SettingsPageContent() {
         </div>
       )}
 
-      {/* ========================================================= */}
-      {/* TAB 1: STUDIO SETTINGS                                    */}
-      {/* ========================================================= */}
-      {activeTab === "studio" && (
-        <div className="flex flex-col gap-8">
+      <div className="flex flex-col gap-8">
           {/* 1. Default Studio Workspace Preference */}
           <div className="order-3 rounded-3xl border border-border-default bg-white p-6 shadow-sm sm:p-8 space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -698,227 +485,7 @@ function SettingsPageContent() {
               </div>
             </div>
           </div>
-        </div>
-      )}
-
-      {/* ========================================================= */}
-      {/* TAB 2: ACCOUNT SETTINGS                                   */}
-      {/* ========================================================= */}
-      {activeTab === "account" && (
-        <div className="space-y-8">
-          {/* 1. Personal Profile */}
-          <div className="rounded-3xl border border-border-default bg-white p-6 shadow-sm sm:p-8 space-y-6">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-border-divider pb-6">
-              <div>
-                <h2 className="text-base font-bold text-text-primary">Account Profile Details</h2>
-                <p className="mt-1 text-xs text-text-secondary">
-                  Your identity across all studio workspaces in Focoman.
-                </p>
-              </div>
-              <div className="h-12 w-12 flex-shrink-0 rounded-2xl bg-brand-blue-primary text-white flex items-center justify-center text-lg font-bold shadow-xs">
-                {user?.displayName
-                  ? user.displayName.charAt(0).toUpperCase()
-                  : user?.email
-                  ? user.email.charAt(0).toUpperCase()
-                  : "U"}
-              </div>
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              {/* Full Name */}
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="text-xs font-bold text-text-primary">Display Name</label>
-                  {!isEditingName ? (
-                    <button
-                      type="button"
-                      onClick={() => setIsEditingName(true)}
-                      className="text-[11px] font-bold text-brand-blue-primary hover:underline cursor-pointer"
-                    >
-                      Edit
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsEditingName(false);
-                        setDisplayNameInput(user?.displayName || "");
-                      }}
-                      className="text-[11px] font-semibold text-text-tertiary hover:underline cursor-pointer"
-                    >
-                      Cancel
-                    </button>
-                  )}
-                </div>
-                {isEditingName ? (
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      value={displayNameInput}
-                      onChange={(e) => setDisplayNameInput(e.target.value)}
-                      className="w-full rounded-xl border border-brand-blue-primary px-3.5 py-2 text-xs font-medium text-text-primary focus:outline-none focus:ring-1 focus:ring-brand-blue-primary"
-                      placeholder="Your full name"
-                    />
-                    <button
-                      type="button"
-                      disabled={nameSaveLoading}
-                      onClick={handleSaveName}
-                      className="rounded-xl bg-brand-blue-primary px-4 py-2 text-xs font-bold text-white hover:bg-brand-blue-hover transition shrink-0 cursor-pointer"
-                    >
-                      {nameSaveLoading ? "Saving..." : "Save"}
-                    </button>
-                  </div>
-                ) : (
-                  <div className="w-full rounded-xl border border-border-default bg-surface-app px-4 py-2 text-xs font-medium text-text-primary flex items-center justify-between">
-                    <span>{user?.displayName || "Not provided"}</span>
-                    {nameSaveSuccess && (
-                      <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                        ✓ Updated
-                      </span>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* Email Address */}
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="text-xs font-bold text-text-primary">Email Address</label>
-                  {user?.emailVerified && (
-                    <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                      Verified
-                    </span>
-                  )}
-                </div>
-                <div className="w-full rounded-xl border border-border-default bg-surface-app px-4 py-2 text-xs font-medium text-text-primary">
-                  {user?.email || "—"}
-                </div>
-              </div>
-
-              {/* User UID */}
-              <div className="sm:col-span-2">
-                <label className="text-xs font-bold text-text-secondary">Account Identifier (UID)</label>
-                <div className="mt-1 font-mono text-[11px] text-text-tertiary bg-surface-app p-2.5 rounded-xl border border-border-default select-all truncate">
-                  {user?.uid || "—"}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* 2. Global Default Workspace Selector */}
-          <div className="rounded-3xl border border-border-default bg-white p-6 shadow-sm sm:p-8 space-y-4">
-            <div>
-              <h2 className="text-base font-bold text-text-primary">Default Workspace Information</h2>
-              <p className="mt-1 text-xs text-text-secondary leading-relaxed">
-                Choose which studio workspace opens automatically when you navigate to /dashboard or launch Focoman.
-              </p>
-            </div>
-
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl bg-slate-50 border border-slate-200 text-xs">
-              <div>
-                <span className="font-bold text-text-primary">Active Selection</span>
-                <span className="text-text-secondary text-[11px] block mt-0.5">
-                  {defaultStudioId
-                    ? `Currently configured to open "/${defaultStudioId}".`
-                    : "No workspace currently designated as your default."}
-                </span>
-              </div>
-
-              <div className="flex items-center gap-2 flex-wrap">
-                {workspaces.length > 0 ? (
-                  <>
-                    <select
-                      value={selectedDefaultStudio || (defaultStudioId || workspaces[0]?.studioId || "")}
-                      onChange={(e) => setSelectedDefaultStudio(e.target.value)}
-                      className="rounded-xl border border-brand-blue-primary/40 bg-white px-3 py-1.5 text-xs font-semibold text-text-primary focus:outline-none focus:border-brand-blue-primary shrink-0 cursor-pointer"
-                    >
-                      {workspaces.map((w) => (
-                        <option key={w.studioId} value={w.studioId}>
-                          {w.studioName || w.studioId} (/{w.studioId})
-                        </option>
-                      ))}
-                    </select>
-
-                    <button
-                      type="button"
-                      onClick={handleSaveDefaultWorkspace}
-                      disabled={
-                        defaultSaveLoading ||
-                        !selectedDefaultStudio ||
-                        selectedDefaultStudio === defaultStudioId
-                      }
-                      className="rounded-xl bg-brand-blue-primary px-3 py-1.5 text-[11px] font-bold text-white hover:bg-brand-blue-hover transition cursor-pointer shadow-2xs disabled:opacity-40 disabled:cursor-not-allowed"
-                    >
-                      {defaultSaveLoading ? "Saving..." : defaultSaveSuccess ? "Saved ✓" : "Set Default"}
-                    </button>
-
-                    {defaultStudioId && (
-                      <button
-                        type="button"
-                        onClick={handleClearDefaultWorkspace}
-                        disabled={defaultSaveLoading}
-                        className="rounded-xl border border-border-default bg-white px-2.5 py-1.5 text-[11px] font-bold text-text-secondary hover:text-red-600 hover:border-red-200 transition cursor-pointer shadow-2xs"
-                      >
-                        Clear
-                      </button>
-                    )}
-                  </>
-                ) : (
-                  <span className="text-text-tertiary text-[11px]">No workspaces found</span>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* 3. Session & Sign Out */}
-          <div className="rounded-3xl border border-border-default bg-white p-6 shadow-sm sm:p-8 space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              <div>
-                <h2 className="text-base font-bold text-text-primary">Sign Out Session</h2>
-                <p className="mt-1 text-xs text-text-secondary max-w-xl leading-relaxed">
-                  Sign out of your active Focoman account session on this device.
-                </p>
-              </div>
-
-              <div>
-                <button
-                  type="button"
-                  onClick={handleSignOutUser}
-                  className="rounded-xl border border-border-default px-4 py-2.5 text-xs font-semibold text-text-secondary hover:bg-slate-50 transition cursor-pointer"
-                >
-                  Sign Out
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* 4. Danger Zone: Close Account */}
-          <div className="rounded-3xl border border-red-200 bg-red-50/40 p-6 shadow-sm sm:p-8 space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              <div>
-                <h2 className="text-base font-bold text-red-950">Close Account</h2>
-                <p className="mt-1 text-xs text-red-900/80 max-w-xl leading-relaxed">
-                  Close this account. Sole-owner workspaces remain recoverable for 30 days under the Privacy Policy.
-                </p>
-              </div>
-
-              <div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowDeleteAccountModal(true);
-                    setDeleteAccountError(null);
-                    setDeleteAccountInput("");
-                  }}
-                  className="rounded-xl bg-red-600 px-4 py-2.5 text-xs font-bold text-white hover:bg-red-700 transition shadow-xs cursor-pointer"
-                >
-                  Close Account...
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      </div>
 
       {/* Confirmation Modal: Delete / Leave Studio */}
       {showDeleteModal && (
@@ -993,80 +560,6 @@ function SettingsPageContent() {
         </div>
       )}
 
-      {/* Confirmation Modal: Close Account */}
-      {showDeleteAccountModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-md rounded-3xl bg-white p-6 sm:p-8 shadow-2xl border border-border-default animate-in fade-in duration-150">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-red-100 text-red-600 mb-4">
-              <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-                />
-              </svg>
-            </div>
-
-            <h3 className="text-lg font-bold text-text-primary">
-              Close Account
-            </h3>
-
-            <p className="mt-2 text-xs text-text-secondary leading-relaxed">
-              This action signs you out and starts the 30-day recovery period for sole-owner workspaces. Contact support through the Privacy Policy if restoration is needed during that period.
-            </p>
-
-            <div className="mt-4 rounded-xl border border-red-200 bg-red-50/70 p-3.5 space-y-2">
-              <label className="block text-[11px] font-bold text-red-950">
-                To confirm, type <span className="font-mono text-red-600 font-extrabold">&quot;delete&quot;</span>:
-              </label>
-              <input
-                type="text"
-                value={deleteAccountInput}
-                onChange={(e) => setDeleteAccountInput(e.target.value)}
-                placeholder='Type "delete" to confirm'
-                disabled={isDeletingAccount}
-                className="w-full rounded-xl border border-red-300 bg-white px-3 py-2 text-xs font-mono font-bold text-text-primary outline-none focus:border-red-500"
-              />
-            </div>
-
-            {deleteAccountError && (
-              <div className="mt-3 rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700">
-                {deleteAccountError}
-              </div>
-            )}
-
-            <div className="mt-6 flex flex-col sm:flex-row items-center justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowDeleteAccountModal(false);
-                  setDeleteAccountError(null);
-                }}
-                disabled={isDeletingAccount}
-                className="w-full sm:w-auto rounded-xl border border-border-default px-4 py-2.5 text-xs font-semibold text-text-secondary hover:bg-slate-50 transition cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleDeleteAccount}
-                disabled={deleteAccountInput.trim().toLowerCase() !== "delete" || isDeletingAccount}
-                className="w-full sm:w-auto rounded-xl bg-red-600 px-5 py-2.5 text-xs font-bold text-white hover:bg-red-700 transition shadow-xs flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                {isDeletingAccount ? (
-                  <>
-                    <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                    Deleting Account...
-                  </>
-                ) : (
-                  "Close Account"
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

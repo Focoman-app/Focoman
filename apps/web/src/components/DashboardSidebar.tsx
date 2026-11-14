@@ -188,8 +188,8 @@ export function DashboardSidebar({ studioSlug, role, plan, studioName, studioLog
       ),
     },
     {
-      label: "Settings",
-      sublabel: "Studio & Account",
+      label: "Studio Settings",
+      sublabel: undefined,
       key: "settings",
       href: (slug: string) => `/${slug}/dashboard/settings`,
       module: null as null,

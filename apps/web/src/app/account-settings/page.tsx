@@ -252,22 +252,6 @@ export default function AccountSettingsPage() {
             <span>{defaultStudio ? `Back to ${defaultStudio} Dashboard` : "Back to Workspaces"}</span>
           </button>
 
-          <div className="flex items-center gap-3 text-xs">
-            {defaultStudio && (
-              <Link
-                href={`/${defaultStudio}/dashboard`}
-                className="text-text-secondary hover:text-brand-blue-primary font-medium transition"
-              >
-                {defaultStudio} Dashboard
-              </Link>
-            )}
-            <Link
-              href="/workspaces"
-              className="text-text-secondary hover:text-brand-blue-primary font-medium transition"
-            >
-              My Workspaces
-            </Link>
-          </div>
         </div>
 
         {/* Panel 1: Profile & Account Settings */}

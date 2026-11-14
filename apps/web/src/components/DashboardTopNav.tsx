@@ -198,7 +198,7 @@ export function DashboardTopNav({
                 )}
 
                 <Link
-                  href={studioSlug ? `/${studioSlug}/dashboard/settings?tab=account` : "/account-settings"}
+                  href="/account-settings"
                   onClick={() => setIsOpen(false)}
                   className="block px-3 py-1.5 text-xs font-medium text-[#57534E] hover:bg-[#FAF7F2] hover:text-[#1C1917] rounded transition"
                 >
