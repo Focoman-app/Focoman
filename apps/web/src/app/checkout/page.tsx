@@ -23,7 +23,7 @@ export default function PricingCheckoutPage() {
         </div>
       </section>
 
-      {/* Builder & Checkout */}
+      {/* Builder and checkout */}
       <section className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
         <Suspense fallback={<div className="p-8 text-center text-sm text-text-secondary">Loading checkout builder...</div>}>
           <CheckoutBuilder />

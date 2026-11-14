@@ -18,6 +18,7 @@ import {
   softDeleteStudioPackage,
 } from "@focoman/db";
 import { Studio, StudioMembership, StudioPlan, StudioServiceConfig, StudioPackage } from "@focoman/types";
+import { PLAN_CAPABILITIES } from "@focoman/config";
 import { requireVerifiedUser, requireStudioMember } from "@/lib/serverAuth";
 import { requireCapability } from "@/lib/entitlementAuth";
 import { DEFAULT_STUDIO_SERVICES, getDefaultStudioPackages } from "@/lib/studioServices";
@@ -395,16 +396,36 @@ export async function restoreStudioAction(
   }
 }
 
-export async function saveStudioCapabilitiesAction(
+const CHECKOUT_PLAN_IDS = ["FREE", "STARTER", "PROFESSIONAL"] as const;
+type CheckoutPlanId = (typeof CHECKOUT_PLAN_IDS)[number];
+
+function isCheckoutPlanId(plan: string): plan is CheckoutPlanId {
+  return CHECKOUT_PLAN_IDS.includes(plan as CheckoutPlanId);
+}
+
+/**
+ * Applies the fixed public plan chosen for one studio. Capabilities are
+ * resolved from the server-owned plan catalogue, never from client input.
+ */
+export async function selectStudioPlanAction(
   studioSlug: string,
-  selectedCapabilities: string[],
+  plan: string,
   idToken: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const decoded = await requireVerifiedUser(idToken);
     await requireStudioMember(decoded.uid, studioSlug, "STUDIO_OWNER");
 
-    if (selectedCapabilities.length > 0) {
+    if (!isCheckoutPlanId(plan)) {
+      return { success: false, error: "Choose a valid studio plan." };
+    }
+
+    const canonicalCapabilities = PLAN_CAPABILITIES[plan];
+    if (!canonicalCapabilities) {
+      return { success: false, error: "The selected plan is not configured." };
+    }
+
+    if (plan !== "FREE") {
       return {
         success: false,
         error: "Paid capability activation requires verified payment confirmation. No plan change was made.",
@@ -412,11 +433,11 @@ export async function saveStudioCapabilitiesAction(
     }
 
     const { updateStudioCapabilities } = await import("@focoman/entitlements");
-    await updateStudioCapabilities(studioSlug, []);
+    await updateStudioCapabilities(studioSlug, canonicalCapabilities, undefined, plan);
     return { success: true };
   } catch (err: unknown) {
-    console.error("[saveStudioCapabilitiesAction] Error:", err);
-    return { success: false, error: err instanceof Error ? err.message : "Failed to save studio capabilities." };
+    console.error("[selectStudioPlanAction] Error:", err);
+    return { success: false, error: err instanceof Error ? err.message : "Failed to save studio plan." };
   }
 }
 
