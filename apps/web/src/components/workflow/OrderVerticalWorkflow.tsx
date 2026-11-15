@@ -47,7 +47,6 @@ interface OrderVerticalWorkflowProps {
   onSaveServiceCrew?: (serviceName: string, memberNames: string[]) => Promise<void>;
   onOpenErpWizard?: (serviceName: string, query?: string) => void;
   onAssignTaskCrew?: (taskId: string, memberName: string) => Promise<void>;
-  onMarkOfflineReviewReady?: (taskId: string) => Promise<void>;
   onSaveSchedule?: (
     eventDate: string,
     eventLocation: string,
@@ -56,9 +55,10 @@ interface OrderVerticalWorkflowProps {
   ) => Promise<void>;
   busyEventDates?: string[];
   hasErp?: boolean;
+  displayMode?: "full" | "main-state-only" | "timeline-only";
 }
 
-type PhaseId = "phase_lead" | "phase_pre_event" | "phase_event_day" | "phase_post_event" | "phase_delivery" | "phase_completed";
+type PhaseId = "phase_lead" | "phase_pre_event" | "phase_event_day" | "phase_post_event" | "phase_delivery";
 
 function isDeliverableOnlyService(serviceName: string): boolean {
   const lower = (serviceName || "").trim().toLowerCase();
@@ -85,10 +85,10 @@ export function OrderVerticalWorkflow({
   onSaveServiceCrew,
   onOpenErpWizard,
   onAssignTaskCrew,
-  onMarkOfflineReviewReady,
   onSaveSchedule,
   busyEventDates = [],
   hasErp = true,
+  displayMode = "full",
 }: OrderVerticalWorkflowProps) {
   const isOms = variant === "oms";
   const fullOrder = isOms ? (order as Order) : null;
@@ -262,8 +262,8 @@ export function OrderVerticalWorkflow({
 
   // Determine active phase
   const activePhaseId = useMemo<PhaseId>(() => {
-    if (order.orderStatus === "COMPLETED") return "phase_completed";
-    if (order.orderStatus === "CANCELLED") return "phase_completed";
+    if (order.orderStatus === "COMPLETED") return "phase_delivery";
+    if (order.orderStatus === "CANCELLED") return "phase_delivery";
 
     if (order.orderStatus === "AWAITING_EVENT") {
       if (isTodayEvent) return "phase_event_day";
@@ -632,7 +632,7 @@ export function OrderVerticalWorkflow({
       const nextDelivery = deliveryTasks.find((t) => t.status !== "COMPLETED");
       if (nextDelivery) {
         items.push({
-          streamLabel: "Final Handover & Delivery",
+          streamLabel: "Final Delivery and Order Completion",
           streamBadgeClass: "bg-emerald-100 text-emerald-800 border-emerald-200",
           task: nextDelivery,
         });
@@ -662,7 +662,7 @@ export function OrderVerticalWorkflow({
   return (
     <div className="w-full space-y-5">
       {/* 1. TOP CURRENT MAIN STATE PANEL (Active Action Center) */}
-      {order.orderStatus === "CANCELLED" ? (
+      {displayMode !== "timeline-only" && (order.orderStatus === "CANCELLED" ? (
         <div className="rounded-2xl border border-rose-200 bg-rose-50/80 p-4 space-y-2">
           <div className="flex items-center gap-2.5">
             <div className="flex h-7 w-7 items-center justify-center rounded-full bg-rose-600 text-white font-extrabold text-xs shadow-xs">
@@ -691,18 +691,18 @@ export function OrderVerticalWorkflow({
           )}
         </div>
       ) : order.orderStatus === "COMPLETED" ? (
-        <div className="rounded-2xl border border-emerald-300 bg-emerald-50/60 p-4 shadow-2xs space-y-2">
+        <div className="rounded-2xl border border-emerald-300 bg-emerald-50/60 p-4 shadow-2xs space-y-2.5">
           <div className="flex items-center justify-between gap-2 flex-wrap">
-            <div className="flex items-center gap-2">
-              <span className="rounded-md bg-emerald-600 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white">
-                Current Main State
-              </span>
-              <span className="rounded-md border border-emerald-300 bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-900">
-                Fulfilled &amp; Completed
-              </span>
-            </div>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-800">
+              Current Main State
+            </span>
             <span className="text-[11px] font-mono font-bold text-emerald-800">
               {allTasksCompletedCount}/{allTasksCount} Steps Done
+            </span>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="rounded-md border border-emerald-300 bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-900">
+              Orders Completed
             </span>
           </div>
           <div>
@@ -715,27 +715,11 @@ export function OrderVerticalWorkflow({
           </div>
         </div>
       ) : order.orderStatus === "AWAITING_EVENT" ? (
-        <div className="rounded-2xl border border-blue-200 bg-gradient-to-br from-blue-50/70 via-white to-slate-50 p-4 shadow-2xs space-y-3">
+        <div className="rounded-2xl border border-blue-200 bg-gradient-to-br from-blue-50/70 via-white to-slate-50 p-4 shadow-2xs space-y-2.5">
           <div className="flex items-center justify-between gap-2 flex-wrap">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="rounded-md bg-brand-blue-primary px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white">
-                Current Main State
-              </span>
-              <span
-                className={`rounded-md border px-2 py-0.5 text-[10px] font-bold ${
-                  isTodayEvent
-                    ? "border-amber-300 bg-amber-100 text-amber-900"
-                    : "border-blue-200 bg-blue-100/80 text-brand-blue-primary"
-                }`}
-              >
-                {isTodayEvent ? "Event Shoot Active Today" : "Awaiting Event"}
-              </span>
-              {eventRem && (
-                <span className="rounded-md border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-bold text-text-secondary">
-                  {eventRem.display}
-                </span>
-              )}
-            </div>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-text-tertiary">
+              Current Main State
+            </span>
             {hasErp && services.length > 0 && (
               <span
                 className={`rounded-md border px-2 py-0.5 text-[10px] font-bold ${
@@ -745,6 +729,22 @@ export function OrderVerticalWorkflow({
                 }`}
               >
                 Crew Readiness: {assignedServicesCount}/{services.length} Services Allocated
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <span
+              className={`rounded-md border px-2 py-0.5 text-[10px] font-bold ${
+                isTodayEvent
+                  ? "border-amber-300 bg-amber-100 text-amber-900"
+                  : "border-blue-200 bg-blue-100/80 text-brand-blue-primary"
+              }`}
+            >
+              {isTodayEvent ? "Event Shoot Active Today" : "Awaiting Event"}
+            </span>
+            {eventRem && (
+              <span className="rounded-md border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-bold text-text-secondary">
+                {eventRem.display}
               </span>
             )}
           </div>
@@ -766,24 +766,24 @@ export function OrderVerticalWorkflow({
         </div>
       ) : (
         /* POST_EVENT_IN_PROGRESS: Active Workflow & Customer / Studio Action Center */
-        <div className="rounded-2xl border border-blue-200 bg-gradient-to-br from-blue-50/60 via-white to-slate-50 p-4 shadow-2xs space-y-3.5">
+        <div className="rounded-2xl border border-blue-200 bg-gradient-to-br from-blue-50/60 via-white to-slate-50 p-4 shadow-2xs space-y-3">
           <div className="flex items-center justify-between gap-2 flex-wrap">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="rounded-md bg-brand-blue-primary px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white">
-                Current Main State
-              </span>
-              <span className="rounded-md border border-blue-200 bg-blue-100/80 px-2 py-0.5 text-[10px] font-bold text-brand-blue-primary">
-                {isProductionCompleted ? "Final Handover & Delivery" : "Post-Event Workflow"}
-              </span>
-              {activeStreamTasks.some((item) => item.task.status === "REVIEW") && (
-                <span className="rounded-md border border-purple-300 bg-purple-100 px-2 py-0.5 text-[10px] font-bold text-purple-900">
-                  Pending Customer Review
-                </span>
-              )}
-            </div>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-text-tertiary">
+              Current Main State
+            </span>
             {allTasksCount > 0 && (
               <span className="text-[11px] font-mono font-bold text-text-secondary">
                 {allTasksCompletedCount}/{allTasksCount} Steps Completed ({Math.round((allTasksCompletedCount / allTasksCount) * 100)}%)
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="rounded-md border border-blue-200 bg-blue-100/80 px-2 py-0.5 text-[10px] font-bold text-brand-blue-primary">
+              {isProductionCompleted ? "Final Delivery and Order Completion" : "Post-Event Workflow"}
+            </span>
+            {activeStreamTasks.some((item) => item.task.status === "REVIEW") && (
+              <span className="rounded-md border border-purple-300 bg-purple-100 px-2 py-0.5 text-[10px] font-bold text-purple-900">
+                Pending Customer Review
               </span>
             )}
           </div>
@@ -808,10 +808,6 @@ export function OrderVerticalWorkflow({
                 const titleLower = (task.title || "").toLowerCase();
                 const isRawSelection =
                   titleLower.includes("raw photo") || titleLower.includes("photo selection");
-                const isPhotoEditing =
-                  titleLower.includes("photo editing") ||
-                  titleLower.includes("retouch") ||
-                  titleLower.includes("color grading");
                 const status = task.status;
                 const isReview = status === "REVIEW";
                 const isRework = status === "REWORK";
@@ -991,25 +987,6 @@ export function OrderVerticalWorkflow({
                                   Send for Customer Review
                                   {hasErp && isMember ? ` (On Behalf of ${memberName})` : ""}
                                 </button>
-                                {(isRawSelection || isPhotoEditing) && onMarkOfflineReviewReady && (
-                                  <button
-                                    type="button"
-                                    disabled={isBusy}
-                                    onClick={() =>
-                                      void (async () => {
-                                        setSubmittingTaskId(task.id);
-                                        try {
-                                          await onMarkOfflineReviewReady(task.id);
-                                        } finally {
-                                          setSubmittingTaskId(null);
-                                        }
-                                      })()
-                                    }
-                                    className="rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-[11px] font-bold text-amber-900 hover:bg-amber-100 transition cursor-pointer disabled:opacity-50"
-                                  >
-                                    Confirm Offline Handoff
-                                  </button>
-                                )}
                                 <button
                                   type="button"
                                   disabled={isBusy}
@@ -1185,9 +1162,10 @@ export function OrderVerticalWorkflow({
             </div>
           )}
         </div>
-      )}
+      ))}
 
       {/* 2. Unified Vertical Workflow Timeline (Read-Only Status & Flow Overview for Tasks) */}
+      {displayMode !== "main-state-only" && (
       <div className="relative pl-6 sm:pl-8 space-y-6 before:absolute before:left-3 sm:before:left-4 before:top-4 before:bottom-4 before:w-0.5 before:bg-slate-200/80">
         {/* PHASE 1: Event Schedule & Execution (Basic Event Info, Multi-Date & Separate Event Shoot Dates) */}
         <div className="relative group">
@@ -2033,13 +2011,13 @@ export function OrderVerticalWorkflow({
           </div>
         </div>
 
-        {/* PHASE 4 (or 3 for Free Tier): Final Handover & Delivery */}
+        {/* PHASE 4 (or 3 for Free Tier): Final Delivery and Order Completion */}
         <div className="relative group">
           {/* Timeline Marker */}
           <div
             className={`absolute -left-6 sm:-left-8 top-0.5 flex h-6 w-6 sm:h-7 sm:w-7 items-center justify-center rounded-full font-bold text-xs ring-4 ring-white shadow-2xs transition-all ${
               order.orderStatus === "COMPLETED"
-                ? "bg-emerald-500 text-white"
+                ? "bg-emerald-500 text-white shadow-sm ring-emerald-100 ring-4"
                 : activePhaseId === "phase_delivery"
                 ? "bg-brand-blue-primary text-white shadow-sm ring-blue-100 ring-4"
                 : "bg-slate-100 text-slate-400 border border-slate-300"
@@ -2050,7 +2028,9 @@ export function OrderVerticalWorkflow({
 
           <div
             className={`rounded-2xl border p-4 shadow-2xs transition ${
-              activePhaseId === "phase_delivery"
+              order.orderStatus === "COMPLETED"
+                ? "border-emerald-300 bg-emerald-50/30"
+                : activePhaseId === "phase_delivery"
                 ? "border-blue-200 bg-white ring-1 ring-blue-100/60"
                 : "border-border-default bg-white"
             }`}
@@ -2067,27 +2047,33 @@ export function OrderVerticalWorkflow({
                   <span
                     className={`inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-bold border ${
                       order.orderStatus === "COMPLETED"
-                        ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                        ? "bg-emerald-100 text-emerald-800 border-emerald-300"
+                        : isProductionCompleted && isDeliveryCompleted && order.orderStatus !== "AWAITING_EVENT"
+                        ? "bg-amber-50 text-amber-800 border-amber-200"
                         : isProductionCompleted && order.orderStatus !== "AWAITING_EVENT"
                         ? "bg-blue-50 text-brand-blue-primary border-blue-200"
                         : "bg-slate-100 text-slate-600 border-slate-200"
                     }`}
                   >
                     {order.orderStatus === "COMPLETED"
-                      ? "Handover Completed"
+                      ? "Orders Completed"
+                      : isProductionCompleted && isDeliveryCompleted && order.orderStatus !== "AWAITING_EVENT"
+                      ? "Final Delivery Done · Pending Payment Clearance"
                       : isProductionCompleted && order.orderStatus !== "AWAITING_EVENT"
                       ? "Unlocked · Final Delivery in Progress"
                       : `Locked · Complete ${hasErp ? "Phase 03" : "Phase 02"} First`}
                   </span>
                 </div>
-                <h3 className="text-sm font-bold text-text-primary mt-0.5">Final Handover &amp; Delivery</h3>
+                <h3 className="text-sm font-bold text-text-primary mt-0.5">
+                  Final Delivery and Order Completion
+                </h3>
                 <p className="text-xs text-text-secondary mt-0.5">
-                  Client review proofs, album printing, digital gallery handover, and delivery sign-off
+                  Client review proofs, album printing, digital gallery handover, and order completion
                 </p>
               </div>
               <button
                 type="button"
-                aria-label="Toggle Phase 4"
+                aria-label={`Toggle ${hasErp ? "Phase 4" : "Phase 3"}`}
                 className="rounded-lg p-1 text-text-tertiary hover:bg-slate-100 transition shrink-0"
               >
                 <svg
@@ -2117,7 +2103,9 @@ export function OrderVerticalWorkflow({
                 ) : (
                   <div className="rounded-xl bg-slate-50 p-3 border border-border-default/60 text-text-secondary space-y-1">
                     <p className="font-semibold text-text-primary">
-                      {isProductionCompleted && order.orderStatus !== "AWAITING_EVENT"
+                      {order.orderStatus === "COMPLETED"
+                        ? "✓ All workflow phases and deliverable handovers have been officially concluded."
+                        : isProductionCompleted && order.orderStatus !== "AWAITING_EVENT"
                         ? "Unlocked — Ready for digital album and deliverable dispatch"
                         : `Locked until ${hasErp ? "Phase 03" : "Phase 02"} (Post-Event Production) is completed.`}
                     </p>
@@ -2126,6 +2114,16 @@ export function OrderVerticalWorkflow({
                     </p>
                   </div>
                 )}
+
+                {order.orderStatus === "COMPLETED" ? (
+                  <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-2.5 text-[11px] font-semibold text-emerald-900">
+                    ✓ Final delivery is complete and the order status is now Orders Completed.
+                  </div>
+                ) : isDeliveryCompleted && isProductionCompleted && order.orderStatus !== "AWAITING_EVENT" ? (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-2.5 text-[11px] font-medium text-amber-900">
+                    Final delivery is complete. Order will automatically move to Orders Completed once full payment is marked Paid.
+                  </div>
+                ) : null}
 
                 {/* Payment Status Isolation Banner (Payment does NOT equal workflow state) */}
                 <div className="rounded-xl border border-border-default bg-white p-2.5 flex items-center justify-between">
@@ -2145,81 +2143,8 @@ export function OrderVerticalWorkflow({
             )}
           </div>
         </div>
-
-        {/* PHASE 5 (or 4 for Free Tier): Completed Terminal State */}
-        <div className="relative group">
-          {/* Timeline Marker */}
-          <div
-            className={`absolute -left-6 sm:-left-8 top-0.5 flex h-6 w-6 sm:h-7 sm:w-7 items-center justify-center rounded-full font-bold text-xs ring-4 ring-white shadow-2xs transition-all ${
-              order.orderStatus === "COMPLETED"
-                ? "bg-emerald-500 text-white shadow-sm ring-emerald-100 ring-4"
-                : "bg-slate-100 text-slate-400 border border-slate-300"
-            }`}
-          >
-            {order.orderStatus === "COMPLETED" ? "✓" : hasErp ? "5" : "4"}
-          </div>
-
-          <div
-            className={`rounded-2xl border p-4 shadow-2xs transition ${
-              order.orderStatus === "COMPLETED"
-                ? "border-emerald-300 bg-emerald-50/30"
-                : "border-border-default bg-white"
-            }`}
-          >
-            <div
-              className="flex items-center justify-between cursor-pointer select-none"
-              onClick={() => togglePhase("phase_completed")}
-            >
-              <div className="min-w-0 pr-2">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-text-tertiary">
-                    Terminal State
-                  </span>
-                  <span
-                    className={`inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-bold border ${
-                      order.orderStatus === "COMPLETED"
-                        ? "bg-emerald-100 text-emerald-800 border-emerald-300"
-                        : "bg-slate-100 text-slate-600 border-slate-200"
-                    }`}
-                  >
-                    {order.orderStatus === "COMPLETED" ? "Fulfilled & Completed" : "Pending Handover"}
-                  </span>
-                </div>
-                <h3 className="text-sm font-bold text-text-primary mt-0.5">Order Completion</h3>
-                <p className="text-xs text-text-secondary mt-0.5">
-                  Full fulfillment confirmation, client acceptance, and project archive
-                </p>
-              </div>
-              <button
-                type="button"
-                aria-label="Toggle Phase 5"
-                className="rounded-lg p-1 text-text-tertiary hover:bg-slate-100 transition shrink-0"
-              >
-                <svg
-                  className={`h-4 w-4 transition-transform duration-200 ${
-                    expandedPhases.has("phase_completed") ? "rotate-180" : ""
-                  }`}
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-                </svg>
-              </button>
-            </div>
-
-            {expandedPhases.has("phase_completed") && (
-              <div className="mt-4 pt-3.5 border-t border-border-default/60 text-xs text-text-secondary space-y-2">
-                <p>
-                  {order.orderStatus === "COMPLETED"
-                    ? "✓ All workflow phases and deliverable handovers have been officially concluded."
-                    : "Order remains active in previous phases until final delivery and completion criteria are satisfied."}
-                </p>
-              </div>
-            )}
-          </div>
-        </div>
       </div>
+      )}
     </div>
   );
 

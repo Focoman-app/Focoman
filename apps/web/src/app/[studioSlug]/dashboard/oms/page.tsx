@@ -31,7 +31,6 @@ import {
   deleteOrderAction,
   sendManualPaymentReminderAction,
   saveServiceCrewAssignmentsAction,
-  markTaskOfflineReviewReadyAction,
   updateOrderAction,
   updateOrderDriveDeliverablesAction,
 } from "@/actions/orderActions";
@@ -784,16 +783,6 @@ export default function OmsPage({
     });
     if (!res.success || !res.order) throw new Error(res.error || "Failed to save event schedule.");
     setOrders((previous) => previous.map((order) => order.id === res.order!.id ? res.order! : order));
-  };
-
-  const handleMarkTaskOfflineReviewReady = async (taskId: string) => {
-    if (!selected) return;
-    const token = (await getIdToken(false)) ?? workspaceToken;
-    if (!token) throw new Error("Authentication error. Please sign in again.");
-    const res = await markTaskOfflineReviewReadyAction({ orderId: selected.id, taskId, studioId: studioSlug, idToken: token });
-    if (!res.success || !res.task) throw new Error(res.error || "Failed to confirm offline handoff.");
-    setSelectedTasks((previous) => previous.map((task) => task.id === res.task!.id ? res.task! : task));
-    await loadOrders();
   };
 
   const handleUpdatePayment = async (
@@ -1709,7 +1698,6 @@ export default function OmsPage({
             onSaveServiceCrew={handleSaveServiceCrewAssignments}
             onOpenErpWizard={hasErp ? openErpWizardForService : undefined}
             onAssignTaskCrew={handleAssignTaskCrew}
-            onMarkOfflineReviewReady={handleMarkTaskOfflineReviewReady}
             onSaveSchedule={handleSaveOrderSchedule}
             busyEventDates={orders
               .filter(

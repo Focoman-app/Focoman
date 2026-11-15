@@ -208,7 +208,9 @@ export function normalizeDateList(
 
 /**
  * Formats one or more YYYY-MM-DD dates into a compact human-readable label.
- * Consecutive dates are grouped as ranges (e.g. "2026-11-24 – 2026-11-26 (3 days)" or "2026-11-10, 2026-11-24").
+ * - 2 consecutive days are listed directly (e.g. "2026-11-09, 2026-11-10")
+ * - 3+ consecutive days are grouped as a range (e.g. "2026-11-09 to 2026-11-11")
+ * - Multiple dates append " / N days" without extra parentheses to avoid nested brackets.
  */
 export function formatMultiDateDisplay(
   dates?: string[] | null,
@@ -239,8 +241,12 @@ export function formatMultiDateDisplay(
     }
   }
 
-  const formattedGroups = groups.map((g) => (g.count > 1 ? `${g.start} to ${g.end}` : g.start));
-  return `${formattedGroups.join(", ")} (${sorted.length} days)`;
+  const formattedGroups = groups.map((g) => {
+    if (g.count >= 3) return `${g.start} to ${g.end}`;
+    if (g.count === 2) return `${g.start}, ${g.end}`;
+    return g.start;
+  });
+  return `${formattedGroups.join(", ")} / ${sorted.length} days`;
 }
 
 /**

@@ -8,6 +8,7 @@ import type {
   StudioServiceConfig,
 } from "@focoman/types";
 import { PRESET_EVENT_TYPES, type NewOrderFormState } from "./omsConstants";
+import { formatMultiDateDisplay } from "@/utils/dateUtils";
 
 interface OmsCreateOrderModalProps {
   isOpen: boolean;
@@ -413,20 +414,7 @@ export function OmsCreateOrderModal({
                           ? [newOrderForm.eventDate]
                           : [];
                       if (dates.length === 0) return "Select one or more dates";
-                      if (dates.length === 1) return dates[0];
-                      const sorted = [...dates].sort();
-                      const first = sorted[0];
-                      const last = sorted[sorted.length - 1];
-                      const isContinuous =
-                        Math.round(
-                          (new Date(`${last}T00:00:00`).getTime() -
-                            new Date(`${first}T00:00:00`).getTime()) /
-                            (1000 * 60 * 60 * 24)
-                        ) ===
-                        sorted.length - 1;
-                      return isContinuous
-                        ? `${first} to ${last} (${sorted.length}d)`
-                        : `${sorted.join(", ")}`;
+                      return formatMultiDateDisplay(dates);
                     })()}
                   </span>
                   <span className="text-base leading-none text-text-tertiary ml-1.5 shrink-0" aria-hidden="true">⌄</span>
@@ -852,7 +840,7 @@ export function OmsCreateOrderModal({
             </div>
 
             {/* Pricing and Advance with Validation */}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-3">
               <div>
                 <label className="block text-xs font-bold text-text-primary leading-snug">
                   Confirmed Total{" "}
@@ -883,87 +871,94 @@ export function OmsCreateOrderModal({
                   </p>
                 )}
               </div>
-              <div>
-                <label className="block text-xs font-bold text-text-primary leading-snug">
-                  Advance{" "}
-                  <span className="whitespace-nowrap">Received (₹)&nbsp;*</span>
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  required
-                  placeholder="e.g. 25,000"
-                  value={newOrderForm.advanceAmount ?? ""}
-                  onChange={(e) =>
-                    setNewOrderForm({
-                      ...newOrderForm,
-                      advanceAmount:
-                        e.target.value === ""
-                          ? ("" as unknown as number)
-                          : Number(e.target.value),
-                    })
-                  }
-                  className={`mt-1 w-full rounded-xl border px-3.5 py-2 text-xs outline-none focus:ring-1 ${
-                    Number(newOrderForm.advanceAmount) >
-                      Number(newOrderForm.finalConfirmedPrice) &&
-                    Number(newOrderForm.finalConfirmedPrice) > 0
-                      ? "border-status-error bg-red-50/50 text-status-error focus:ring-red-400"
-                      : "border-border-default focus:border-brand-blue-primary focus:ring-brand-blue-primary"
-                  }`}
-                />
-              </div>
-              {Number(newOrderForm.advanceAmount) >
-                Number(newOrderForm.finalConfirmedPrice) &&
-                Number(newOrderForm.finalConfirmedPrice) > 0 && (
-                  <div className="col-span-2 rounded-xl border border-red-200 bg-red-50 p-2.5 text-[11px] font-semibold text-status-error">
-                    Advance amount cannot exceed the confirmed total price.
-                  </div>
-                )}
 
-              <div className="col-span-2 rounded-xl border border-brand-blue-light bg-blue-50/50 p-3 space-y-2.5">
-                <div>
-                  <label className="text-[10px] font-bold text-text-secondary block mb-0.5">
-                    Payment Mode
-                  </label>
-                  <select
-                    value={newOrderForm.advanceMethod}
-                    onChange={(e) =>
-                      setNewOrderForm({
-                        ...newOrderForm,
-                        advanceMethod: e.target.value as
-                          | "CASH"
-                          | "UPI"
-                          | "BANK_TRANSFER",
-                      })
-                    }
-                    className="w-full rounded-lg border border-border-default bg-white px-2.5 py-1 text-xs text-text-primary focus:outline-none focus:border-brand-blue-primary focus:ring-1 focus:ring-brand-blue-primary"
-                  >
-                    <option value="CASH">Cash</option>
-                    <option value="UPI">UPI</option>
-                    <option value="BANK_TRANSFER">Bank Transfer</option>
-                  </select>
-                </div>
-
-                {newOrderForm.advanceMethod === "UPI" && (
+              {/* Unified Advance Received & Payment Mode Panel */}
+              <div className="rounded-2xl border border-brand-blue-light bg-blue-50/50 p-3.5 space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="text-[10px] font-bold text-text-secondary block mb-0.5">
-                      UPI Transaction ID{" "}
-                      <span className="font-normal">(Optional)</span>
+                    <label className="block text-xs font-bold text-text-primary leading-snug">
+                      Advance{" "}
+                      <span className="whitespace-nowrap">Received (₹)&nbsp;*</span>
                     </label>
                     <input
-                      type="text"
-                      value={newOrderForm.advanceReference}
+                      type="number"
+                      min="0"
+                      required
+                      placeholder="e.g. 25,000"
+                      value={newOrderForm.advanceAmount ?? ""}
                       onChange={(e) =>
                         setNewOrderForm({
                           ...newOrderForm,
-                          advanceReference: e.target.value,
+                          advanceAmount:
+                            e.target.value === ""
+                              ? ("" as unknown as number)
+                              : Number(e.target.value),
                         })
                       }
-                      placeholder="UTR / transaction number"
-                      maxLength={200}
-                      className="w-full rounded-lg border border-border-default bg-white px-2.5 py-1 text-xs text-text-secondary focus:outline-none focus:border-brand-blue-primary focus:ring-1 focus:ring-brand-blue-primary"
+                      className={`mt-1 w-full rounded-xl border bg-white px-3.5 py-2 text-xs outline-none focus:ring-1 ${
+                        Number(newOrderForm.advanceAmount) >
+                          Number(newOrderForm.finalConfirmedPrice) &&
+                        Number(newOrderForm.finalConfirmedPrice) > 0
+                          ? "border-status-error bg-red-50/50 text-status-error focus:ring-red-400"
+                          : "border-border-default focus:border-brand-blue-primary focus:ring-brand-blue-primary"
+                      }`}
                     />
-                    <label className="mt-2 block text-[10px] font-bold text-text-secondary">
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-text-primary leading-snug">
+                      Payment Mode
+                    </label>
+                    <select
+                      value={newOrderForm.advanceMethod}
+                      onChange={(e) =>
+                        setNewOrderForm({
+                          ...newOrderForm,
+                          advanceMethod: e.target.value as
+                            | "CASH"
+                            | "UPI"
+                            | "BANK_TRANSFER",
+                        })
+                      }
+                      className="mt-1 w-full rounded-xl border border-border-default bg-white px-3 py-2 text-xs text-text-primary focus:outline-none focus:border-brand-blue-primary focus:ring-1 focus:ring-brand-blue-primary"
+                    >
+                      <option value="CASH">Cash</option>
+                      <option value="UPI">UPI</option>
+                      <option value="BANK_TRANSFER">Bank Transfer</option>
+                    </select>
+                  </div>
+                </div>
+
+                {Number(newOrderForm.advanceAmount) >
+                  Number(newOrderForm.finalConfirmedPrice) &&
+                  Number(newOrderForm.finalConfirmedPrice) > 0 && (
+                    <div className="rounded-xl border border-red-200 bg-red-50 p-2.5 text-[11px] font-semibold text-status-error">
+                      Advance amount cannot exceed the confirmed total price.
+                    </div>
+                  )}
+
+                {newOrderForm.advanceMethod === "UPI" && (
+                  <div className="space-y-2 pt-1 border-t border-brand-blue-soft/60">
+                    <div>
+                      <label className="text-[10px] font-bold text-text-secondary block mb-0.5">
+                        UPI Transaction ID{" "}
+                        <span className="font-normal">(Optional)</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={newOrderForm.advanceReference}
+                        onChange={(e) =>
+                          setNewOrderForm({
+                            ...newOrderForm,
+                            advanceReference: e.target.value,
+                          })
+                        }
+                        placeholder="UTR / transaction number"
+                        maxLength={200}
+                        className="w-full rounded-lg border border-border-default bg-white px-2.5 py-1.5 text-xs text-text-secondary focus:outline-none focus:border-brand-blue-primary focus:ring-1 focus:ring-brand-blue-primary"
+                      />
+                    </div>
+                    <label className="block text-[10px] font-bold text-text-secondary">
                       Screenshot proof{" "}
                       <span className="font-normal">(Optional)</span>
                       <input
@@ -978,7 +973,7 @@ export function OmsCreateOrderModal({
                       />
                     </label>
                     {advanceProofFile && (
-                      <p className="mt-1 text-[10px] text-text-tertiary">
+                      <p className="text-[10px] text-text-tertiary">
                         Selected: {advanceProofFile.name}
                       </p>
                     )}
@@ -995,9 +990,9 @@ export function OmsCreateOrderModal({
                         advanceNotes: e.target.value,
                       })
                     }
-                    placeholder="Optional note"
+                    placeholder="Optional advance payment note"
                     maxLength={50}
-                    className="w-full rounded-lg border border-border-default bg-white px-2.5 py-1 text-xs text-text-secondary focus:outline-none focus:border-brand-blue-primary focus:ring-1 focus:ring-brand-blue-primary"
+                    className="w-full rounded-lg border border-border-default bg-white px-2.5 py-1.5 text-xs text-text-secondary focus:outline-none focus:border-brand-blue-primary focus:ring-1 focus:ring-brand-blue-primary"
                   />
                 </div>
               </div>

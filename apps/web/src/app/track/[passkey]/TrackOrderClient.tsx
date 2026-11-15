@@ -953,6 +953,19 @@ export function TrackOrderClient({ view, rawIdentifier }: TrackOrderClientProps)
             </div>
           </div>
 
+          {/* Current Main State & Customer Action Center (Top of Track Order, above Pipeline) */}
+          <div className="rounded-3xl border border-border-default bg-white p-5 sm:p-6 shadow-sm">
+            <OrderVerticalWorkflow
+              order={{ ...order, orderStatus: orderStatusState }}
+              tasks={tasksState}
+              variant="tracking"
+              displayMode="main-state-only"
+              hasErp={Boolean(order.hasErp)}
+              canCustomerAct={Boolean(canEdit || (!hasCustomerEmail && isUnlocked))}
+              onCustomerReviewTask={handleCustomerReviewTask}
+            />
+          </div>
+
           {/* Payment Summary & Minimal Invoice / Receipts */}
           <div className="rounded-3xl border border-border-default bg-white p-6 shadow-sm sm:p-8 space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1039,8 +1052,8 @@ export function TrackOrderClient({ view, rawIdentifier }: TrackOrderClientProps)
                 <h2 className="text-lg font-bold text-text-primary">Order Lifecycle Pipeline</h2>
                 <p className="text-xs text-text-tertiary mt-0.5">
                   {order.hasErp
-                    ? "Live end-to-end vertical workflow tracking event schedule, pre-event preparation, and post-event milestones"
-                    : "Live end-to-end vertical workflow tracking event schedule, post-event production, and final delivery milestones"}
+                    ? "Live end-to-end vertical workflow tracking event schedule, pre-event preparation, post-event production, and final delivery & order completion"
+                    : "Live end-to-end vertical workflow tracking event schedule, post-event production, and final delivery & order completion"}
                 </p>
               </div>
               <div className="self-start sm:self-center">
@@ -1062,6 +1075,7 @@ export function TrackOrderClient({ view, rawIdentifier }: TrackOrderClientProps)
               order={{ ...order, orderStatus: orderStatusState }}
               tasks={tasksState}
               variant="tracking"
+              displayMode="timeline-only"
               hasErp={Boolean(order.hasErp)}
               canCustomerAct={Boolean(canEdit || (!hasCustomerEmail && isUnlocked))}
               onCustomerReviewTask={handleCustomerReviewTask}
