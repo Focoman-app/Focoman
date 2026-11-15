@@ -308,6 +308,13 @@ export default function AccountSettingsPage() {
             console.warn("[handleDeleteAccount] Failed to clear local storage:", e);
           }
         }
+        if (instantDeleteAccount && !res.authDeleted) {
+          try {
+            await user.delete();
+          } catch (clientDeleteErr) {
+            console.warn("[handleDeleteAccount] Client user.delete() fallback skipped:", clientDeleteErr);
+          }
+        }
         await signOutUser();
         router.replace("/sign-in?deleted=true");
       } else {

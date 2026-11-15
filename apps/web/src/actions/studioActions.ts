@@ -18,6 +18,7 @@ import {
   getStudioPackages,
   saveStudioPackage,
   softDeleteStudioPackage,
+  getUserLegalConsent,
 } from "@focoman/db";
 import {
   Studio,
@@ -28,7 +29,11 @@ import {
   DeletedStudioRecoveryInfo,
 } from "@focoman/types";
 import { PLAN_CAPABILITIES } from "@focoman/config";
-import { requireVerifiedUser, requireStudioMember } from "@/lib/serverAuth";
+import {
+  getAdminAuthInstance,
+  requireVerifiedUser,
+  requireStudioMember,
+} from "@/lib/serverAuth";
 import { requireCapability } from "@/lib/entitlementAuth";
 import { DEFAULT_STUDIO_SERVICES, getDefaultStudioPackages } from "@/lib/studioServices";
 
@@ -365,6 +370,7 @@ export async function getRecoverableAccountStatusAction(
 ): Promise<{
   success: boolean;
   hasRecoverableData: boolean;
+  legalConsentRequired?: boolean;
   accountClosureRequestedAt?: string | null;
   remainingDays: number;
   scheduledDeletionAt?: string | null;
@@ -374,14 +380,16 @@ export async function getRecoverableAccountStatusAction(
   try {
     const decoded = await requireVerifiedUser(idToken);
     const firestore = getFirestoreServerInstance();
-    const [studios, activeMemberships, prefSnap] = await Promise.all([
+    const [studios, activeMemberships, prefSnap, existingConsent] = await Promise.all([
       getDeletedStudiosByOwner(decoded.uid, decoded.email),
       getMembershipsByUid(decoded.uid, decoded.email),
       firestore.collection("user_preferences").doc(decoded.uid).get(),
+      getUserLegalConsent(decoded.uid),
     ]);
 
     const prefData = prefSnap.exists ? prefSnap.data() : null;
     const accountClosureRequestedAt = (prefData?.accountClosureRequestedAt as string | undefined) || null;
+    const legalConsentRequired = Boolean(prefData?.legalConsentRequired) && !existingConsent;
 
     // Show recovery prompt on login if the user has recoverable deleted studios
     // from a closed account (or has no active workspaces and has recoverable deleted studios)
@@ -395,6 +403,7 @@ export async function getRecoverableAccountStatusAction(
     return {
       success: true,
       hasRecoverableData,
+      legalConsentRequired,
       accountClosureRequestedAt,
       remainingDays,
       scheduledDeletionAt,
@@ -471,6 +480,12 @@ export async function startNewProfileAfterDeletionAction(
       await permanentlyDeleteStudioData(ds.id);
     }
 
+    try {
+      await firestore.collection("user_legal_consents").doc(decoded.uid).delete();
+    } catch (e) {
+      console.warn("[startNewProfileAfterDeletionAction] Delete user_legal_consents warning:", e);
+    }
+
     await firestore
       .collection("user_preferences")
       .doc(decoded.uid)
@@ -478,6 +493,7 @@ export async function startNewProfileAfterDeletionAction(
         {
           accountClosureRequestedAt: null,
           defaultStudioId: null,
+          legalConsentRequired: true,
           updatedAt: new Date().toISOString(),
         },
         { merge: true }
@@ -666,6 +682,7 @@ export async function deleteUserAccountAction(
   options?: { permanent?: boolean }
 ): Promise<{
   success: boolean;
+  authDeleted?: boolean;
   error?: string;
 }> {
   try {
@@ -710,8 +727,8 @@ export async function deleteUserAccountAction(
       }
     }
 
-    // 3. When Full Instant Delete is selected, also purge any soft-deleted studios owned by this user
-    // and remove user-level documents and memberships
+    // 3. When Full Instant Delete is selected, also purge any soft-deleted studios owned by this user,
+    // remove user-level documents/memberships, and delete the Firebase Authentication user record.
     if (isPermanent) {
       try {
         const deletedStudios = await getDeletedStudiosByOwner(uid, decoded.email);
@@ -727,6 +744,20 @@ export async function deleteUserAccountAction(
       }
 
       try {
+        const remainingMemberships = await firestore
+          .collection("memberships")
+          .where("uid", "==", uid)
+          .get();
+        if (!remainingMemberships.empty) {
+          const batch = firestore.batch();
+          remainingMemberships.docs.forEach((doc) => batch.delete(doc.ref));
+          await batch.commit();
+        }
+      } catch (e) {
+        console.warn("[deleteUserAccountAction] Purge remaining memberships warning:", e);
+      }
+
+      try {
         await firestore.collection("user_preferences").doc(uid).delete();
       } catch (e) {
         console.warn("[deleteUserAccountAction] Delete user_preferences warning:", e);
@@ -737,6 +768,46 @@ export async function deleteUserAccountAction(
       } catch (e) {
         console.warn("[deleteUserAccountAction] Delete user_legal_consents warning:", e);
       }
+
+      let authDeleted = false;
+      try {
+        const adminAuth = getAdminAuthInstance();
+        try {
+          await adminAuth.revokeRefreshTokens(uid);
+        } catch (revokeErr) {
+          console.warn("[deleteUserAccountAction] Revoke refresh tokens warning:", revokeErr);
+        }
+        await adminAuth.deleteUser(uid);
+        authDeleted = true;
+      } catch (authErr: unknown) {
+        const code =
+          typeof authErr === "object" && authErr !== null && "code" in authErr
+            ? String((authErr as { code?: unknown }).code)
+            : "";
+        if (code === "auth/user-not-found") {
+          authDeleted = true;
+        } else {
+          console.warn("[deleteUserAccountAction] Admin deleteUser warning:", authErr);
+        }
+      }
+
+      if (!authDeleted) {
+        try {
+          await firestore.collection("user_preferences").doc(uid).set(
+            {
+              accountClosureRequestedAt: null,
+              defaultStudioId: null,
+              legalConsentRequired: true,
+              updatedAt: new Date().toISOString(),
+            },
+            { merge: true }
+          );
+        } catch (e) {
+          console.warn("[deleteUserAccountAction] Set fallback legalConsentRequired warning:", e);
+        }
+      }
+
+      return { success: true, authDeleted };
     } else {
       // Record the closure request while preserving the 30-day recovery window
       try {
@@ -750,9 +821,9 @@ export async function deleteUserAccountAction(
       } catch (e) {
         console.warn("[deleteUserAccountAction] Record closure request warning:", e);
       }
-    }
 
-    return { success: true };
+      return { success: true };
+    }
   } catch (err: unknown) {
     console.error("[deleteUserAccountAction] Error:", err);
     return {

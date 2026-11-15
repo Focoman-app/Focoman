@@ -113,7 +113,6 @@ function SignInContent() {
     if (recoveryCheckPending.current) return;
     recoveryCheckPending.current = true;
     try {
-      await syncServerSession(true);
       const token = await authedUser.getIdToken();
       const status = await getRecoverableAccountStatusAction(token);
       if (status.success && status.hasRecoverableData && status.studios.length > 0) {
@@ -124,10 +123,25 @@ function SignInContent() {
           studios: status.studios,
         });
         setIsSigningIn(false);
+        recoveryCheckPending.current = false;
         return;
       }
+      if (status.success && status.legalConsentRequired) {
+        await fetch("/api/session", { method: "DELETE", credentials: "same-origin" }).catch(() => {});
+        setTermsRead(false);
+        setPrivacyRead(false);
+        setAccepted(false);
+        consentPending.current = true;
+        markLegalConsentPending();
+        setPendingConsent(authedUser);
+        setIsSigningIn(false);
+        recoveryCheckPending.current = false;
+        return;
+      }
+      await syncServerSession(true);
     } catch (err) {
       console.warn("[SignInContent] Recoverable check failed, proceeding to target:", err);
+      await syncServerSession(true).catch(() => false);
     }
     continueToTarget();
   }, [continueToTarget]);
@@ -219,6 +233,7 @@ function SignInContent() {
       });
       if (!result.success) throw new Error(result.error);
       consentPending.current = false;
+      recoveryCheckPending.current = false;
       clearLegalConsentAuthState();
       await checkRecoveryOrContinue(pendingConsent);
     } catch (error) {
@@ -259,8 +274,20 @@ function SignInContent() {
       if (!res.success) {
         throw new Error(res.error || "Failed to start as new profile.");
       }
-      await clearDefaultWorkspace(recoverablePrompt.user.uid, token);
-      continueToTarget("/workspaces");
+      await clearDefaultWorkspace(recoverablePrompt.user.uid);
+      await fetch("/api/session", { method: "DELETE", credentials: "same-origin" }).catch(() => {});
+      if (typeof window !== "undefined" && !redirectUrl && !sessionStorage.getItem("focoman_auth_redirect")) {
+        sessionStorage.setItem("focoman_auth_redirect", "/workspaces");
+      }
+      setTermsRead(false);
+      setPrivacyRead(false);
+      setAccepted(false);
+      consentPending.current = true;
+      markLegalConsentPending();
+      recoveryCheckPending.current = false;
+      setRecoverablePrompt(null);
+      setPendingConsent(recoverablePrompt.user);
+      setIsStartingFresh(false);
     } catch (err: unknown) {
       setAuthError(err instanceof Error ? err.message : "Failed to start as new profile.");
       setIsStartingFresh(false);

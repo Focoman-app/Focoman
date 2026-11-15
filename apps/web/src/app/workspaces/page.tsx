@@ -6,7 +6,13 @@ import { useRouter } from "next/navigation";
 import { Navbar } from "@/components/Navbar";
 import { BackButton } from "@/components/BackButton";
 import { FocomanLoadingState, FocomanSpinner } from "@/components/FocomanSpinner";
-import { subscribeToAuthState, signInWithGoogle, signOutUser, syncServerSession } from "@/lib/firebaseAuth";
+import {
+  subscribeToAuthState,
+  signInWithGoogle,
+  signOutUser,
+  syncServerSession,
+  markLegalConsentPending,
+} from "@/lib/firebaseAuth";
 import {
   getUserWorkspacesAction,
   deleteStudioAction,
@@ -79,9 +85,6 @@ export default function WorkspacesPage() {
       if (user) {
         setLoadingWorkspaces(true);
 
-        // Ensure the server-side HTTP session cookie is active before launching any workspace
-        await syncServerSession();
-
         // CHG-011: Pass the Firebase ID token (JWT), not the UID — identity is verified server-side.
         const idToken = await user.getIdToken();
         const [data, invitations, recoveryStatus] = await Promise.all([
@@ -89,6 +92,17 @@ export default function WorkspacesPage() {
           getMyPendingInvitationsAction(idToken),
           getRecoverableAccountStatusAction(idToken),
         ]);
+
+        if (recoveryStatus.success && recoveryStatus.legalConsentRequired) {
+          await fetch("/api/session", { method: "DELETE", credentials: "same-origin" }).catch(() => {});
+          markLegalConsentPending();
+          router.replace("/sign-in?redirect=/workspaces");
+          return;
+        }
+
+        // Ensure the server-side HTTP session cookie is active before launching any workspace
+        await syncServerSession();
+
         setWorkspaces(data);
         setPendingInvitations(invitations);
 
@@ -112,7 +126,7 @@ export default function WorkspacesPage() {
       }
     });
     return () => unsubscribe();
-  }, []);
+  }, [router]);
 
   // Subscribe to default workspace changes across tabs & in-tab
   useEffect(() => {
@@ -153,10 +167,12 @@ export default function WorkspacesPage() {
       const res = await startNewProfileAfterDeletionAction(idToken);
       if (res.success) {
         setRecoverableStudios([]);
-        await clearDefaultWorkspace(currentUser.uid, idToken);
+        await clearDefaultWorkspace(currentUser.uid);
         setDefaultStudioId(null);
-        setSuccessToast("Started as a fresh profile. Previous deleted studio data was permanently removed.");
-        setTimeout(() => setSuccessToast(null), 4000);
+        await fetch("/api/session", { method: "DELETE", credentials: "same-origin" }).catch(() => {});
+        markLegalConsentPending();
+        router.replace("/sign-in?redirect=/workspaces");
+        return;
       }
     } finally {
       setIsStartingNewProfile(false);
