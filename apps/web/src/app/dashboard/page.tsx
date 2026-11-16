@@ -8,21 +8,36 @@ import { resolveAndSyncDefaultWorkspace } from "@/lib/workspaceDefaults";
 import { Navbar } from "@/components/Navbar";
 import { BackButton } from "@/components/BackButton";
 import { FocomanLoadingState } from "@/components/FocomanSpinner";
+import { measurePerformance } from "@/lib/performance";
 
 export default function GlobalDashboardRedirect() {
   const router = useRouter();
   const [status, setStatus] = useState("Checking authentication...");
+  const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
+    let active = true;
+    let generation = 0;
     const unsubscribe = subscribeToAuthState(async (user) => {
+      const current = ++generation;
+      const isCurrent = () => active && current === generation;
       if (user) {
         try {
           setStatus("Finding your default studio...");
-          await syncServerSession();
-          const idToken = await user.getIdToken();
-          const workspaces = await getUserWorkspacesAction(idToken);
-          
-          const defaultStudio = await resolveAndSyncDefaultWorkspace(user.uid, workspaces, idToken);
+          setFailed(false);
+          const defaultStudio = await measurePerformance("workspace.resolve", async () => {
+            const idToken = await user.getIdToken();
+            // Workspace discovery authenticates with this token and does not
+            // depend on the cookie POST. Navigation waits for both to succeed.
+            const [sessionReady, workspaces] = await Promise.all([
+              syncServerSession(),
+              getUserWorkspacesAction(idToken),
+            ]);
+            if (!sessionReady) throw new Error("Unable to establish your secure session. Please retry.");
+            return resolveAndSyncDefaultWorkspace(user.uid, workspaces, idToken);
+          });
+          if (!isCurrent()) return;
 
           if (defaultStudio) {
             router.replace(`/${defaultStudio}/dashboard`);
@@ -30,27 +45,35 @@ export default function GlobalDashboardRedirect() {
             router.replace("/workspaces");
           }
         } catch (error) {
+          if (!isCurrent()) return;
           console.error("Failed to load workspaces", error);
-          setStatus("Error loading workspaces. Redirecting...");
-          setTimeout(() => router.replace("/workspaces"), 1500);
+          setStatus("Unable to load your workspace. Please retry.");
+          setFailed(true);
         }
       } else {
         router.replace("/sign-in");
       }
     });
 
-    return () => unsubscribe();
-  }, [router]);
+    return () => { active = false; unsubscribe(); };
+  }, [router, attempt]);
 
   return (
     <div className="min-h-screen bg-surface-app flex flex-col">
       <Navbar />
       <main className="flex-1 flex flex-col items-center justify-center p-4">
-        <FocomanLoadingState
+        {failed ? (
+          <div role="alert" className="text-center space-y-4">
+            <p>{status}</p>
+            <button className="rounded-lg bg-brand-blue-primary px-4 py-2 text-white" onClick={() => setAttempt((value) => value + 1)}>
+              Retry
+            </button>
+          </div>
+        ) : <FocomanLoadingState
           status={status}
           subtext="Preparing your workspace environment"
           showCard={true}
-        />
+        />}
       </main>
     </div>
   );
