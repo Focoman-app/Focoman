@@ -20,6 +20,8 @@ Use bounded cursor pages, stable ordering with an ID tie-breaker, validated page
 
 Dashboard aggregate data is independent from table pages and remains complete for selected periods. Prefer lightweight server-side summaries/projections; do not send entire historical order payloads merely to calculate chart totals. Existing crew conflict/availability logic must remain correct across all relevant dates.
 
+Implementation refinement after examining legacy data contracts: OMS currently supports global date/price sorting and substring search. Without a verified production backfill, bounded indexed queries cannot preserve these semantics for missing fields. A single projected metadata load may therefore remain for global filtering/sorting, followed by authorized batches of full records. Reuse that metadata across subsequent pages rather than re-scanning the collection on every page. Report this retained O(n) read cost explicitly; bounded response/detail payloads are not the same as bounded total database reads. Full database-read scaling requires an indexed schema rollout and must not be claimed as delivered by this compatibility approach.
+
 ### UI states
 
 ```text
