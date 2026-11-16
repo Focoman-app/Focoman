@@ -58,11 +58,11 @@ export function PlanGatedToast({
     <div
       role="alert"
       aria-live="assertive"
-      className="fixed top-16 right-4 left-4 sm:left-auto z-[70] max-w-xl rounded-xl border border-red-300 bg-red-50 px-3.5 py-2.5 text-xs font-semibold text-red-800 shadow-lg flex items-center justify-between gap-2.5"
+      className="fixed top-16 right-4 left-4 sm:left-auto z-[70] max-w-xl rounded-xl border border-red-300 bg-red-50 px-3.5 py-2.5 text-xs font-semibold text-red-800 shadow-lg flex items-start sm:items-center justify-between gap-2.5"
     >
-      <div className="flex items-center gap-2 min-w-0">
-        <AlertCircle className="h-4 w-4 shrink-0 text-red-600" />
-        <span className="truncate">{message}</span>
+      <div className="flex items-start sm:items-center gap-2 min-w-0 flex-1">
+        <AlertCircle className="h-4 w-4 shrink-0 text-red-600 mt-0.5 sm:mt-0" />
+        <span className="whitespace-normal break-words leading-relaxed">{message}</span>
       </div>
       <div className="flex items-center gap-2 shrink-0">
         {upgradeHref && (

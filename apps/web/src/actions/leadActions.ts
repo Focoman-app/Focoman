@@ -502,6 +502,7 @@ export async function convertLeadToOrderAction(params: {
           name: lead.name,
           ...(customerPhone ? { phone: customerPhone } : {}),
           ...(customerEmail ? { email: customerEmail } : {}),
+          verificationStatus: customerPhone || customerEmail ? "VERIFIED" : "UNVERIFIED",
           ...(locationVal ? { address: locationVal } : {}),
           isDeleted: false,
           createdAt: now,

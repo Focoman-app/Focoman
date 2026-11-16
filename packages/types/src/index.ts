@@ -492,12 +492,15 @@ export interface StudioInvitationSummary {
   acceptedAt?: string;
 }
 
+export type CustomerVerificationStatus = 'VERIFIED' | 'UNVERIFIED';
+
 export interface Customer extends SoftDeletable {
   id: string;
   studioId: string;
   name: string;
   phone?: string;
   email?: string;
+  verificationStatus?: CustomerVerificationStatus;
   notifyWhatsApp?: boolean;
   notifyEmail?: boolean;
   uid?: string;

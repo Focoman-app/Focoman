@@ -196,7 +196,7 @@ export function PricingTwoPanels({ hasMultiStudios = false }: PricingTwoPanelsPr
                 WhatsApp Operations and Business Reports
               </h2>
               <p className="mt-1.5 text-xs sm:text-sm text-[#57534E] leading-relaxed">
-                Includes everything in the ₹999 plan, plus WhatsApp operations, interactive studio bot, and exportable business reports.
+                Includes everything in the ₹999 plan, plus WhatsApp operations, interactive studio bot, pre-anniversary memory reminders for repeat leads, and exportable business reports.
               </p>
             </div>
 
@@ -223,6 +223,15 @@ export function PricingTwoPanels({ hasMultiStudios = false }: PricingTwoPanelsPr
                   </span>
                   <span className="text-[#1C1917] font-medium leading-tight">
                     WhatsApp Operations and Interactive Bot
+                  </span>
+                </div>
+
+                <div className="flex items-start gap-2.5">
+                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-[11px] font-extrabold text-emerald-700 mt-0.5 border border-emerald-300">
+                    ✓
+                  </span>
+                  <span className="text-[#1C1917] font-medium leading-tight">
+                    Pre-Anniversary &amp; Event Reminders (share photography memories to generate repeat leads)
                   </span>
                 </div>
 

@@ -49,7 +49,8 @@ export type WhatsAppTemplateId =
   | 'ready_for_delivery'
   | 'booking_confirmation'
   | 'crew_assignment_alert'
-  | 'crew_task_assigned';
+  | 'crew_task_assigned'
+  | 'anniversary_memory_reminder';
 
 export interface WhatsAppTemplateDefinition {
   id: WhatsAppTemplateId;
@@ -204,6 +205,20 @@ export const WHATSAPP_TEMPLATES: Record<WhatsAppTemplateId, WhatsAppTemplateDefi
       `New production task assigned: *${d.taskTitle || 'Editing'}* for Order *#${d.orderNumber}*.\n` +
       `Client: ${d.customerName || 'Studio Client'}\n\n` +
       `Reply with \`DONE ${d.orderNumber}\` when completed, or update status in your studio dashboard.`,
+  },
+
+  anniversary_memory_reminder: {
+    id: 'anniversary_memory_reminder',
+    title: 'Pre-Anniversary & Event Memory Reminder',
+    audience: 'CUSTOMER',
+    description: 'Sent ahead of an anniversary or main event milestone to share photography memories and spark repeat bookings.',
+    generateText: (d) =>
+      `💫 *${d.studioName}* — Relive Your Favorite Memories!\n\n` +
+      `Hello ${d.customerName || 'Valued Client'},\n` +
+      `Your *${d.eventType || 'Special Event'}* anniversary milestone is right around the corner!\n\n` +
+      `Revisit your curated photo memories anytime here:\n` +
+      `🔗 *Memory Gallery:* ${d.trackingUrl || `https://focoman.web.app/track/${d.orderNumber || d.trackingPasskey}`}\n\n` +
+      `Planning an anniversary shoot, family portrait, or upcoming celebration? Reply here and our team will be delighted to help!`,
   },
 };
 

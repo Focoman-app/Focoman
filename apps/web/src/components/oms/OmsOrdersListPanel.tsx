@@ -1,8 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import type { Order, OrderStatus } from "@focoman/types";
-import { FileSpreadsheet, SlidersHorizontal } from "lucide-react";
-import { useState } from "react";
+import { FileSpreadsheet, Lock, SlidersHorizontal } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { FocomanSpinner } from "@/components/FocomanSpinner";
 import {
   formatMultiDateDisplay,
@@ -36,6 +37,7 @@ interface OmsOrdersListPanelProps {
 }
 
 export function OmsOrdersListPanel({
+  studioSlug,
   orders,
   filtered,
   selected,
@@ -58,6 +60,31 @@ export function OmsOrdersListPanel({
   onSwitchToLeads,
 }: OmsOrdersListPanelProps) {
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [exportUpgradeHint, setExportUpgradeHint] = useState(false);
+  const hintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (hintTimerRef.current) {
+        clearTimeout(hintTimerRef.current);
+      }
+    };
+  }, []);
+
+  const handleExportClick = () => {
+    if (!canExport) {
+      if (hintTimerRef.current) {
+        clearTimeout(hintTimerRef.current);
+      }
+      setExportUpgradeHint(true);
+      hintTimerRef.current = setTimeout(() => {
+        setExportUpgradeHint(false);
+        hintTimerRef.current = null;
+      }, 5000);
+      return;
+    }
+    onExportExcel();
+  };
 
   return (
     <div
@@ -86,36 +113,79 @@ export function OmsOrdersListPanel({
               <SlidersHorizontal className="h-3.5 w-3.5" />
               Filters
             </button>
-            <button
-              type="button"
-              onClick={onExportExcel}
-              disabled={canExport && filtered.length === 0}
-              className="rounded-xl border border-border-default bg-white px-3.5 py-2 text-xs font-bold text-text-primary hover:bg-surface-app hover:border-brand-blue-primary transition inline-flex items-center gap-1.5 shadow-2xs disabled:opacity-50 cursor-pointer"
-              title="Export filtered orders and payment ledger to Excel (.xlsx)"
-            >
-              <FileSpreadsheet className="h-3.5 w-3.5 text-brand-blue-primary" />
-              <span>Export Excel</span>
-            </button>
           </div>
         </div>
 
-        {hasLeads && <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-border-default pt-3.5">
-          <div className="inline-flex rounded-xl border border-border-default bg-surface-app p-1">
+        <div className="mt-4 border-t border-border-default pt-3.5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            {hasLeads ? (
+              <div className="inline-flex rounded-xl border border-border-default bg-surface-app p-1">
+                <button
+                  type="button"
+                  className="rounded-lg bg-brand-blue-primary px-3.5 py-1.5 text-xs font-extrabold text-white shadow-2xs transition cursor-pointer"
+                >
+                  Orders ({orders.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={onSwitchToLeads}
+                  className="rounded-lg px-3.5 py-1.5 text-xs font-bold text-text-secondary hover:text-text-primary transition cursor-pointer"
+                >
+                  Leads ({leadsCount})
+                </button>
+              </div>
+            ) : (
+              <div className="inline-flex rounded-xl border border-border-default bg-surface-app p-1">
+                <span className="rounded-lg bg-brand-blue-primary px-3.5 py-1.5 text-xs font-extrabold text-white shadow-2xs">
+                  Orders ({orders.length})
+                </span>
+              </div>
+            )}
+
             <button
               type="button"
-              className="rounded-lg bg-brand-blue-primary px-3.5 py-1.5 text-xs font-extrabold text-white shadow-2xs transition cursor-pointer"
+              onClick={handleExportClick}
+              disabled={canExport && filtered.length === 0}
+              aria-disabled={!canExport}
+              className={`ml-auto rounded-xl border border-border-default px-3.5 py-2 text-xs font-bold inline-flex items-center gap-1.5 shadow-2xs transition cursor-pointer ${
+                canExport
+                  ? "bg-white text-text-primary hover:bg-surface-app hover:border-brand-blue-primary disabled:opacity-50"
+                  : "bg-slate-100 text-text-tertiary opacity-50 hover:opacity-75"
+              }`}
+              title={
+                canExport
+                  ? "Export filtered orders and payment ledger to Excel (.xlsx)"
+                  : "Excel export requires the Professional (₹1,999/mo) plan"
+              }
             >
-              Orders ({orders.length})
-            </button>
-            <button
-              type="button"
-              onClick={onSwitchToLeads}
-              className="rounded-lg px-3.5 py-1.5 text-xs font-bold text-text-secondary hover:text-text-primary transition cursor-pointer"
-            >
-              Leads ({leadsCount})
+              <FileSpreadsheet
+                className={`h-3.5 w-3.5 ${
+                  canExport ? "text-brand-blue-primary" : "text-text-tertiary"
+                }`}
+              />
+              <span>Export Excel</span>
+              {!canExport && <Lock className="h-3 w-3 text-text-tertiary" />}
             </button>
           </div>
-        </div>}
+
+          {!canExport && exportUpgradeHint && (
+            <div
+              role="status"
+              aria-live="polite"
+              className="mt-2 flex justify-end"
+            >
+              <p className="max-w-full sm:max-w-md text-right text-[11px] font-medium text-red-700 whitespace-normal break-words leading-relaxed">
+                Excel export is available only on the Professional (₹1,999/mo) plan.{" "}
+                <Link
+                  href={`/checkout?studio=${studioSlug}&plan=professional`}
+                  className="font-bold underline hover:text-red-900"
+                >
+                  Subscribe to Professional
+                </Link>
+              </p>
+            </div>
+          )}
+        </div>
 
         {filtersOpen && (
           <div id="oms-order-filters" className="mt-3 flex flex-col sm:flex-row gap-2.5">

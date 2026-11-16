@@ -59,6 +59,7 @@ const NOTIFICATION_GROUPS = [
       { id: "customer_post_event", label: "Post-Event Workflow Updates", enabled: true },
       { id: "customer_ready_delivery", label: "Order Ready for Delivery", enabled: true },
       { id: "customer_payment_remind", label: "Payment Status Updates", enabled: true },
+      { id: "customer_anniversary_reminder", label: "Pre-Anniversary & Event Memory Reminders (Lead Generation)", enabled: true },
     ],
   },
 ];
@@ -70,6 +71,7 @@ const TEMPLATES_LIST: { id: WhatsAppTemplateId; name: string; audience: string }
   { id: "customer_selection_done", name: "Selection Finalized Alert", audience: "Studio Owner" },
   { id: "album_review_ready", name: "Photobook Draft Layout Ready", audience: "Client" },
   { id: "ready_for_delivery", name: "Ready for Delivery / Balance", audience: "Client" },
+  { id: "anniversary_memory_reminder", name: "Pre-Anniversary & Event Memory Reminder", audience: "Client" },
   { id: "crew_assignment_alert", name: "Crew Call-Time Reminder", audience: "Team Crew" },
   { id: "crew_task_assigned", name: "Production Task Assigned", audience: "Editor" },
 ];

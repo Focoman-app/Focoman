@@ -57,8 +57,8 @@ const MODULES: ModuleData[] = [
         desc: "Get a centralized overview of all customers within your studio, including their booking activity, payment history, lifetime value (LTV), and repeat bookings. Identify your most valuable customers and understand overall customer relationships and booking trends.",
       },
       {
-        title: "Automated Follow-ups & Anniversary Reminders",
-        desc: "Track customer anniversaries and important event milestones, send automated reminders to studios and customers, and support personalized follow-ups through email and WhatsApp when available to encourage repeat bookings and generate new leads.",
+        title: "Pre-Anniversary & Event Memory Reminders",
+        desc: "Track customer anniversaries and main event milestones, and send automated reminders ahead of the date (Professional plan) sharing photography memories to encourage repeat bookings and generate new leads.",
       },
     ],
   },
@@ -95,8 +95,8 @@ const MODULES: ModuleData[] = [
     tagColor: "bg-green-50 text-status-success border-green-200",
     cards: [
       {
-        title: "Automated WhatsApp Notifications",
-        desc: "Send booking confirmations, event reminders, production updates, gallery links, and delivery notifications to customers through configurable WhatsApp triggers.",
+        title: "Automated WhatsApp Notifications & Reminders",
+        desc: "Send booking confirmations, pre-anniversary and main-event memory reminders, production updates, gallery links, and delivery notifications to customers through configurable WhatsApp triggers.",
       },
       {
         title: "Interactive Studio Operations Bot",

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, use, useMemo } from "react";
+import { useState, useEffect, useCallback, use, useMemo, useRef } from "react";
 import Link from "next/link";
 import { Customer, Order } from "@focoman/types";
 import {
@@ -93,6 +93,27 @@ export default function CrmPage({ params }: { params: Promise<{ studioSlug: stri
     show: showPlanWarning,
     dismiss: dismissPlanWarning,
   } = usePlanGatedToast();
+  const [exportUpgradeHint, setExportUpgradeHint] = useState(false);
+  const exportHintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (exportHintTimerRef.current) {
+        clearTimeout(exportHintTimerRef.current);
+      }
+    };
+  }, []);
+
+  const triggerExportUpgradeHint = () => {
+    if (exportHintTimerRef.current) {
+      clearTimeout(exportHintTimerRef.current);
+    }
+    setExportUpgradeHint(true);
+    exportHintTimerRef.current = setTimeout(() => {
+      setExportUpgradeHint(false);
+      exportHintTimerRef.current = null;
+    }, 5000);
+  };
 
   const showBanner = (type: "success" | "error", text: string) => {
     setStatusMessage({ type, text });
@@ -405,12 +426,26 @@ export default function CrmPage({ params }: { params: Promise<{ studioSlug: stri
                   <span className="h-1.5 w-1.5 rounded-full bg-brand-orange-primary" />
                 )}
               </button>
+            </div>
+          </div>
+
+          <div className="mt-4 border-t border-border-default pt-3.5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="inline-flex rounded-xl border border-border-default bg-surface-app p-1">
+                <span className="rounded-lg bg-brand-orange-primary px-3.5 py-1.5 text-xs font-extrabold text-white shadow-2xs">
+                  {viewMode === "ACTIVE"
+                    ? `Clients (${customers.length})`
+                    : `Archived (${deletedCustomers.length})`}
+                </span>
+              </div>
+
               <button
                 type="button"
                 disabled={canExportExcel && filtered.length === 0}
+                aria-disabled={!canExportExcel}
                 onClick={() => {
                   if (!canExportExcel) {
-                    showPlanWarning("Excel export is available only in the Professional (₹1,999/mo) plan.");
+                    triggerExportUpgradeHint();
                     return;
                   }
                   exportTableToExcel(
@@ -419,6 +454,17 @@ export default function CrmPage({ params }: { params: Promise<{ studioSlug: stri
                     [
                       { header: "Customer ID", key: "id", width: 22 },
                       { header: "Customer Name", key: "name", width: 24 },
+                      {
+                        header: "Verification Status",
+                        key: "verificationStatus",
+                        width: 18,
+                        getValue: (c) =>
+                          (c.verificationStatus ??
+                            (c.phone?.trim() || c.email?.trim() ? "VERIFIED" : "UNVERIFIED")) ===
+                          "VERIFIED"
+                            ? "Verified"
+                            : "Unverified",
+                      },
                       {
                         header: "Phone",
                         key: "phone",
@@ -474,13 +520,40 @@ export default function CrmPage({ params }: { params: Promise<{ studioSlug: stri
                     filtered
                   );
                 }}
-                className="rounded-xl border border-border-default bg-white px-3.5 py-2 text-xs font-bold text-text-primary hover:bg-surface-app hover:border-brand-orange-primary transition inline-flex items-center gap-1.5 shadow-2xs disabled:opacity-50 cursor-pointer"
-                title="Export filtered customers with LTV & pending dues to Excel (.xlsx)"
+                className={`ml-auto rounded-xl border border-border-default px-3.5 py-2 text-xs font-bold inline-flex items-center gap-1.5 shadow-2xs transition cursor-pointer ${
+                  canExportExcel
+                    ? "bg-white text-text-primary hover:bg-surface-app hover:border-brand-orange-primary disabled:opacity-50"
+                    : "bg-slate-100 text-text-tertiary opacity-50 hover:opacity-75"
+                }`}
+                title={
+                  canExportExcel
+                    ? "Export filtered customers with LTV & pending dues to Excel (.xlsx)"
+                    : "Excel export requires the Professional (₹1,999/mo) plan"
+                }
               >
-                <FileSpreadsheet className="h-3.5 w-3.5 text-brand-orange-primary" />
+                <FileSpreadsheet
+                  className={`h-3.5 w-3.5 ${
+                    canExportExcel ? "text-brand-orange-primary" : "text-text-tertiary"
+                  }`}
+                />
                 <span>Export Excel</span>
+                {!canExportExcel && <Lock className="h-3 w-3 text-text-tertiary" />}
               </button>
             </div>
+
+            {!canExportExcel && exportUpgradeHint && (
+              <div role="status" aria-live="polite" className="mt-2 flex justify-end">
+                <p className="max-w-full sm:max-w-md text-right text-[11px] font-medium text-red-700 whitespace-normal break-words leading-relaxed">
+                  Excel export is available only on the Professional (₹1,999/mo) plan.{" "}
+                  <Link
+                    href={`/checkout?studio=${studioSlug}&plan=professional`}
+                    className="font-bold underline hover:text-red-900"
+                  >
+                    Subscribe to Professional
+                  </Link>
+                </p>
+              </div>
+            )}
           </div>
 
           {filtersOpen && (
@@ -525,6 +598,10 @@ export default function CrmPage({ params }: { params: Promise<{ studioSlug: stri
           ) : (
             filtered.map((cus) => {
               const metrics = customerMetrics[cus.id];
+              const isVerified =
+                (cus.verificationStatus ??
+                  (cus.phone?.trim() || cus.email?.trim() ? "VERIFIED" : "UNVERIFIED")) ===
+                "VERIFIED";
               return (
                 <div
                   key={cus.id}
@@ -537,15 +614,27 @@ export default function CrmPage({ params }: { params: Promise<{ studioSlug: stri
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <p className="font-bold text-sm text-text-primary">{cus.name}</p>
+                        <span
+                          className={`rounded px-1.5 py-0.5 text-[10px] font-semibold border ${
+                            isVerified
+                              ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                              : "bg-amber-50 text-amber-700 border-amber-200"
+                          }`}
+                        >
+                          {isVerified ? "Verified" : "Unverified"}
+                        </span>
                         {cus.isDeleted && (
                           <span className="rounded bg-red-100 px-1.5 py-0.5 text-[9px] font-bold uppercase text-red-700">
                             Archived
                           </span>
                         )}
                       </div>
-                      <p className="text-xs text-text-secondary mt-0.5">{cus.phone || "No phone registered"} {cus.email ? `· ${cus.email}` : ""}</p>
+                      <p className="text-xs text-text-secondary mt-0.5">
+                        {[cus.phone?.trim(), cus.email?.trim()].filter(Boolean).join(" · ") ||
+                          "No phone or email registered"}
+                      </p>
                       <div className="mt-2.5 flex items-center gap-2 text-[10px] font-semibold">
                         <span className="badge-brand-blue">
                           <span className="h-1.5 w-1.5 rounded-full bg-brand-blue-primary" />

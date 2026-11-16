@@ -111,26 +111,29 @@ export async function createCustomerAction(input: {
     const customerId = `CUS-${randomUUID().replace(/-/g, '').slice(0, 8).toUpperCase()}`;
     const now = new Date().toISOString();
 
+    const phoneVal = validated.phone?.trim() || undefined;
+    const emailVal = validated.email?.trim() || undefined;
     const customer: Customer = {
       id: customerId,
       studioId: validated.studioId.toLowerCase(),
       name: validated.name.trim(),
-      phone: validated.phone?.trim() || undefined,
-      email: validated.email?.trim() || undefined,
+      phone: phoneVal,
+      email: emailVal,
+      verificationStatus: phoneVal || emailVal ? "VERIFIED" : "UNVERIFIED",
       address: validated.address?.trim() || undefined,
       ...(validated.notifyWhatsApp !== undefined
-        ? { notifyWhatsApp: Boolean(validated.notifyWhatsApp && validated.phone?.trim()) }
+        ? { notifyWhatsApp: Boolean(validated.notifyWhatsApp && phoneVal) }
         : {}),
       ...(validated.notifyEmail !== undefined
-        ? { notifyEmail: Boolean(validated.notifyEmail && validated.email?.trim()) }
+        ? { notifyEmail: Boolean(validated.notifyEmail && emailVal) }
         : {}),
       isDeleted: false,
       createdAt: now,
       updatedAt: now,
     };
 
-    await saveCustomer(customer);
-    return { success: true, customer };
+    const savedCustomer = await saveCustomer(customer);
+    return { success: true, customer: savedCustomer };
   } catch (err: unknown) {
     console.error("[createCustomerAction] Error:", err);
     return {

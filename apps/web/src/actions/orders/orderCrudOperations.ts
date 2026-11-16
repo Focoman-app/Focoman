@@ -302,6 +302,7 @@ export async function createOrderCore(rawInput: unknown): Promise<{
           name: validated.customerName,
           ...(customerPhone ? { phone: customerPhone } : {}),
           ...(customerEmail ? { email: customerEmail } : {}),
+          verificationStatus: customerPhone || customerEmail ? "VERIFIED" : "UNVERIFIED",
           ...(validated.eventLocation ? { address: validated.eventLocation } : {}),
           isDeleted: false,
           createdAt: nowIso,

@@ -1,6 +1,6 @@
 import 'server-only';
 import { getApps, initializeApp, cert, App } from 'firebase-admin/app';
-import { getFirestore, Firestore } from 'firebase-admin/firestore';
+import { FieldValue, getFirestore, Firestore } from 'firebase-admin/firestore';
 import type {
   Studio,
   StudioMember,
@@ -841,6 +841,23 @@ export async function restoreOrder(orderId: string): Promise<boolean> {
 // 3. CUSTOMERS (CRM)
 // ============================================================================
 
+function computeCustomerVerificationStatus(customer: {
+  phone?: string | null;
+  email?: string | null;
+}): 'VERIFIED' | 'UNVERIFIED' {
+  const hasPhone = Boolean(customer.phone && customer.phone.trim().length > 0);
+  const hasEmail = Boolean(customer.email && customer.email.trim().length > 0);
+  return hasPhone || hasEmail ? 'VERIFIED' : 'UNVERIFIED';
+}
+
+function normalizeCustomerRecord(customer: Customer): Customer {
+  return {
+    ...customer,
+    verificationStatus:
+      customer.verificationStatus ?? computeCustomerVerificationStatus(customer),
+  };
+}
+
 export async function getCustomersByStudio(studioId: string): Promise<Customer[]> {
   const firestore = getFirestoreServerInstance();
   const snap = await firestore
@@ -848,7 +865,7 @@ export async function getCustomersByStudio(studioId: string): Promise<Customer[]
     .where('studioId', '==', studioId.toLowerCase())
     .get();
   return snap.docs
-    .map((d) => d.data() as Customer)
+    .map((d) => normalizeCustomerRecord(d.data() as Customer))
     .filter((c) => !c.isDeleted);
 }
 
@@ -859,7 +876,7 @@ export async function getDeletedCustomersByStudio(studioId: string): Promise<Cus
     .where('studioId', '==', studioId.toLowerCase())
     .get();
   return snap.docs
-    .map((d) => d.data() as Customer)
+    .map((d) => normalizeCustomerRecord(d.data() as Customer))
     .filter((c) => !!c.isDeleted);
 }
 
@@ -867,7 +884,7 @@ export async function getCustomerById(customerId: string): Promise<Customer | nu
   const firestore = getFirestoreServerInstance();
   const doc = await firestore.collection('customers').doc(customerId).get();
   if (doc.exists) {
-    const customer = doc.data() as Customer;
+    const customer = normalizeCustomerRecord(doc.data() as Customer);
     if (customer.isDeleted) return null;
     return customer;
   }
@@ -877,22 +894,58 @@ export async function getCustomerById(customerId: string): Promise<Customer | nu
 export async function getCustomerByIdIncludeDeleted(customerId: string): Promise<Customer | null> {
   const firestore = getFirestoreServerInstance();
   const doc = await firestore.collection('customers').doc(customerId).get();
-  if (doc.exists) return doc.data() as Customer;
+  if (doc.exists) return normalizeCustomerRecord(doc.data() as Customer);
   return null;
 }
 
 export async function saveCustomer(customer: Customer): Promise<Customer> {
   const firestore = getFirestoreServerInstance();
-  await firestore.collection('customers').doc(customer.id).set(customer, { merge: true });
-  return customer;
+  const verificationStatus = computeCustomerVerificationStatus(customer);
+  const record: Customer = {
+    ...customer,
+    verificationStatus,
+  };
+  await firestore.collection('customers').doc(customer.id).set(record, { merge: true });
+  return record;
 }
 
 export async function updateCustomer(customerId: string, updates: Partial<Customer>): Promise<Customer | null> {
   const firestore = getFirestoreServerInstance();
   const ref = firestore.collection('customers').doc(customerId);
-  await ref.update({ ...updates, updatedAt: new Date().toISOString() });
+  const existingSnap = await ref.get();
+  const existing = existingSnap.exists ? (existingSnap.data() as Customer) : null;
+
+  const nextPhone =
+    'phone' in updates ? (updates.phone?.trim() || undefined) : existing?.phone;
+  const nextEmail =
+    'email' in updates ? (updates.email?.trim() || undefined) : existing?.email;
+  const nextAddress =
+    'address' in updates ? (updates.address?.trim() || undefined) : existing?.address;
+
+  const verificationStatus = computeCustomerVerificationStatus({
+    phone: nextPhone,
+    email: nextEmail,
+  });
+
+  const firestoreUpdates: Record<string, unknown> = {
+    ...updates,
+    verificationStatus,
+    updatedAt: new Date().toISOString(),
+  };
+
+  if ('phone' in updates) {
+    firestoreUpdates.phone = nextPhone ?? FieldValue.delete();
+  }
+  if ('email' in updates) {
+    firestoreUpdates.email = nextEmail ?? FieldValue.delete();
+  }
+  if ('address' in updates) {
+    firestoreUpdates.address = nextAddress ?? FieldValue.delete();
+  }
+
+  await ref.update(firestoreUpdates);
   const snap = await ref.get();
-  return snap.exists ? (snap.data() as Customer) : null;
+  return snap.exists ? normalizeCustomerRecord(snap.data() as Customer) : null;
 }
 
 export async function softDeleteCustomer(customerId: string, deletedByUid: string): Promise<boolean> {

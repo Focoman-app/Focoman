@@ -46,11 +46,12 @@ const PLAN_OPTIONS: readonly PlanOption[] = [
     id: "PROFESSIONAL",
     name: "Professional",
     price: "₹1,999/month",
-    summary: "Starter tools with WhatsApp Business lead capture, WhatsApp operations bot, invoices & receipts, and advanced business reporting.",
+    summary: "Starter tools with WhatsApp Business lead capture, WhatsApp operations bot, pre-anniversary memory reminders, invoices & receipts, and advanced business reporting.",
     features: [
       "Everything in Starter",
       "WhatsApp Business lead capture (Full multi-channel leads)",
       "WhatsApp notifications and studio operations bot",
+      "Pre-anniversary & event reminders (share memories for repeat leads)",
       "Official invoices and payment receipts",
       "Advanced business reports, analytics, and Excel exports",
     ],

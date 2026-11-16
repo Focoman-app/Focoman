@@ -20,6 +20,7 @@ import {
   getLocalDefaultWorkspace,
   subscribeToDefaultWorkspaceChanges,
 } from "@/lib/workspaceDefaults";
+import { getEffectiveStudioFeatures, getEffectiveStudioTier } from "@/lib/proEntitlements";
 
 function SettingsPageContent() {
   const params = useParams();
@@ -28,6 +29,8 @@ function SettingsPageContent() {
   const { studio, user, getIdToken } = useStudioWorkspace();
 
   const isOwner = studio.ownerId === user?.uid || studio.ownerEmail?.toLowerCase() === user?.email?.toLowerCase();
+  const effectiveTier = getEffectiveStudioTier(studio);
+  const effectiveFeatures = getEffectiveStudioFeatures(studio.ownerEmail, studio.features, studio.planInfo);
 
   // -------------------------------------------------------------
   // STUDIO SETTINGS STATE
@@ -55,6 +58,7 @@ function SettingsPageContent() {
     studio.serviceCrewMapping || {}
   );
   const [savingCrewMapping, setSavingCrewMapping] = useState(false);
+  const [crewMappingNotice, setCrewMappingNotice] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   // Delete / Leave Studio Modal State
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -127,6 +131,7 @@ function SettingsPageContent() {
   };
 
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!isOwner) return;
     const file = e.target.files?.[0];
     if (!file) return;
     setLogoError(null);
@@ -141,12 +146,38 @@ function SettingsPageContent() {
     const reader = new FileReader();
     reader.onload = (event) => {
       const result = event.target?.result as string;
-      setLogoUrl(result);
+      if (!result) return;
+      if (file.type === "image/svg+xml" || result.length <= 250_000) {
+        setLogoUrl(result);
+        return;
+      }
+      const img = new Image();
+      img.onload = () => {
+        const maxDim = 256;
+        const scale = Math.min(1, maxDim / Math.max(img.width || maxDim, img.height || maxDim));
+        const width = Math.max(1, Math.round((img.width || maxDim) * scale));
+        const height = Math.max(1, Math.round((img.height || maxDim) * scale));
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          setLogoUrl(result);
+          return;
+        }
+        ctx.drawImage(img, 0, 0, width, height);
+        setLogoUrl(canvas.toDataURL("image/webp", 0.85));
+      };
+      img.onerror = () => {
+        setLogoError("Could not process the selected image file.");
+      };
+      img.src = result;
     };
     reader.readAsDataURL(file);
   };
 
   const handleRemoveLogo = () => {
+    if (!isOwner) return;
     setLogoUrl("");
     setLogoError(null);
   };
@@ -249,7 +280,7 @@ function SettingsPageContent() {
   const handleSaveServiceCrewMapping = async () => {
     if (!isOwner) return;
     setSavingCrewMapping(true);
-    setAutoAssignNotice(null);
+    setCrewMappingNotice(null);
     try {
       const token = await getIdToken(true);
       if (!token) throw new Error("Authentication token unavailable.");
@@ -259,20 +290,20 @@ function SettingsPageContent() {
         idToken: token,
       });
       if (res.success) {
-        setAutoAssignNotice({
+        setCrewMappingNotice({
           type: "success",
           text: "Service-to-crew auto-assignment mapping saved.",
         });
         router.refresh();
-        setTimeout(() => setAutoAssignNotice(null), 4000);
+        setTimeout(() => setCrewMappingNotice(null), 4000);
       } else {
-        setAutoAssignNotice({
+        setCrewMappingNotice({
           type: "error",
           text: res.error || "Failed to save crew mapping.",
         });
       }
     } catch (err: unknown) {
-      setAutoAssignNotice({
+      setCrewMappingNotice({
         type: "error",
         text: err instanceof Error ? err.message : "Failed to save crew mapping.",
       });
@@ -456,239 +487,257 @@ function SettingsPageContent() {
                 </p>
               )}
 
-              {/* Service-to-Crew Auto-Assign Mapping */}
-              <div className="pt-3 border-t border-border-divider space-y-3">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                  <div>
-                    <h3 className="text-xs font-bold uppercase tracking-wider text-text-tertiary">
-                      Service-to-Crew Mapping
-                    </h3>
-                    <p className="mt-0.5 text-xs text-text-secondary">
-                      Map one or multiple crew members to each catalog service. At order confirmation, mapped available crew are assigned automatically (skill-matched fallback applies when unmapped).
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    disabled={savingCrewMapping || loadingCrewRoster}
-                    onClick={() => void handleSaveServiceCrewMapping()}
-                    className="rounded-xl bg-brand-purple-primary px-3.5 py-2 text-xs font-bold text-white hover:opacity-90 transition shadow-2xs disabled:opacity-50 shrink-0 cursor-pointer"
-                  >
-                    {savingCrewMapping ? "Saving Mapping..." : "Save Crew Mapping"}
-                  </button>
+              {/* Service-to-Crew Auto-Assign Mapping (Unified Panel with Bottom Save) */}
+              <div className="pt-4 border-t border-border-divider space-y-3">
+                <div>
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-text-tertiary">
+                    Service-to-Crew Mapping
+                  </h3>
+                  <p className="mt-0.5 text-xs text-text-secondary">
+                    Map one or multiple crew members to each catalog service. Select your crew across the services below and save your mapping at the bottom.
+                  </p>
                 </div>
 
                 {loadingCrewRoster ? (
                   <p className="text-xs text-text-tertiary py-2">Loading crew roster...</p>
                 ) : (
-                  <div className="space-y-2.5">
-                    {(studio.configuredServices && studio.configuredServices.length > 0
-                      ? studio.configuredServices
-                      : DEFAULT_STUDIO_SERVICES
-                    )
-                      .filter((svc) => svc.enabled !== false)
-                      .map((svc) => {
-                        const roster = buildAutoAssignRoster(studio, studioSlug, crewMembers);
-                        const selectedIds = serviceCrewMapping[svc.name] || [];
-                        return (
-                          <div
-                            key={svc.id}
-                            className="rounded-2xl border border-border-default bg-surface-app/40 p-3.5 space-y-2"
-                          >
-                            <div className="flex items-center justify-between gap-2">
-                              <div>
-                                <p className="text-xs font-bold text-text-primary">{svc.name}</p>
-                                <p className="text-[11px] text-text-tertiary">{svc.category}</p>
+                  <div className="rounded-2xl border border-border-default bg-surface-app/40 overflow-hidden">
+                    <div className="divide-y divide-border-divider">
+                      {(studio.configuredServices && studio.configuredServices.length > 0
+                        ? studio.configuredServices
+                        : DEFAULT_STUDIO_SERVICES
+                      )
+                        .filter((svc) => svc.enabled !== false)
+                        .map((svc) => {
+                          const roster = buildAutoAssignRoster(studio, studioSlug, crewMembers);
+                          const selectedIds = serviceCrewMapping[svc.name] || [];
+                          return (
+                            <div key={svc.id} className="p-4 space-y-2.5">
+                              <div className="flex items-center justify-between gap-2">
+                                <div>
+                                  <p className="text-xs font-bold text-text-primary">{svc.name}</p>
+                                  <p className="text-[11px] text-text-tertiary">{svc.category}</p>
+                                </div>
+                                <span className="text-[10px] font-bold text-brand-purple-primary bg-brand-purple-background/60 px-2 py-0.5 rounded-full">
+                                  {selectedIds.length} mapped
+                                </span>
                               </div>
-                              <span className="text-[10px] font-bold text-brand-purple-primary bg-brand-purple-background/60 px-2 py-0.5 rounded-full">
-                                {selectedIds.length} mapped
-                              </span>
-                            </div>
-                            <div className="flex flex-wrap gap-2">
-                              {roster.map((member) => {
-                                const isChecked = selectedIds.includes(member.id);
-                                const skillMatches =
-                                  member.isOwner ||
-                                  isSkillRelatedToService(member.skills, svc.name, svc.category);
-                                return (
-                                  <label
-                                    key={member.id}
-                                    className={`inline-flex items-center gap-2 rounded-xl border px-2.5 py-1.5 text-[11px] font-semibold cursor-pointer transition ${
-                                      isChecked
-                                        ? "border-brand-purple-primary bg-white text-brand-purple-primary shadow-2xs"
-                                        : skillMatches
-                                        ? "border-purple-200 bg-purple-50/40 text-text-primary hover:border-brand-purple-primary"
-                                        : "border-border-default bg-white text-text-secondary hover:bg-surface-app"
-                                    }`}
-                                  >
-                                    <input
-                                      type="checkbox"
-                                      checked={isChecked}
-                                      onChange={() =>
-                                        toggleServiceCrewMember(svc.name, member.id)
-                                      }
-                                      className="rounded text-brand-purple-primary"
-                                    />
-                                    <span>
-                                      {member.name}
-                                      {member.isOwner ? " (Owner)" : ""}
-                                    </span>
-                                    {!member.isOwner && member.skills.length > 0 && (
-                                      <span className="text-[10px] font-normal text-text-tertiary">
-                                        · {member.skills.map(getSkillLabel).join(", ")}
+                              <div className="flex flex-wrap gap-2">
+                                {roster.map((member) => {
+                                  const isChecked = selectedIds.includes(member.id);
+                                  const skillMatches =
+                                    member.isOwner ||
+                                    isSkillRelatedToService(member.skills, svc.name, svc.category);
+                                  return (
+                                    <label
+                                      key={member.id}
+                                      className={`inline-flex items-center gap-2 rounded-xl border px-2.5 py-1.5 text-[11px] font-semibold cursor-pointer transition ${
+                                        isChecked
+                                          ? "border-brand-purple-primary bg-white text-brand-purple-primary shadow-2xs"
+                                          : skillMatches
+                                          ? "border-purple-200 bg-purple-50/40 text-text-primary hover:border-brand-purple-primary"
+                                          : "border-border-default bg-white text-text-secondary hover:bg-surface-app"
+                                      }`}
+                                    >
+                                      <input
+                                        type="checkbox"
+                                        checked={isChecked}
+                                        onChange={() =>
+                                          toggleServiceCrewMember(svc.name, member.id)
+                                        }
+                                        className="rounded text-brand-purple-primary"
+                                      />
+                                      <span>
+                                        {member.name}
+                                        {member.isOwner ? " (Owner)" : ""}
                                       </span>
-                                    )}
-                                  </label>
-                                );
-                              })}
+                                      {!member.isOwner && member.skills.length > 0 && (
+                                        <span className="text-[10px] font-normal text-text-tertiary">
+                                          · {member.skills.map(getSkillLabel).join(", ")}
+                                        </span>
+                                      )}
+                                    </label>
+                                  );
+                                })}
+                              </div>
                             </div>
-                          </div>
-                        );
-                      })}
+                          );
+                        })}
+                    </div>
+
+                    <div className="border-t border-border-divider bg-white px-4 py-3.5 space-y-2.5">
+                      {crewMappingNotice && (
+                        <p
+                          className={`text-xs font-semibold p-2.5 rounded-xl border ${
+                            crewMappingNotice.type === "success"
+                              ? "text-emerald-700 bg-emerald-50 border-emerald-200"
+                              : "text-status-error bg-red-50 border-red-200"
+                          }`}
+                        >
+                          {crewMappingNotice.text}
+                        </p>
+                      )}
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <p className="text-[11px] text-text-secondary">
+                          Unmapped services automatically fall back to skill-matched available crew.
+                        </p>
+                        <button
+                          type="button"
+                          disabled={savingCrewMapping || loadingCrewRoster}
+                          onClick={() => void handleSaveServiceCrewMapping()}
+                          className="rounded-xl bg-brand-purple-primary px-4 py-2 text-xs font-bold text-white hover:opacity-90 transition shadow-2xs disabled:opacity-50 shrink-0 cursor-pointer"
+                        >
+                          {savingCrewMapping ? "Saving Mapping..." : "Save Crew Mapping"}
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
             </div>
           )}
 
-          {/* 3. Studio Profile & Identity (Owner Only) */}
+          {/* 3. Studio Profile & Identity (Owner Editable / Member Read-Only Panel) */}
           <div className="order-1 rounded-3xl border border-border-default bg-white p-6 shadow-sm sm:p-8 space-y-6">
             <div>
               <h2 className="text-base font-bold text-text-primary">Studio Profile &amp; Identity</h2>
               <p className="mt-1 text-xs text-text-secondary">
-                Basic information displayed on invoices, client contracts, and WhatsApp templates.
+                {isOwner
+                  ? "Basic information displayed on invoices, client contracts, and WhatsApp templates."
+                  : "Studio profile details displayed on invoices, client portals, and templates (managed by the studio owner)."}
               </p>
             </div>
 
-            <form onSubmit={handleSaveSettings} className="space-y-5">
-              {/* Studio Logo Upload */}
-              <div className="rounded-2xl border border-border-default bg-surface-app/40 p-4 sm:p-5">
-                <label className="block text-xs font-bold text-text-primary mb-1">
-                  Studio Logo (Optional)
-                </label>
-                <p className="text-[11px] text-text-secondary mb-3">
-                  Displayed near your studio name in the dashboard.
-                </p>
+            {isOwner ? (
+              <form onSubmit={handleSaveSettings} className="space-y-5">
+                {/* Studio Logo Upload (Owner Only) */}
+                <div className="rounded-2xl border border-border-default bg-surface-app/40 p-4 sm:p-5">
+                  <label className="block text-xs font-bold text-text-primary mb-1">
+                    Studio Logo (Optional)
+                  </label>
+                  <p className="text-[11px] text-text-secondary mb-3">
+                    Displayed near your studio name in the dashboard.
+                  </p>
 
-                <div className="flex flex-wrap items-center gap-4">
-                  {logoUrl ? (
-                    <div className="relative group">
-                      <img
-                        src={logoUrl}
-                        alt="Studio Logo Preview"
-                        className="w-16 h-16 rounded-2xl object-cover border border-border-default shadow-xs bg-white"
-                      />
-                    </div>
-                  ) : (
-                    <div className="w-16 h-16 rounded-2xl bg-brand-blue-background border border-dashed border-brand-blue-light flex items-center justify-center text-brand-blue-primary font-extrabold text-xl">
-                      {name ? name.charAt(0).toUpperCase() : "S"}
-                    </div>
-                  )}
-
-                  <div className="space-y-1.5">
-                    <div className="flex items-center gap-2">
-                      <label className="cursor-pointer inline-flex items-center gap-1.5 rounded-xl border border-border-default bg-white px-3.5 py-2 text-xs font-semibold text-text-primary hover:bg-slate-50 transition shadow-2xs">
-                        <svg className="w-4 h-4 text-text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-                        </svg>
-                        <span>{logoUrl ? "Change Logo" : "Upload Logo"}</span>
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={handleLogoUpload}
-                          disabled={!isOwner || isSaving}
-                          className="hidden"
+                  <div className="flex flex-wrap items-center gap-4">
+                    {logoUrl ? (
+                      <div className="relative group">
+                        <img
+                          src={logoUrl}
+                          alt="Studio Logo Preview"
+                          className="w-16 h-16 rounded-2xl object-cover border border-border-default shadow-xs bg-white"
                         />
-                      </label>
+                      </div>
+                    ) : (
+                      <div className="w-16 h-16 rounded-2xl bg-brand-blue-background border border-dashed border-brand-blue-light flex items-center justify-center text-brand-blue-primary font-extrabold text-xl">
+                        {name ? name.charAt(0).toUpperCase() : "S"}
+                      </div>
+                    )}
 
-                      {logoUrl && (
-                        <button
-                          type="button"
-                          onClick={handleRemoveLogo}
-                          disabled={!isOwner || isSaving}
-                          className="rounded-xl border border-red-200 px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 transition cursor-pointer"
-                        >
-                          Remove
-                        </button>
+                    <div className="space-y-1.5">
+                      <div className="flex items-center gap-2">
+                        <label className="cursor-pointer inline-flex items-center gap-1.5 rounded-xl border border-border-default bg-white px-3.5 py-2 text-xs font-semibold text-text-primary hover:bg-slate-50 transition shadow-2xs">
+                          <svg className="w-4 h-4 text-text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                          </svg>
+                          <span>{logoUrl ? "Change Logo" : "Upload Logo"}</span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={handleLogoUpload}
+                            disabled={isSaving}
+                            className="hidden"
+                          />
+                        </label>
+
+                        {logoUrl && (
+                          <button
+                            type="button"
+                            onClick={handleRemoveLogo}
+                            disabled={isSaving}
+                            className="rounded-xl border border-red-200 px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 transition cursor-pointer"
+                          >
+                            Remove
+                          </button>
+                        )}
+                      </div>
+                      <p className="text-[10px] text-text-tertiary">
+                        PNG, JPG, WebP, or SVG up to 2MB. Square ratio recommended.
+                      </p>
+                      {logoError && (
+                        <p className="text-[11px] font-semibold text-red-600 mt-1">{logoError}</p>
                       )}
                     </div>
-                    <p className="text-[10px] text-text-tertiary">
-                      PNG, JPG, WebP, or SVG up to 2MB. Square ratio recommended.
-                    </p>
-                    {logoError && (
-                      <p className="text-[11px] font-semibold text-red-600 mt-1">{logoError}</p>
-                    )}
                   </div>
                 </div>
-              </div>
 
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div>
-                  <label className="block text-xs font-bold text-text-primary">Studio Name</label>
-                  <input
-                    type="text"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    disabled={!isOwner || isSaving}
-                    className="mt-1 w-full rounded-xl border border-border-default px-3.5 py-2.5 text-xs text-text-primary outline-none focus:border-brand-blue-primary disabled:bg-slate-50"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-text-primary">Operating City</label>
-                  <input
-                    type="text"
-                    value={city}
-                    onChange={(e) => setCity(e.target.value)}
-                    disabled={!isOwner || isSaving}
-                    className="mt-1 w-full rounded-xl border border-border-default px-3.5 py-2.5 text-xs text-text-primary outline-none focus:border-brand-blue-primary disabled:bg-slate-50"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-text-primary">Website (Optional)</label>
-                  <div className="mt-1 flex rounded-xl border border-border-default bg-white overflow-hidden focus-within:border-brand-blue-primary focus-within:ring-1 focus-within:ring-brand-blue-primary">
-                    <span className="inline-flex items-center px-3 bg-slate-50 text-text-muted text-xs font-medium border-r border-border-default select-none">
-                      https://
-                    </span>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className="block text-xs font-bold text-text-primary">Studio Name</label>
                     <input
                       type="text"
-                      value={website}
-                      onChange={(e) => setWebsite(e.target.value.replace(/^https?:\/\//i, ""))}
-                      disabled={!isOwner || isSaving}
-                      placeholder="yourstudio.com"
-                      className="w-full px-3.5 py-2.5 text-xs text-text-primary outline-none bg-transparent disabled:bg-slate-50 placeholder:text-text-muted"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      disabled={isSaving}
+                      className="mt-1 w-full rounded-xl border border-border-default px-3.5 py-2.5 text-xs text-text-primary outline-none focus:border-brand-blue-primary disabled:bg-slate-50"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-text-primary">Operating City</label>
+                    <input
+                      type="text"
+                      value={city}
+                      onChange={(e) => setCity(e.target.value)}
+                      disabled={isSaving}
+                      className="mt-1 w-full rounded-xl border border-border-default px-3.5 py-2.5 text-xs text-text-primary outline-none focus:border-brand-blue-primary disabled:bg-slate-50"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-text-primary">Website (Optional)</label>
+                    <div className="mt-1 flex rounded-xl border border-border-default bg-white overflow-hidden focus-within:border-brand-blue-primary focus-within:ring-1 focus-within:ring-brand-blue-primary">
+                      <span className="inline-flex items-center px-3 bg-slate-50 text-text-muted text-xs font-medium border-r border-border-default select-none">
+                        https://
+                      </span>
+                      <input
+                        type="text"
+                        value={website}
+                        onChange={(e) => setWebsite(e.target.value.replace(/^https?:\/\//i, ""))}
+                        disabled={isSaving}
+                        placeholder="yourstudio.com"
+                        className="w-full px-3.5 py-2.5 text-xs text-text-primary outline-none bg-transparent disabled:bg-slate-50 placeholder:text-text-muted"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-text-primary">Instagram Handle (Optional)</label>
+                    <input
+                      type="text"
+                      value={instagram}
+                      onChange={(e) => setInstagram(e.target.value)}
+                      disabled={isSaving}
+                      placeholder="@yourstudio"
+                      className="mt-1 w-full rounded-xl border border-border-default px-3.5 py-2.5 text-xs text-text-primary outline-none focus:border-brand-blue-primary disabled:bg-slate-50"
                     />
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-text-primary">Instagram Handle (Optional)</label>
-                  <input
-                    type="text"
-                    value={instagram}
-                    onChange={(e) => setInstagram(e.target.value)}
-                    disabled={!isOwner || isSaving}
-                    placeholder="@yourstudio"
-                    className="mt-1 w-full rounded-xl border border-border-default px-3.5 py-2.5 text-xs text-text-primary outline-none focus:border-brand-blue-primary disabled:bg-slate-50"
-                  />
-                </div>
-              </div>
+                {saveSuccess && (
+                  <p className="text-xs font-semibold text-emerald-600 bg-emerald-50 p-2.5 rounded-xl border border-emerald-200">
+                    ✓ Studio settings updated successfully.
+                  </p>
+                )}
 
-              {saveSuccess && (
-                <p className="text-xs font-semibold text-emerald-600 bg-emerald-50 p-2.5 rounded-xl border border-emerald-200">
-                  ✓ Studio settings updated successfully.
-                </p>
-              )}
+                {saveError && (
+                  <p className="text-xs font-semibold text-status-error bg-red-50 p-2.5 rounded-xl border border-red-200">
+                    {saveError}
+                  </p>
+                )}
 
-              {saveError && (
-                <p className="text-xs font-semibold text-status-error bg-red-50 p-2.5 rounded-xl border border-red-200">
-                  {saveError}
-                </p>
-              )}
-
-              {isOwner && (
                 <div className="flex justify-end pt-2">
                   <button
                     type="submit"
@@ -698,36 +747,198 @@ function SettingsPageContent() {
                     {isSaving ? "Saving Settings..." : "Save Studio Settings"}
                   </button>
                 </div>
-              )}
-            </form>
+              </form>
+            ) : (
+              <div className="space-y-6">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-border-divider pb-5">
+                  <div className="flex items-center gap-4">
+                    {studio.logoUrl ? (
+                      <img
+                        src={studio.logoUrl}
+                        alt={`${studio.name || studioSlug} Logo`}
+                        className="w-14 h-14 rounded-2xl object-cover border border-border-default shadow-xs bg-white shrink-0"
+                      />
+                    ) : (
+                      <div className="w-14 h-14 rounded-2xl bg-brand-blue-background border border-brand-blue-light flex items-center justify-center text-brand-blue-primary font-extrabold text-xl shrink-0">
+                        {(studio.name || studioSlug).charAt(0).toUpperCase()}
+                      </div>
+                    )}
+                    <div>
+                      <span className="text-[11px] font-bold uppercase tracking-widest text-brand-blue-primary">
+                        Studio Identity
+                      </span>
+                      <h3 className="mt-0.5 text-xl font-extrabold tracking-tight text-text-primary">
+                        {studio.name || studioSlug}
+                      </h3>
+                      <p className="text-xs text-text-secondary font-mono">/{studioSlug}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                  <div>
+                    <span className="text-xs font-bold uppercase tracking-wider text-text-tertiary">
+                      Studio Name
+                    </span>
+                    <p className="mt-1 text-sm font-semibold text-text-primary">
+                      {studio.name || studioSlug}
+                    </p>
+                  </div>
+
+                  <div>
+                    <span className="text-xs font-bold uppercase tracking-wider text-text-tertiary">
+                      Operating City
+                    </span>
+                    <p className="mt-1 text-sm font-semibold text-text-primary">
+                      {studio.city || "—"}
+                    </p>
+                  </div>
+
+                  <div>
+                    <span className="text-xs font-bold uppercase tracking-wider text-text-tertiary">
+                      Website
+                    </span>
+                    {(() => {
+                      const displayWebsite = (studio.website || "").trim().replace(/^https?:\/\//i, "");
+                      return (
+                        <p className="mt-1 text-sm font-semibold text-text-primary break-all">
+                          {displayWebsite ? (
+                            <a
+                              href={`https://${displayWebsite}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-brand-blue-primary hover:underline"
+                            >
+                              https://{displayWebsite}
+                            </a>
+                          ) : (
+                            "—"
+                          )}
+                        </p>
+                      );
+                    })()}
+                  </div>
+
+                  <div>
+                    <span className="text-xs font-bold uppercase tracking-wider text-text-tertiary">
+                      Instagram
+                    </span>
+                    <p className="mt-1 text-sm font-semibold text-text-primary break-words">
+                      {studio.instagram || "—"}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* 4. Plan Information */}
-          <div className="order-4 rounded-3xl border border-border-default bg-white p-6 shadow-sm sm:p-8 space-y-4">
+          <div className="order-4 rounded-3xl border border-border-default bg-white p-6 shadow-sm sm:p-8 space-y-5">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h2 className="text-base font-bold text-text-primary">Plan Information</h2>
                 <p className="mt-1 text-xs text-text-secondary max-w-xl leading-relaxed">
-                  Your current plan and included features are shown here. Plan changes are managed from checkout.
+                  Your current subscription tier and included modules are outlined below. Plan changes are managed from checkout.
                 </p>
               </div>
-              <Link
-                href={`/checkout?studio=${studioSlug}`}
-                className="inline-flex items-center justify-center rounded-xl bg-brand-blue-primary px-4 py-2.5 text-xs font-bold text-white hover:bg-brand-blue-hover transition shadow-xs"
-              >
-                Upgrade Plan →
-              </Link>
+              {isOwner && (
+                <Link
+                  href={`/checkout?studio=${studioSlug}`}
+                  className="inline-flex items-center justify-center rounded-xl bg-brand-blue-primary px-4 py-2.5 text-xs font-bold text-white hover:bg-brand-blue-hover transition shadow-xs shrink-0"
+                >
+                  {effectiveTier === "COMPLETE" ? "Manage Plan →" : "Upgrade Plan →"}
+                </Link>
+              )}
             </div>
-            <div className="rounded-2xl border border-border-default bg-surface-app p-4 text-xs">
-              <p className="font-bold text-text-primary">{studio.planInfo?.plan || "FREE"} Plan</p>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {(studio.planInfo?.selectedCapabilities || ["OMS_CORE"]).map((capability) => (
-                  <span key={capability} className="rounded-md border border-brand-blue-light bg-brand-blue-background px-2 py-1 text-[10px] font-bold text-brand-blue-primary">
-                    {capability.replace(/_/g, " ")}
-                  </span>
-                ))}
-              </div>
-            </div>
+
+            {(() => {
+              const planTitle =
+                effectiveTier === "COMPLETE"
+                  ? "Professional Plan (₹1,999/month)"
+                  : effectiveTier === "PROFESSIONAL"
+                  ? "Starter Plan (₹999/month)"
+                  : "Free Plan (₹0/forever)";
+
+              const planItems: Array<{ title: string; description: string }> = [
+                {
+                  title: "OMS Basic — Order Management & Lifecycle Pipeline",
+                  description:
+                    "Create and track confirmed orders end-to-end with a visual order lifecycle pipeline from booking to final delivery.",
+                },
+              ];
+
+              if (effectiveFeatures.driveReview) {
+                planItems.push({
+                  title: "Google Drive Client Review",
+                  description:
+                    "Link Google Drive folders for in-app photo previews, client photo selections, and proofing comments.",
+                });
+              }
+
+              if (effectiveFeatures.crm) {
+                planItems.push({
+                  title: "Customer Data & Relations (CRM)",
+                  description:
+                    "Store verified/unverified customer profiles, order history, payment balances, and capture Instagram & Website / Google Maps leads.",
+                });
+              }
+
+              if (effectiveFeatures.erp) {
+                planItems.push({
+                  title: "Studio Operations (ERP)",
+                  description:
+                    "Manage studio crew members, skills, availability checks, task assignments, and auto-assign workflow rules.",
+                });
+              }
+
+              if (effectiveFeatures.basicDashboard) {
+                planItems.push({
+                  title: "Basic Business Dashboard",
+                  description:
+                    "Track active order counts, total studio revenue overview, and pending customer payment balances.",
+                });
+              }
+
+              if (effectiveFeatures.whatsapp || effectiveTier === "COMPLETE") {
+                planItems.push({
+                  title: "WhatsApp Operations, Alerts & Lead Capture",
+                  description:
+                    "Send automated milestone notifications, capture WhatsApp Business enquiries, and query studio status via the interactive bot.",
+                });
+                planItems.push({
+                  title: "Pre-Anniversary & Event Reminders",
+                  description:
+                    "Send pre-anniversary and main-event reminders to share photography memory moments and create repeat lead opportunities.",
+                });
+              }
+
+              if (effectiveFeatures.reports) {
+                planItems.push({
+                  title: "Business Reports, Invoices & Excel Exports",
+                  description:
+                    "Access monthly/yearly analytics, issue official invoices and receipts, and download Excel exports across orders and CRM.",
+                });
+              }
+
+              return (
+                <div className="rounded-2xl border border-border-default bg-surface-app/40 overflow-hidden">
+                  <div className="border-b border-border-divider bg-white px-4 py-3 flex items-center justify-between gap-2">
+                    <span className="text-xs font-extrabold text-text-primary">{planTitle}</span>
+                    <span className="text-[11px] font-semibold text-text-secondary">
+                      {planItems.length} {planItems.length === 1 ? "module" : "modules"} included
+                    </span>
+                  </div>
+                  <div className="divide-y divide-border-divider">
+                    {planItems.map((item) => (
+                      <div key={item.title} className="px-4 py-3 space-y-0.5">
+                        <p className="text-xs font-bold text-text-primary">{item.title}</p>
+                        <p className="text-xs text-text-secondary leading-relaxed">{item.description}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
           </div>
 
           {/* 5. Danger Zone: Delete Studio (Owner) or Leave Studio (Member) */}

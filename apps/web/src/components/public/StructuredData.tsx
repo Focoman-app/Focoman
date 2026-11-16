@@ -50,7 +50,7 @@ export function StructuredData() {
             "price": "1999",
             "priceCurrency": "INR",
             "billingDuration": "P1M",
-            "description": "WhatsApp Business lead capture, WhatsApp Operations and Bot, invoices and receipts, and advanced reports with exports.",
+            "description": "WhatsApp Business lead capture, WhatsApp Operations and Bot, pre-anniversary memory reminders for repeat leads, invoices and receipts, and advanced reports with exports.",
           },
         ],
       },
