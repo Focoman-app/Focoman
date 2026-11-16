@@ -141,16 +141,23 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (!(await hasStudioCapability(studioSlug, "BUSINESS_REPORTS"))) {
+    const [hasStarterLeads, hasWhatsAppLeads] = await Promise.all([
+      hasStudioCapability(studioSlug, "CUSTOMER_CRM"),
+      hasStudioCapability(studioSlug, "WHATSAPP_OPERATIONS").then(
+        (ok) => ok || hasStudioCapability(studioSlug, "BUSINESS_REPORTS")
+      ),
+    ]);
+
+    if (!hasStarterLeads) {
       return NextResponse.json(
-        { error: "Multi-channel lead capture requires the ₹1,999 Professional plan." },
+        { error: "Instagram & Website lead capture requires the ₹999 Starter plan or higher." },
         { status: 403, headers: CORS_HEADERS }
       );
     }
 
     if (studio.leadWebhookConfig?.enabled === false) {
       return NextResponse.json(
-        { error: "Multi-channel lead capture is currently disabled for this studio." },
+        { error: "Lead capture is currently disabled for this studio." },
         { status: 403, headers: CORS_HEADERS }
       );
     }
@@ -220,8 +227,15 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Case 2: Meta WhatsApp Business Cloud API Webhook
+    // Case 2: Meta WhatsApp Business Cloud API Webhook (Professional ₹1,999+ Plan)
     if (body.object === "whatsapp_business_account" || body.entry?.[0]?.changes?.[0]?.value?.messages) {
+      if (!hasWhatsAppLeads) {
+        return NextResponse.json(
+          { error: "WhatsApp lead capture requires the ₹1,999 Professional plan." },
+          { status: 403, headers: CORS_HEADERS }
+        );
+      }
+
       const value = body.entry?.[0]?.changes?.[0]?.value || {};
       const msg = value.messages?.[0];
       const contact = value.contacts?.[0];
@@ -253,11 +267,18 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Case 3: Studio Website Form / Direct Webhook JSON Submission
+    // Case 3: Studio Website Form / Google Maps Enquiry Link / Direct Webhook JSON Submission
     const rawChannel = String(body.channel || "WEBSITE").toUpperCase();
     const channel: LeadChannel = ["INSTAGRAM", "WHATSAPP", "WEBSITE", "DIRECT"].includes(rawChannel)
       ? (rawChannel as LeadChannel)
       : "WEBSITE";
+
+    if (channel === "WHATSAPP" && !hasWhatsAppLeads) {
+      return NextResponse.json(
+        { error: "WhatsApp lead capture requires the ₹1,999 Professional plan." },
+        { status: 403, headers: CORS_HEADERS }
+      );
+    }
 
     const name = String(body.name || body.customerName || body.fullName || "Website Inquiry").trim();
     const phone = String(body.phone || body.customerPhone || body.mobile || "").trim();

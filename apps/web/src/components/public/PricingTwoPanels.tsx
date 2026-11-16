@@ -100,7 +100,7 @@ export function PricingTwoPanels({ hasMultiStudios = false }: PricingTwoPanelsPr
                 Advanced OMS, CRM and Studio Operations
               </h2>
               <p className="mt-1.5 text-xs sm:text-sm text-[#57534E] leading-relaxed">
-                Includes everything in the Free plan, plus Google Drive preview and selection, customer management, studio operations, and Basic Business Dashboard.
+                Includes everything in the Free plan, plus Google Drive preview and selection, Instagram &amp; Website / Google Maps lead capture, customer management, studio operations, and Basic Business Dashboard.
               </p>
             </div>
 
@@ -154,6 +154,15 @@ export function PricingTwoPanels({ hasMultiStudios = false }: PricingTwoPanelsPr
                   </span>
                   <span className="text-[#1C1917] font-medium leading-tight">
                     Basic Business Dashboard with order counts, revenue overview, and pending payment overview
+                  </span>
+                </div>
+
+                <div className="flex items-start gap-2.5">
+                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-orange-100 text-[11px] font-extrabold text-brand-orange-primary mt-0.5 border border-orange-200">
+                    ✓
+                  </span>
+                  <span className="text-[#1C1917] font-medium leading-tight">
+                    Instagram &amp; Website / Google Maps Lead Capture (with Hosted Studio Enquiry Form)
                   </span>
                 </div>
               </div>
@@ -240,7 +249,7 @@ export function PricingTwoPanels({ hasMultiStudios = false }: PricingTwoPanelsPr
                 </div>
                 <div className="flex items-start gap-2.5">
                   <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-[11px] font-extrabold text-emerald-700 mt-0.5 border border-emerald-300">✓</span>
-                  <span className="text-[#1C1917] font-medium leading-tight">Multi-Channel Leads</span>
+                  <span className="text-[#1C1917] font-medium leading-tight">WhatsApp Business Lead Capture (Full Multi-Channel Leads)</span>
                 </div>
               </div>
             </div>

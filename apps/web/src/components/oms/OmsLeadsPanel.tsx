@@ -47,6 +47,8 @@ interface OmsLeadsPanelProps {
   ordersCount: number;
   leads: StudioLead[];
   webhookConfig: StudioLeadWebhookConfig | null;
+  hasWhatsAppLeads?: boolean;
+  onLockedWhatsAppLeadAction?: () => void;
   onSwitchToOrders: (selectOrderId?: string) => void;
   getIdToken: (forceRefresh?: boolean) => Promise<string | null>;
   onRefreshAll: () => Promise<void>;
@@ -57,6 +59,8 @@ export function OmsLeadsPanel({
   ordersCount,
   leads,
   webhookConfig,
+  hasWhatsAppLeads = false,
+  onLockedWhatsAppLeadAction,
   onSwitchToOrders,
   getIdToken,
   onRefreshAll,
@@ -113,6 +117,9 @@ export function OmsLeadsPanel({
     typeof window !== "undefined" ? window.location.origin : "https://focoman.web.app";
   const webhookKey = webhookConfig?.webhookKey || `fcm_wh_${studioSlug}`;
   const webhookUrl = `${origin}/api/webhooks/leads?studio=${studioSlug}&key=${webhookKey}`;
+  const enquiryUrl = `${origin}/enquire/${studioSlug}`;
+  const googleMapsEnquiryUrl = `${enquiryUrl}?source=google-maps`;
+  const instagramBioEnquiryUrl = `${enquiryUrl}?source=instagram`;
 
   const websiteSnippet = `<script>
 async function submitFocomanLead(formEl) {
@@ -169,7 +176,9 @@ async function submitFocomanLead(formEl) {
       if (res.success) {
         showNotice(
           "success",
-          "Channel configuration saved! Instagram, WhatsApp & Website leads are unified here."
+          hasWhatsAppLeads
+            ? "Channel configuration saved! Instagram, WhatsApp & Website / Google Maps leads are unified here."
+            : "Channel configuration saved! Instagram & Website / Google Maps leads are unified here."
         );
         setShowSetupModal(false);
         await onRefreshAll();
@@ -181,7 +190,19 @@ async function submitFocomanLead(formEl) {
     }
   };
 
+  const handleLockedWhatsApp = () => {
+    if (onLockedWhatsAppLeadAction) {
+      onLockedWhatsAppLeadAction();
+      return;
+    }
+    showNotice("error", "WhatsApp lead capture requires the Professional (₹1,999/mo) plan.");
+  };
+
   const handleSimulateWebhookLead = async (simChannel: "INSTAGRAM" | "WHATSAPP" | "WEBSITE") => {
+    if (simChannel === "WHATSAPP" && !hasWhatsAppLeads) {
+      handleLockedWhatsApp();
+      return;
+    }
     setBusy(true);
     try {
       const samplePayloads = {
@@ -264,6 +285,10 @@ async function submitFocomanLead(formEl) {
 
   const handleCreateLeadManual = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (newLeadForm.channel === "WHATSAPP" && !hasWhatsAppLeads) {
+      handleLockedWhatsApp();
+      return;
+    }
     setBusy(true);
     try {
       const token = await getIdToken(true);
@@ -376,6 +401,18 @@ async function submitFocomanLead(formEl) {
               <SlidersHorizontal className="h-3.5 w-3.5 text-brand-blue-primary" />
               <span>Configure Channels</span>
             </button>
+            <button
+              type="button"
+              onClick={() => void copyText("header-enquiry", googleMapsEnquiryUrl)}
+              className="rounded-xl border border-border-default bg-white px-3.5 py-2 text-xs font-bold text-text-primary hover:bg-surface-app hover:border-brand-blue-primary transition inline-flex items-center gap-1.5 shadow-2xs cursor-pointer"
+            >
+              {copiedField === "header-enquiry" ? (
+                <Check className="h-3.5 w-3.5 text-emerald-600" />
+              ) : (
+                <Copy className="h-3.5 w-3.5 text-brand-blue-primary" />
+              )}
+              <span>{copiedField === "header-enquiry" ? "Copied Enquiry Link" : "Copy Enquiry Link"}</span>
+            </button>
           </div>
 
           <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-border-default/70 pt-3.5">
@@ -462,7 +499,9 @@ async function submitFocomanLead(formEl) {
                 No {channelFilter === "ALL" ? "" : CHANNEL_BADGES[channelFilter].label} leads found
               </p>
               <p className="text-xs text-text-tertiary max-w-md mx-auto">
-                Leads from Instagram, WhatsApp, your Studio Website, and direct enquiries appear here before being converted into confirmed orders.
+                {hasWhatsAppLeads
+                  ? "Leads from Instagram, WhatsApp, Google Maps / Search, and your Studio Website appear here before being converted into confirmed orders."
+                  : "Leads from Instagram, Google Maps / Search, your Studio Website, and direct enquiries appear here. Upgrade to Professional (₹1,999/mo) to unlock WhatsApp Business lead capture."}
               </p>
               <div className="flex flex-wrap justify-center gap-2 pt-1">
                 <button
@@ -471,8 +510,17 @@ async function submitFocomanLead(formEl) {
                   className="rounded-xl border border-brand-blue-light bg-brand-blue-background px-3.5 py-1.5 text-xs font-bold text-brand-blue-primary hover:bg-sky-100 transition inline-flex items-center gap-1.5"
                 >
                   <Webhook className="h-3.5 w-3.5" />
-                  <span>Configure Channels &amp; Webhook</span>
+                  <span>Configure Channels &amp; Enquiry Link</span>
                 </button>
+                <a
+                  href={enquiryUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="rounded-xl border border-border-default bg-surface-app px-3 py-1.5 text-xs font-bold text-text-primary hover:border-brand-blue-primary transition inline-flex items-center gap-1.5"
+                >
+                  <ExternalLink className="h-3.5 w-3.5 text-brand-blue-primary" />
+                  <span>Open Hosted Enquiry Form</span>
+                </a>
                 <button
                   type="button"
                   disabled={busy}
@@ -486,10 +534,14 @@ async function submitFocomanLead(formEl) {
                   type="button"
                   disabled={busy}
                   onClick={() => void handleSimulateWebhookLead("WHATSAPP")}
-                  className="rounded-xl border border-border-default bg-surface-app px-3 py-1.5 text-xs font-bold text-text-primary hover:border-emerald-500 transition inline-flex items-center gap-1.5"
+                  className={`rounded-xl border border-border-default px-3 py-1.5 text-xs font-bold transition inline-flex items-center gap-1.5 ${
+                    hasWhatsAppLeads
+                      ? "bg-surface-app text-text-primary hover:border-emerald-500"
+                      : "bg-slate-50 text-text-tertiary hover:border-amber-400"
+                  }`}
                 >
                   <MessageCircle className="h-3.5 w-3.5 text-emerald-600" />
-                  <span>Test WhatsApp Lead</span>
+                  <span>{hasWhatsAppLeads ? "Test WhatsApp Lead" : "Test WhatsApp Lead (Pro)"}</span>
                 </button>
                 <button
                   type="button"
@@ -741,10 +793,12 @@ async function submitFocomanLead(formEl) {
                   OMS Lead Channels · 1-Time Setup
                 </span>
                 <h3 className="text-lg font-extrabold text-text-primary">
-                  Enable &amp; Configure Multi-Channel Leads
+                  Enable &amp; Configure Lead Channels
                 </h3>
                 <p className="text-xs text-text-secondary mt-0.5">
-                  Unify leads from Instagram Business, WhatsApp Business, and your Studio Website inside OMS.
+                  {hasWhatsAppLeads
+                    ? "Unify leads from Instagram Business, WhatsApp Business, Google Maps / Search, and your Studio Website inside OMS."
+                    : "Capture leads from Instagram Business, Google Maps / Search, and your Studio Website inside OMS."}
                 </p>
               </div>
               <button
@@ -761,10 +815,12 @@ async function submitFocomanLead(formEl) {
               <div className="rounded-2xl border border-border-default bg-surface-app p-4 flex items-center justify-between gap-4">
                 <div>
                   <p className="font-bold text-text-primary text-sm">
-                    Enable Multi-Channel Lead Capture (Instagram, WhatsApp &amp; Website)
+                    {hasWhatsAppLeads
+                      ? "Enable Multi-Channel Lead Capture (Instagram, WhatsApp & Website / Maps)"
+                      : "Enable Lead Capture (Instagram, Website & Google Maps)"}
                   </p>
                   <p className="text-xs text-text-secondary mt-0.5">
-                    When enabled, inquiries sent to your connected channels automatically appear in the OMS Leads tab.
+                    When enabled, inquiries sent to your connected channels or hosted enquiry link automatically appear in OMS Leads.
                   </p>
                 </div>
                 <label className="relative inline-flex cursor-pointer items-center shrink-0">
@@ -780,11 +836,84 @@ async function submitFocomanLead(formEl) {
                 </label>
               </div>
 
+              {/* Hosted Studio Enquiry Link (No Website Needed) */}
+              <div className="rounded-2xl border border-emerald-200 bg-emerald-50/40 p-4 space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-bold text-emerald-800 uppercase tracking-wider text-[10px]">
+                    No Website Needed · Google Maps, Google Search &amp; Bio Link
+                  </span>
+                  <a
+                    href={enquiryUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[11px] font-bold text-brand-blue-primary hover:underline inline-flex items-center gap-1"
+                  >
+                    <span>Preview Form</span>
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                </div>
+                <p className="text-[11px] text-text-secondary leading-relaxed">
+                  Paste your Hosted Enquiry Link in your{" "}
+                  <strong className="text-text-primary">Google Business Profile</strong>{" "}
+                  (Website or Appointments link) so anyone finding your studio on{" "}
+                  <strong className="text-text-primary">Google Maps or Google Search (Chrome)</strong>{" "}
+                  can submit a booking enquiry straight into OMS Leads.
+                </p>
+
+                <div className="space-y-2">
+                  <div>
+                    <label className="block font-bold text-text-primary mb-1">
+                      Google Maps &amp; Google Search Link (Paste in Google Business Profile)
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        readOnly
+                        value={googleMapsEnquiryUrl}
+                        className="w-full rounded-xl border border-border-default bg-white px-3 py-2 font-mono text-[11px] text-text-primary"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => void copyText("gmb-url", googleMapsEnquiryUrl)}
+                        className="rounded-xl bg-text-primary px-3 py-2 text-white font-bold inline-flex items-center gap-1 shrink-0"
+                      >
+                        {copiedField === "gmb-url" ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                        <span>{copiedField === "gmb-url" ? "Copied" : "Copy"}</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-text-primary mb-1">
+                      Instagram Bio Link (Optional backup alongside DM webhook)
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        readOnly
+                        value={instagramBioEnquiryUrl}
+                        className="w-full rounded-xl border border-border-default bg-white px-3 py-2 font-mono text-[11px] text-text-primary"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => void copyText("ig-bio-url", instagramBioEnquiryUrl)}
+                        className="rounded-xl border border-border-default bg-white px-3 py-2 text-text-primary font-bold inline-flex items-center gap-1 shrink-0"
+                      >
+                        {copiedField === "ig-bio-url" ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                        <span>{copiedField === "ig-bio-url" ? "Copied" : "Copy"}</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               {/* Meta Webhook One-Time Credentials */}
               <div className="rounded-2xl border border-brand-blue-light bg-brand-blue-background/50 p-4 space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="font-bold text-brand-blue-primary uppercase tracking-wider text-[10px]">
-                    1-Time Meta Webhook Setup (Instagram &amp; WhatsApp Business)
+                    {hasWhatsAppLeads
+                      ? "1-Time Meta Webhook Setup (Instagram & WhatsApp Business)"
+                      : "1-Time Meta Webhook Setup (Instagram Business)"}
                   </span>
                   <span className="badge-status-success">
                     {configDraft.enabled ? "Active Endpoint" : "Paused"}
@@ -851,20 +980,32 @@ async function submitFocomanLead(formEl) {
                   />
                 </div>
                 <div>
-                  <label className="block font-bold text-text-primary mb-1">
-                    WhatsApp Business Number
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block font-bold text-text-primary">
+                      WhatsApp Business Number
+                    </label>
+                    {!hasWhatsAppLeads && (
+                      <button
+                        type="button"
+                        onClick={handleLockedWhatsApp}
+                        className="text-[10px] font-bold text-brand-orange-primary hover:underline"
+                      >
+                        Professional (₹1,999/mo)
+                      </button>
+                    )}
+                  </div>
                   <input
                     type="text"
+                    disabled={!hasWhatsAppLeads}
                     value={configDraft.whatsappBusinessPhone}
                     onChange={(e) => setConfigDraft({ ...configDraft, whatsappBusinessPhone: e.target.value })}
-                    placeholder="+91 98765 43210"
-                    className="w-full rounded-xl border border-border-default px-3 py-2 text-xs"
+                    placeholder={hasWhatsAppLeads ? "+91 98765 43210" : "Upgrade to Professional (₹1,999/mo)"}
+                    className="w-full rounded-xl border border-border-default px-3 py-2 text-xs disabled:bg-slate-100 disabled:text-text-tertiary"
                   />
                 </div>
                 <div className="sm:col-span-2">
                   <label className="block font-bold text-text-primary mb-1">
-                    External Studio Website Domain (Optional)
+                    External Studio Website Domain (Optional — if you already have a website)
                   </label>
                   <input
                     type="text"
@@ -876,28 +1017,40 @@ async function submitFocomanLead(formEl) {
                 </div>
               </div>
 
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={configDraft.autoCaptureWhatsAppUnknownSenders}
-                  onChange={(e) =>
-                    setConfigDraft({
-                      ...configDraft,
-                      autoCaptureWhatsAppUnknownSenders: e.target.checked,
-                    })
-                  }
-                  className="rounded border-border-default"
-                />
-                <span className="font-semibold text-text-primary">
-                  Auto-capture inbound WhatsApp messages from new customer phone numbers into OMS Leads
-                </span>
-              </label>
+              <div className="flex items-start justify-between gap-2 rounded-xl border border-border-default bg-surface-app/60 px-3 py-2.5">
+                <label className={`flex items-center gap-2 ${hasWhatsAppLeads ? "cursor-pointer" : "cursor-not-allowed opacity-70"}`}>
+                  <input
+                    type="checkbox"
+                    disabled={!hasWhatsAppLeads}
+                    checked={hasWhatsAppLeads && configDraft.autoCaptureWhatsAppUnknownSenders}
+                    onChange={(e) =>
+                      setConfigDraft({
+                        ...configDraft,
+                        autoCaptureWhatsAppUnknownSenders: e.target.checked,
+                      })
+                    }
+                    className="rounded border-border-default"
+                  />
+                  <span className="font-semibold text-text-primary">
+                    Auto-capture inbound WhatsApp messages from new customer phone numbers into OMS Leads
+                  </span>
+                </label>
+                {!hasWhatsAppLeads && (
+                  <button
+                    type="button"
+                    onClick={handleLockedWhatsApp}
+                    className="shrink-0 text-[10px] font-bold text-brand-orange-primary hover:underline"
+                  >
+                    Pro Plan
+                  </button>
+                )}
+              </div>
 
               {/* Website Snippet */}
               <div className="rounded-2xl border border-border-default bg-surface-app p-3.5 space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="font-bold text-text-primary">
-                    External Studio Website Form Snippet
+                    External Studio Website Form Snippet (For Existing Websites)
                   </span>
                   <button
                     type="button"
@@ -930,9 +1083,13 @@ async function submitFocomanLead(formEl) {
                     type="button"
                     disabled={busy}
                     onClick={() => void handleSimulateWebhookLead("WHATSAPP")}
-                    className="rounded-xl border border-border-default bg-surface-app px-3 py-1.5 font-bold text-text-primary hover:border-emerald-500 transition"
+                    className={`rounded-xl border border-border-default px-3 py-1.5 font-bold transition ${
+                      hasWhatsAppLeads
+                        ? "bg-surface-app text-text-primary hover:border-emerald-500"
+                        : "bg-slate-50 text-text-tertiary hover:border-amber-400"
+                    }`}
                   >
-                    + Simulate WhatsApp Lead
+                    {hasWhatsAppLeads ? "+ Simulate WhatsApp Lead" : "+ Simulate WhatsApp Lead (Pro)"}
                   </button>
                   <button
                     type="button"
@@ -982,14 +1139,21 @@ async function submitFocomanLead(formEl) {
                   <label className="block font-bold text-text-primary mb-1">Channel *</label>
                   <select
                     value={newLeadForm.channel}
-                    onChange={(e) =>
-                      setNewLeadForm({ ...newLeadForm, channel: e.target.value as LeadChannel })
-                    }
+                    onChange={(e) => {
+                      const val = e.target.value as LeadChannel;
+                      if (val === "WHATSAPP" && !hasWhatsAppLeads) {
+                        handleLockedWhatsApp();
+                        return;
+                      }
+                      setNewLeadForm({ ...newLeadForm, channel: val });
+                    }}
                     className="w-full rounded-xl border border-border-default px-3 py-2 text-xs"
                   >
                     <option value="INSTAGRAM">Instagram</option>
-                    <option value="WHATSAPP">WhatsApp</option>
-                    <option value="WEBSITE">Studio Website</option>
+                    <option value="WHATSAPP" disabled={!hasWhatsAppLeads}>
+                      {hasWhatsAppLeads ? "WhatsApp" : "WhatsApp (Professional ₹1,999/mo)"}
+                    </option>
+                    <option value="WEBSITE">Website / Google Maps</option>
                     <option value="DIRECT">Direct Call / Walk-in</option>
                   </select>
                 </div>

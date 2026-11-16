@@ -29,7 +29,7 @@ const MODULES: ModuleData[] = [
       },
       {
         title: "Multi-Channel Leads & Order Conversion",
-        desc: "Capture leads from Instagram, WhatsApp Business, and your website through webhooks, and convert qualified leads into confirmed orders.",
+        desc: "Capture leads from Instagram, Google Maps / Search, and your website (or Focoman's hosted enquiry link), plus WhatsApp Business on Professional plans, and convert qualified leads into confirmed orders.",
       },
       {
         title: "Google Drive Integration & Client Review",

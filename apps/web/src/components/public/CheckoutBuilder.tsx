@@ -33,10 +33,11 @@ const PLAN_OPTIONS: readonly PlanOption[] = [
     id: "STARTER",
     name: "Starter",
     price: "₹999/month",
-    summary: "Order management with client review, customer records, studio operations, and dashboard visibility.",
+    summary: "Order management with client review, Instagram & Website / Google Maps lead capture, customer records, studio operations, and dashboard visibility.",
     features: [
       "Everything in Free",
       "Google Drive photo preview and client review",
+      "Instagram & Website / Google Maps lead capture",
       "Customer relationship management and studio operations",
       "Basic business dashboard for orders, revenue, and pending payments",
     ],
@@ -45,12 +46,13 @@ const PLAN_OPTIONS: readonly PlanOption[] = [
     id: "PROFESSIONAL",
     name: "Professional",
     price: "₹1,999/month",
-    summary: "Starter tools with WhatsApp operations and advanced business reporting.",
+    summary: "Starter tools with WhatsApp Business lead capture, WhatsApp operations bot, invoices & receipts, and advanced business reporting.",
     features: [
       "Everything in Starter",
+      "WhatsApp Business lead capture (Full multi-channel leads)",
       "WhatsApp notifications and studio operations bot",
-      "Advanced business reports and analytics",
-      "Excel report exports",
+      "Official invoices and payment receipts",
+      "Advanced business reports, analytics, and Excel exports",
     ],
   },
 ];
@@ -67,8 +69,8 @@ function resolveCheckoutPlanParam(
   if (isCheckoutPlanId(clean)) return clean;
   if (clean === "COMPLETE") return "PROFESSIONAL";
   const upgrade = upgradeParam?.toLowerCase() ?? null;
-  if (upgrade === "reports" || upgrade === "whatsapp") return "PROFESSIONAL";
-  if (upgrade === "erp" || upgrade === "crm" || upgrade === "drive") return "STARTER";
+  if (upgrade === "reports" || upgrade === "whatsapp" || upgrade === "whatsapp-leads") return "PROFESSIONAL";
+  if (upgrade === "erp" || upgrade === "crm" || upgrade === "drive" || upgrade === "leads") return "STARTER";
   return null;
 }
 

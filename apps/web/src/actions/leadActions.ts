@@ -112,12 +112,19 @@ export async function saveStudioLeadWebhookConfigAction(params: {
     const cleanSlug = params.studioId.toLowerCase();
     const decoded = await requireVerifiedUser(params.idToken);
     await requireStudioOwner(decoded.uid, cleanSlug);
-    await requireCapability(cleanSlug, "BUSINESS_REPORTS");
+    await requireCapability(cleanSlug, "CUSTOMER_CRM");
+
+    const hasWhatsAppLeads =
+      (await hasStudioCapability(cleanSlug, "WHATSAPP_OPERATIONS")) ||
+      (await hasStudioCapability(cleanSlug, "BUSINESS_REPORTS"));
 
     const existing = await ensureStudioWebhookConfig(cleanSlug);
     const updatedConfig: StudioLeadWebhookConfig = {
       ...existing,
       ...params.config,
+      autoCaptureWhatsAppUnknownSenders: hasWhatsAppLeads
+        ? params.config.autoCaptureWhatsAppUnknownSenders ?? existing.autoCaptureWhatsAppUnknownSenders
+        : false,
       webhookKey: params.config.webhookKey?.trim() || existing.webhookKey,
       updatedAt: new Date().toISOString(),
     };
@@ -150,8 +157,15 @@ export async function createStudioLeadAction(params: {
     const cleanSlug = params.studioId.toLowerCase();
     const decoded = await requireVerifiedUser(params.idToken);
     await requireStudioMember(decoded.uid, cleanSlug);
-    if (["INSTAGRAM", "WHATSAPP", "WEBSITE"].includes(params.channel)) {
-      await requireCapability(cleanSlug, "BUSINESS_REPORTS");
+    if (params.channel === "WHATSAPP") {
+      const hasWhatsAppLeads =
+        (await hasStudioCapability(cleanSlug, "WHATSAPP_OPERATIONS")) ||
+        (await hasStudioCapability(cleanSlug, "BUSINESS_REPORTS"));
+      if (!hasWhatsAppLeads) {
+        throw new Error("WhatsApp lead capture requires the Professional (₹1,999/mo) plan.");
+      }
+    } else if (["INSTAGRAM", "WEBSITE"].includes(params.channel)) {
+      await requireCapability(cleanSlug, "CUSTOMER_CRM");
     }
 
     const nowDate = new Date();
@@ -183,6 +197,94 @@ export async function createStudioLeadAction(params: {
     return {
       success: false,
       error: err instanceof Error ? err.message : "Failed to create lead",
+    };
+  }
+}
+
+/**
+ * Public action used by /enquire/[studioSlug] (Hosted Focoman Studio Enquiry Form).
+ * Lets studios without a website capture leads from Google Business Profile (Maps/Search) and Instagram Bio.
+ */
+export async function submitPublicStudioEnquiryAction(params: {
+  studioSlug: string;
+  name: string;
+  phone: string;
+  email?: string;
+  eventType?: string;
+  eventDate?: string;
+  location?: string;
+  estimatedBudget?: number;
+  message?: string;
+  source?: string;
+}): Promise<{ success: boolean; leadId?: string; error?: string }> {
+  try {
+    const cleanSlug = (params.studioSlug || "").toLowerCase().trim();
+    if (!cleanSlug) {
+      return { success: false, error: "Studio not specified." };
+    }
+
+    const cleanName = (params.name || "").trim();
+    const cleanPhone = (params.phone || "").trim();
+    if (!cleanName || !cleanPhone) {
+      return { success: false, error: "Please enter your name and phone number." };
+    }
+
+    const studio = await getStudioBySlug(cleanSlug);
+    if (!studio || studio.isDeleted) {
+      return { success: false, error: "This studio is not currently accepting online enquiries." };
+    }
+
+    const canCapture = await hasStudioCapability(cleanSlug, "CUSTOMER_CRM");
+    if (!canCapture || studio.leadWebhookConfig?.enabled === false) {
+      return {
+        success: false,
+        error: "Online enquiry capture is currently unavailable for this studio.",
+      };
+    }
+
+    const cleanSource = (params.source || "").toLowerCase().trim();
+    const isInstagramBio = cleanSource === "instagram" || cleanSource === "ig";
+    const channel: LeadChannel = isInstagramBio ? "INSTAGRAM" : "WEBSITE";
+    const sourceLabel =
+      cleanSource === "google-maps" || cleanSource === "google_maps" || cleanSource === "gmb"
+        ? "Google Maps / Search"
+        : isInstagramBio
+        ? "Instagram Bio Link"
+        : "Studio Enquiry Link";
+
+    const cleanMessage = (params.message || "").trim();
+    const formattedMessage = cleanMessage
+      ? `[${sourceLabel}] ${cleanMessage}`
+      : `Submitted via ${sourceLabel}`;
+
+    const nowDate = new Date();
+    const now = nowDate.toISOString();
+    const lead: StudioLead = {
+      id: generateStudioLeadId(cleanSlug, nowDate),
+      studioId: cleanSlug,
+      name: cleanName,
+      phone: cleanPhone,
+      ...(params.email?.trim() ? { email: params.email.trim() } : {}),
+      channel,
+      stage: "NEW",
+      eventType: params.eventType?.trim() || "Photography Shoot Inquiry",
+      ...(params.eventDate?.trim() ? { eventDate: params.eventDate.trim() } : {}),
+      ...(params.location?.trim() ? { location: params.location.trim() } : {}),
+      ...(typeof params.estimatedBudget === "number" && params.estimatedBudget > 0
+        ? { estimatedBudget: params.estimatedBudget }
+        : {}),
+      message: formattedMessage,
+      isDeleted: false,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    const saved = await saveStudioLead(lead);
+    return { success: true, leadId: saved.id };
+  } catch (err: unknown) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Failed to submit enquiry. Please try again.",
     };
   }
 }

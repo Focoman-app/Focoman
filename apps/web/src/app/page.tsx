@@ -254,11 +254,11 @@ export default function HomePage() {
                 Transform Your Studio Operations Today
               </h2>
               <p className="mt-3 text-xs sm:text-base text-white/90 leading-relaxed">
-                Join photography studios running their orders, crew workflows, and deliveries with peace of mind. Start your 30-day full trial with zero risk.
+                Join photography studios running their orders, crew workflows, and deliveries with peace of mind.
               </p>
 
               {/* Action Button */}
-              <div className="flex flex-col sm:flex-row items-center justify-center gap-3.5">
+              <div className="mt-6 flex flex-col sm:flex-row items-center justify-center gap-3.5">
                 <Link
                   href="/sign-in"
                   className="w-full sm:w-auto rounded-xl bg-white px-8 py-3.5 text-xs sm:text-sm font-bold text-brand-blue-primary shadow-sm active:translate-y-[2px] transition hover:bg-slate-50"

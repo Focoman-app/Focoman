@@ -1624,6 +1624,10 @@ export default function OmsPage({
           ordersCount={orders.length}
           leads={leads}
           webhookConfig={webhookConfig}
+          hasWhatsAppLeads={hasWhatsAppOperations || canExportOrders}
+          onLockedWhatsAppLeadAction={() =>
+            showPlanWarning("WhatsApp lead capture requires the Professional (₹1,999/mo) plan.")
+          }
           onSwitchToOrders={(orderId) => {
             setOmsSection("ORDERS");
             if (orderId) {

@@ -42,7 +42,7 @@ export function StructuredData() {
             "price": "999",
             "priceCurrency": "INR",
             "billingDuration": "P1M",
-            "description": "Google Drive photo preview and selection, CRM, ERP, and a basic business dashboard.",
+            "description": "Google Drive photo preview and selection, Instagram & Website / Google Maps lead capture, CRM, ERP, and a basic business dashboard.",
           },
           {
             "@type": "Offer",
@@ -50,7 +50,7 @@ export function StructuredData() {
             "price": "1999",
             "priceCurrency": "INR",
             "billingDuration": "P1M",
-            "description": "WhatsApp Operations and Bot, invoices and receipts, multi-channel leads, and advanced reports with exports.",
+            "description": "WhatsApp Business lead capture, WhatsApp Operations and Bot, invoices and receipts, and advanced reports with exports.",
           },
         ],
       },
