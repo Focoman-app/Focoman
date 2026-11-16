@@ -1694,3 +1694,6 @@ export async function updateStudioLead(
 
 
 export * from './billing';
+
+export { readStudioPage, readOrderListPage, readOrderPageByIds, getDashboardOrderProjection } from './workspacePaging';
+export type { StudioPage, StudioPageInput } from './workspacePaging';
