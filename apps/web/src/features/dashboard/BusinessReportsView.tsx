@@ -7,6 +7,7 @@ import { calculateOrderPaymentBreakdown } from "@focoman/domain";
 import { FileSpreadsheet, TrendingUp, Lock, Users } from "lucide-react";
 import { exportWorkbookToExcel } from "@/utils/excelExport";
 import type { StudioSubscriptionTier } from "@/lib/proEntitlements";
+import { PlanGatedToast, usePlanGatedToast } from "@/components/PlanGatedToast";
 
 interface BusinessReportsViewProps {
   studioSlug: string;
@@ -29,6 +30,11 @@ export function BusinessReportsView({
   const [timeframe, setTimeframe] = useState<Timeframe>("all");
 
   const isCompleteTier = studioTier === "COMPLETE";
+  const {
+    message: planWarning,
+    show: showPlanWarning,
+    dismiss: dismissPlanWarning,
+  } = usePlanGatedToast();
 
   // Filter orders by timeframe
   const filteredOrders = useMemo(() => {
@@ -308,7 +314,10 @@ export function BusinessReportsView({
   };
 
   const handleExportReportsExcel = useCallback(() => {
-    if (!isCompleteTier) return;
+    if (!isCompleteTier) {
+      showPlanWarning("Excel export is available only in the Professional (₹1,999/mo) plan.");
+      return;
+    }
     exportWorkbookToExcel(`${studioSlug}_Business_Report_${timeframe}`, [
       {
         name: "Orders & Payments Ledger",
@@ -494,6 +503,7 @@ export function BusinessReportsView({
     categoryStats,
     monthlyRevenueData,
     crewProductivity,
+    showPlanWarning,
   ]);
 
   return (
@@ -561,26 +571,15 @@ export function BusinessReportsView({
             </button>
           </div>
 
-          {isCompleteTier ? (
-            <button
-              type="button"
-              onClick={handleExportReportsExcel}
-              className="rounded-xl border border-border-default bg-white px-3.5 py-2 text-xs font-bold text-text-primary shadow-2xs hover:bg-slate-50 hover:border-brand-blue-primary transition flex items-center gap-1.5 cursor-pointer"
-              title="Export multi-sheet Business Report to Excel (.xlsx)"
-            >
-              <FileSpreadsheet className="h-4 w-4 text-brand-blue-primary" />
-              <span>Export Excel</span>
-            </button>
-          ) : (
-            <Link
-              href={`/checkout?studio=${studioSlug}&plan=COMPLETE`}
-              className="rounded-xl border border-amber-300 bg-amber-50 px-3.5 py-2 text-xs font-bold text-amber-900 hover:bg-amber-100 transition flex items-center gap-1.5"
-              title="Excel Report Exports are included in the ₹1,999/month plan"
-            >
-              <Lock className="h-3.5 w-3.5 text-amber-700" />
-              <span>Export Excel (₹1,999 Plan)</span>
-            </Link>
-          )}
+          <button
+            type="button"
+            onClick={handleExportReportsExcel}
+            className="rounded-xl border border-border-default bg-white px-3.5 py-2 text-xs font-bold text-text-primary shadow-2xs hover:bg-slate-50 hover:border-brand-blue-primary transition flex items-center gap-1.5 cursor-pointer"
+            title="Export multi-sheet Business Report to Excel (.xlsx)"
+          >
+            <FileSpreadsheet className="h-4 w-4 text-brand-blue-primary" />
+            <span>Export Excel</span>
+          </button>
 
           <button
             onClick={handlePrint}
@@ -961,6 +960,12 @@ export function BusinessReportsView({
           </div>
         )}
       </div>
+
+      <PlanGatedToast
+        message={planWarning}
+        onDismiss={dismissPlanWarning}
+        upgradeHref={`/checkout?studio=${studioSlug}&plan=COMPLETE`}
+      />
     </div>
   );
 }

@@ -408,7 +408,9 @@ export interface Studio extends SoftDeletable {
     driveReview?: boolean;
     basicDashboard?: boolean;
     autoAssignCrew?: boolean;
+    autoAssignCrewConfigured?: boolean;
   };
+  serviceCrewMapping?: Record<string, string[]>;
   billingProfile?: StudioBillingProfile;
   createdAt: string;
   updatedAt: string;
@@ -430,7 +432,8 @@ export interface StudioMember extends SoftDeletable {
   ownerAssignedName?: string; // Original nickname / name provided by owner at invite creation
   email: string;
   phone?: string;
-  skills: string[]; // e.g. ['PHOTOGRAPHY', 'VIDEOGRAPHY', 'PHOTO_EDITING', 'ALBUM_DESIGN']
+  notifyWhatsApp?: boolean;
+  skills: string[]; // e.g. ['PHOTOGRAPHY', 'VIDEOGRAPHY', 'PHOTO_EDITING', 'ALBUM_DESIGN', 'DRONE_OPERATOR'] or custom
   role?: 'STUDIO_OWNER' | 'STUDIO_MEMBER';
   status?: 'ACTIVE' | 'INACTIVE';
   createdAt: string;
@@ -455,6 +458,7 @@ export interface StudioInvitation extends SoftDeletable {
   studioName: string;
   email?: string;
   phone?: string;
+  notifyWhatsApp?: boolean;
   name?: string;
   skills: string[];
   claimCode?: string;
@@ -494,6 +498,8 @@ export interface Customer extends SoftDeletable {
   name: string;
   phone?: string;
   email?: string;
+  notifyWhatsApp?: boolean;
+  notifyEmail?: boolean;
   uid?: string;
   address?: string;
   createdAt: string;

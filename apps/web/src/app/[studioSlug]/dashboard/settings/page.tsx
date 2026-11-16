@@ -9,6 +9,11 @@ import {
   deleteStudioAction,
   leaveStudioAction,
 } from "@/actions/studioActions";
+import { StudioMember } from "@focoman/types";
+import { getStudioMembersAction } from "@/actions/memberActions";
+import { DEFAULT_STUDIO_SERVICES } from "@/lib/studioServices";
+import { getSkillLabel, isSkillRelatedToService } from "@/lib/crewSkills";
+import { buildAutoAssignRoster } from "@/lib/autoAssignCrew";
 import {
   setDefaultWorkspace,
   clearDefaultWorkspace,
@@ -39,6 +44,17 @@ function SettingsPageContent() {
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [autoAssignEnabled, setAutoAssignEnabled] = useState<boolean>(
+    studio.features?.autoAssignCrew !== false
+  );
+  const [togglingAutoAssign, setTogglingAutoAssign] = useState(false);
+  const [autoAssignNotice, setAutoAssignNotice] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [crewMembers, setCrewMembers] = useState<StudioMember[]>([]);
+  const [loadingCrewRoster, setLoadingCrewRoster] = useState(false);
+  const [serviceCrewMapping, setServiceCrewMapping] = useState<Record<string, string[]>>(
+    studio.serviceCrewMapping || {}
+  );
+  const [savingCrewMapping, setSavingCrewMapping] = useState(false);
 
   // Delete / Leave Studio Modal State
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -58,6 +74,39 @@ function SettingsPageContent() {
       return () => unsub();
     }
   }, [user, studioSlug]);
+
+  useEffect(() => {
+    if (studio?.features?.autoAssignCrew !== undefined) {
+      setAutoAssignEnabled(Boolean(studio.features.autoAssignCrew));
+    }
+  }, [studio?.features?.autoAssignCrew]);
+
+  useEffect(() => {
+    setServiceCrewMapping(studio?.serviceCrewMapping || {});
+  }, [studio?.serviceCrewMapping]);
+
+  useEffect(() => {
+    let active = true;
+    if (!isOwner || !studioSlug || studio.features?.erp === false) return;
+    setLoadingCrewRoster(true);
+    void (async () => {
+      try {
+        const token = await getIdToken(false);
+        if (!token || !active) return;
+        const members = await getStudioMembersAction(studioSlug, token);
+        if (active) {
+          setCrewMembers(members || []);
+        }
+      } catch (err) {
+        console.error("[SettingsPage] Failed to load crew roster:", err);
+      } finally {
+        if (active) setLoadingCrewRoster(false);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [isOwner, studioSlug, studio.features?.erp, getIdToken]);
 
   const handleSetDefaultStudio = async () => {
     if (!user || !studioSlug) return;
@@ -139,6 +188,96 @@ function SettingsPageContent() {
       setSaveError(err instanceof Error ? err.message : "An error occurred while saving.");
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleToggleAutoAssignCrew = async () => {
+    if (!isOwner) return;
+    setTogglingAutoAssign(true);
+    setAutoAssignNotice(null);
+    try {
+      const token = await getIdToken(true);
+      if (!token) throw new Error("Authentication token unavailable.");
+      const nextVal = !autoAssignEnabled;
+      const res = await updateStudioAction({
+        studioSlug,
+        updates: {
+          features: {
+            ...(studio.features || { oms: true, crm: true, erp: true, whatsapp: true }),
+            autoAssignCrew: nextVal,
+            autoAssignCrewConfigured: true,
+          },
+        },
+        idToken: token,
+      });
+      if (res.success) {
+        setAutoAssignEnabled(nextVal);
+        setAutoAssignNotice({
+          type: "success",
+          text: nextVal
+            ? "Auto-Assign Crew enabled: New orders will automatically assign available skill-matched crew."
+            : "Auto-Assign Crew disabled: Crew assignments will remain manual.",
+        });
+        router.refresh();
+        setTimeout(() => setAutoAssignNotice(null), 4000);
+      } else {
+        setAutoAssignNotice({
+          type: "error",
+          text: res.error || "Failed to update crew assignment setting.",
+        });
+      }
+    } catch (err: unknown) {
+      setAutoAssignNotice({
+        type: "error",
+        text: err instanceof Error ? err.message : "Failed to update crew assignment setting.",
+      });
+    } finally {
+      setTogglingAutoAssign(false);
+    }
+  };
+
+  const toggleServiceCrewMember = (serviceName: string, memberId: string) => {
+    setServiceCrewMapping((prev) => {
+      const current = Array.isArray(prev[serviceName]) ? prev[serviceName] : [];
+      const next = current.includes(memberId)
+        ? current.filter((id) => id !== memberId)
+        : [...current, memberId];
+      return { ...prev, [serviceName]: next };
+    });
+  };
+
+  const handleSaveServiceCrewMapping = async () => {
+    if (!isOwner) return;
+    setSavingCrewMapping(true);
+    setAutoAssignNotice(null);
+    try {
+      const token = await getIdToken(true);
+      if (!token) throw new Error("Authentication token unavailable.");
+      const res = await updateStudioAction({
+        studioSlug,
+        updates: { serviceCrewMapping },
+        idToken: token,
+      });
+      if (res.success) {
+        setAutoAssignNotice({
+          type: "success",
+          text: "Service-to-crew auto-assignment mapping saved.",
+        });
+        router.refresh();
+        setTimeout(() => setAutoAssignNotice(null), 4000);
+      } else {
+        setAutoAssignNotice({
+          type: "error",
+          text: res.error || "Failed to save crew mapping.",
+        });
+      }
+    } catch (err: unknown) {
+      setAutoAssignNotice({
+        type: "error",
+        text: err instanceof Error ? err.message : "Failed to save crew mapping.",
+      });
+    } finally {
+      setSavingCrewMapping(false);
     }
   };
 
@@ -277,6 +416,139 @@ function SettingsPageContent() {
               </div>
             </div>
           </div>
+
+          {/* 2b. Workflow Automation (Owner Only, when ERP enabled) */}
+          {isOwner && studio.features?.erp !== false && (
+            <div className="order-3 rounded-3xl border border-border-default bg-white p-6 shadow-sm sm:p-8 space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div>
+                  <h2 className="text-base font-bold text-text-primary">Workflow Automation</h2>
+                  <p className="mt-1 text-xs text-text-secondary max-w-xl leading-relaxed">
+                    Automatically assign available skill-matched crew members when confirming new orders (falls back to manual assignment if busy).
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  disabled={togglingAutoAssign}
+                  onClick={() => void handleToggleAutoAssignCrew()}
+                  className={`rounded-xl px-4 py-2.5 text-xs font-bold transition shadow-2xs shrink-0 cursor-pointer disabled:opacity-50 ${
+                    autoAssignEnabled
+                      ? "bg-brand-purple-primary text-white hover:opacity-90"
+                      : "border border-border-default bg-white text-text-secondary hover:text-text-primary hover:bg-surface-app"
+                  }`}
+                >
+                  {togglingAutoAssign
+                    ? "Updating..."
+                    : autoAssignEnabled
+                    ? "Auto-Assign Crew: ON"
+                    : "Auto-Assign Crew: OFF"}
+                </button>
+              </div>
+              {autoAssignNotice && (
+                <p
+                  className={`text-xs font-semibold p-2.5 rounded-xl border ${
+                    autoAssignNotice.type === "success"
+                      ? "text-emerald-700 bg-emerald-50 border-emerald-200"
+                      : "text-status-error bg-red-50 border-red-200"
+                  }`}
+                >
+                  {autoAssignNotice.text}
+                </p>
+              )}
+
+              {/* Service-to-Crew Auto-Assign Mapping */}
+              <div className="pt-3 border-t border-border-divider space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                  <div>
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-text-tertiary">
+                      Service-to-Crew Mapping
+                    </h3>
+                    <p className="mt-0.5 text-xs text-text-secondary">
+                      Map one or multiple crew members to each catalog service. At order confirmation, mapped available crew are assigned automatically (skill-matched fallback applies when unmapped).
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={savingCrewMapping || loadingCrewRoster}
+                    onClick={() => void handleSaveServiceCrewMapping()}
+                    className="rounded-xl bg-brand-purple-primary px-3.5 py-2 text-xs font-bold text-white hover:opacity-90 transition shadow-2xs disabled:opacity-50 shrink-0 cursor-pointer"
+                  >
+                    {savingCrewMapping ? "Saving Mapping..." : "Save Crew Mapping"}
+                  </button>
+                </div>
+
+                {loadingCrewRoster ? (
+                  <p className="text-xs text-text-tertiary py-2">Loading crew roster...</p>
+                ) : (
+                  <div className="space-y-2.5">
+                    {(studio.configuredServices && studio.configuredServices.length > 0
+                      ? studio.configuredServices
+                      : DEFAULT_STUDIO_SERVICES
+                    )
+                      .filter((svc) => svc.enabled !== false)
+                      .map((svc) => {
+                        const roster = buildAutoAssignRoster(studio, studioSlug, crewMembers);
+                        const selectedIds = serviceCrewMapping[svc.name] || [];
+                        return (
+                          <div
+                            key={svc.id}
+                            className="rounded-2xl border border-border-default bg-surface-app/40 p-3.5 space-y-2"
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <div>
+                                <p className="text-xs font-bold text-text-primary">{svc.name}</p>
+                                <p className="text-[11px] text-text-tertiary">{svc.category}</p>
+                              </div>
+                              <span className="text-[10px] font-bold text-brand-purple-primary bg-brand-purple-background/60 px-2 py-0.5 rounded-full">
+                                {selectedIds.length} mapped
+                              </span>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              {roster.map((member) => {
+                                const isChecked = selectedIds.includes(member.id);
+                                const skillMatches =
+                                  member.isOwner ||
+                                  isSkillRelatedToService(member.skills, svc.name, svc.category);
+                                return (
+                                  <label
+                                    key={member.id}
+                                    className={`inline-flex items-center gap-2 rounded-xl border px-2.5 py-1.5 text-[11px] font-semibold cursor-pointer transition ${
+                                      isChecked
+                                        ? "border-brand-purple-primary bg-white text-brand-purple-primary shadow-2xs"
+                                        : skillMatches
+                                        ? "border-purple-200 bg-purple-50/40 text-text-primary hover:border-brand-purple-primary"
+                                        : "border-border-default bg-white text-text-secondary hover:bg-surface-app"
+                                    }`}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={isChecked}
+                                      onChange={() =>
+                                        toggleServiceCrewMember(svc.name, member.id)
+                                      }
+                                      className="rounded text-brand-purple-primary"
+                                    />
+                                    <span>
+                                      {member.name}
+                                      {member.isOwner ? " (Owner)" : ""}
+                                    </span>
+                                    {!member.isOwner && member.skills.length > 0 && (
+                                      <span className="text-[10px] font-normal text-text-tertiary">
+                                        · {member.skills.map(getSkillLabel).join(", ")}
+                                      </span>
+                                    )}
+                                  </label>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* 3. Studio Profile & Identity (Owner Only) */}
           <div className="order-1 rounded-3xl border border-border-default bg-white p-6 shadow-sm sm:p-8 space-y-6">

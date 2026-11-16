@@ -9,6 +9,7 @@ import {
   updateStudio,
   getMembersByStudio,
   getCustomersByStudio,
+  getOrdersByStudio,
   saveCustomer,
   updateCustomer,
   saveOrder,
@@ -42,6 +43,11 @@ import {
 } from "@/lib/serverAuth";
 import { hasStudioCapability, requireCapability } from "@/lib/entitlementAuth";
 import { getFreeWorkflowTaskAssignee } from "@/lib/erpCrewPolicy";
+import { PRESET_SKILLS } from "@/lib/crewSkills";
+import {
+  computeAutoAssignedResources,
+  findWorkflowTaskAssignee,
+} from "@/lib/autoAssignCrew";
 
 function generateStudioLeadId(studioId: string, now = new Date()): string {
   const studioPrefix = prefixLetters(studioId);
@@ -256,10 +262,11 @@ export async function convertLeadToOrderAction(params: {
     const passkeyPin = generateSixDigitPasskeyPin();
     const studioPrefix = prefixLetters(cleanSlug);
 
-    const [studioMembers, existingCustomers, studio, hasErp] = await Promise.all([
+    const [studioMembers, existingCustomers, studio, existingOrders, hasErp] = await Promise.all([
       getMembersByStudio(cleanSlug),
       getCustomersByStudio(cleanSlug),
       getStudioBySlug(cleanSlug),
+      getOrdersByStudio(cleanSlug),
       hasStudioCapability(cleanSlug, "STUDIO_ERP"),
     ]);
 
@@ -284,28 +291,23 @@ export async function convertLeadToOrderAction(params: {
     const suggestions = hasErp
       ? generateResourceSuggestions(
           eventDateVal,
-          ["PHOTOGRAPHY", "VIDEOGRAPHY", "ALBUM_DESIGN", "PHOTO_EDITING"],
+          [...PRESET_SKILLS],
           studioMembers,
           []
         )
       : [];
 
     const autoAssignEnabled = hasErp && studio?.features?.autoAssignCrew !== false;
-    const assignedResources: ResourceAssignment[] = [];
-    if (autoAssignEnabled) {
-      const usedMembers = new Set<string>();
-      for (const s of suggestions) {
-        if (s.availableOnDate && !usedMembers.has(s.memberId) && assignedResources.length < 2) {
-          usedMembers.add(s.memberId);
-          assignedResources.push({
-            memberId: s.memberId,
-            memberName: s.memberName,
-            skill: s.skill,
-            availabilityConfirmed: null,
-          });
-        }
-      }
-    }
+    const assignedResources: ResourceAssignment[] = autoAssignEnabled
+      ? computeAutoAssignedResources({
+          studio,
+          studioSlug: cleanSlug,
+          services: servicesList,
+          eventDates: [eventDateVal],
+          studioMembers,
+          existingOrders,
+        })
+      : [];
 
     const confirmedPrice = Math.max(0, Number(params.confirmedPrice) || lead.estimatedBudget || 0);
     const advanceAmount = Math.max(0, Math.min(confirmedPrice, Number(params.advanceAmount) || 0));
@@ -373,7 +375,7 @@ export async function convertLeadToOrderAction(params: {
       const seqSuffix = String(idx + 1).padStart(2, "0");
       const matchedCrew =
         autoAssignEnabled && assignedResources.length > 0
-          ? assignedResources.find((r) => r.skill.includes(t.serviceCategory)) || assignedResources[0]
+          ? findWorkflowTaskAssignee(t.serviceCategory, assignedResources, studioMembers)
           : undefined;
       return {
         ...t,

@@ -9,6 +9,7 @@ interface OmsPaymentSummarySectionProps {
   canIssueBilling?: boolean;
   onOpenInvoice?: () => void;
   onOpenReceipt?: (receiptKey: string) => void;
+  onLockedBillingAction?: (kind: "invoice" | "receipt") => void;
   isEditingPricing: boolean;
   onCancelEditingPricing: () => void;
   onStartEditingPricing: () => void;
@@ -56,6 +57,7 @@ export function OmsPaymentSummarySection({
   canIssueBilling = false,
   onOpenInvoice,
   onOpenReceipt,
+  onLockedBillingAction,
   isEditingPricing,
   onCancelEditingPricing,
   onStartEditingPricing,
@@ -92,12 +94,18 @@ export function OmsPaymentSummarySection({
   onSavePricing,
 }: OmsPaymentSummarySectionProps) {
   const handleInvoiceClick = () => {
-    if (!canIssueBilling) return;
+    if (!canIssueBilling) {
+      onLockedBillingAction?.("invoice");
+      return;
+    }
     onOpenInvoice?.();
   };
 
   const handleReceiptClick = (receiptKey: string) => {
-    if (!canIssueBilling) return;
+    if (!canIssueBilling) {
+      onLockedBillingAction?.("receipt");
+      return;
+    }
     onOpenReceipt?.(receiptKey);
   };
 
@@ -276,15 +284,13 @@ export function OmsPaymentSummarySection({
                   <span>{isSendingReminder ? "Sending..." : "Send Reminder"}</span>
                 </button>
               )}
-              {canIssueBilling && (
-                <button
-                  type="button"
-                  onClick={handleInvoiceClick}
-                  className="rounded-lg border border-border-default bg-white px-2.5 py-1 text-[11px] font-semibold text-text-secondary shadow-2xs transition flex items-center hover:text-brand-blue-primary hover:border-brand-blue-primary hover:bg-blue-50/50 cursor-pointer"
-                >
-                  <span>Invoice</span>
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={handleInvoiceClick}
+                className="rounded-lg border border-border-default bg-white px-2.5 py-1 text-[11px] font-semibold text-text-secondary shadow-2xs transition flex items-center hover:text-brand-blue-primary hover:border-brand-blue-primary hover:bg-blue-50/50 cursor-pointer"
+              >
+                <span>Invoice</span>
+              </button>
               <button
                 type="button"
                 disabled={isUpdatingPayment}
@@ -672,7 +678,7 @@ export function OmsPaymentSummarySection({
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    {canIssueBilling && breakdown.advanceAmount > 0 && (
+                    {breakdown.advanceAmount > 0 && (
                       <button
                         type="button"
                         onClick={() => handleReceiptClick("advance")}
@@ -708,17 +714,15 @@ export function OmsPaymentSummarySection({
                             </span>
                           </div>
                           <div className="flex items-center gap-2">
-                            {canIssueBilling && (
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  handleReceiptClick(inst.id ? `installment:${inst.id}` : "advance")
-                                }
-                                className="inline-flex items-center rounded border border-border-default bg-white px-2 py-0.5 text-[10px] font-semibold text-text-secondary transition hover:text-brand-blue-primary hover:border-brand-blue-primary hover:bg-blue-50/50 cursor-pointer"
-                              >
-                                <span>Receipt</span>
-                              </button>
-                            )}
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleReceiptClick(inst.id ? `installment:${inst.id}` : "advance")
+                              }
+                              className="inline-flex items-center rounded border border-border-default bg-white px-2 py-0.5 text-[10px] font-semibold text-text-secondary transition hover:text-brand-blue-primary hover:border-brand-blue-primary hover:bg-blue-50/50 cursor-pointer"
+                            >
+                              <span>Receipt</span>
+                            </button>
                             <span className="font-mono font-bold text-text-primary tabular-nums">
                               ₹{inst.amount.toLocaleString("en-IN")}
                             </span>

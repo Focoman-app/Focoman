@@ -1378,6 +1378,9 @@ export async function acceptInvitationTransaction(input: {
           ...(resolvedOwnerAssignedName ? { ownerAssignedName: resolvedOwnerAssignedName } : {}),
           email: normalizedEmail,
           ...(invitation.phone ? { phone: invitation.phone } : {}),
+          ...(invitation.notifyWhatsApp !== undefined
+            ? { notifyWhatsApp: invitation.notifyWhatsApp }
+            : {}),
           skills: invitation.skills || existingMember.skills,
           status: 'ACTIVE',
           isDeleted: false,
@@ -1394,6 +1397,9 @@ export async function acceptInvitationTransaction(input: {
           ...(ownerAssignedName ? { ownerAssignedName } : {}),
           email: normalizedEmail,
           ...(invitation.phone ? { phone: invitation.phone } : {}),
+          ...(invitation.notifyWhatsApp !== undefined
+            ? { notifyWhatsApp: invitation.notifyWhatsApp }
+            : {}),
           skills: invitation.skills || [],
           status: 'ACTIVE',
           isDeleted: false,

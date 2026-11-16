@@ -90,6 +90,7 @@ export function getEffectiveStudioFeatures(
     driveReview?: boolean;
     basicDashboard?: boolean;
     autoAssignCrew?: boolean;
+    autoAssignCrewConfigured?: boolean;
   } | null,
   planInfo?: {
     plan?: string;
@@ -111,6 +112,7 @@ export function getEffectiveStudioFeatures(
       driveReview: true,
       basicDashboard: true,
       autoAssignCrew: configuredFeatures?.autoAssignCrew ?? true,
+      autoAssignCrewConfigured: Boolean(configuredFeatures?.autoAssignCrewConfigured),
     };
   }
 
@@ -124,6 +126,7 @@ export function getEffectiveStudioFeatures(
       driveReview: true,
       basicDashboard: true,
       autoAssignCrew: configuredFeatures?.autoAssignCrew ?? true,
+      autoAssignCrewConfigured: Boolean(configuredFeatures?.autoAssignCrewConfigured),
     };
   }
 
@@ -143,6 +146,7 @@ export function getEffectiveStudioFeatures(
     driveReview: hasDrive,
     basicDashboard: hasDashboard,
     autoAssignCrew: hasErp ? (configuredFeatures?.autoAssignCrew ?? true) : false,
+    autoAssignCrewConfigured: Boolean(configuredFeatures?.autoAssignCrewConfigured),
   };
 }
 

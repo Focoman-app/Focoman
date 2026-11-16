@@ -3,15 +3,10 @@
 import { useState, useEffect } from "react";
 import { createMemberAction } from "@/actions/memberActions";
 import { useStudioWorkspace } from "@/components/StudioWorkspaceProvider";
-
-const SKILL_LABELS: Record<string, string> = {
-  PHOTOGRAPHY: "Photographer",
-  VIDEOGRAPHY: "Videographer",
-  PHOTO_EDITING: "Photo Editor",
-  ALBUM_DESIGN: "Album Designer",
-};
-
-const ALL_SKILLS = ["PHOTOGRAPHY", "VIDEOGRAPHY", "PHOTO_EDITING", "ALBUM_DESIGN"];
+import { PRESET_SKILLS, getSkillLabel } from "@/lib/crewSkills";
+import { getEffectiveStudioFeatures } from "@/lib/proEntitlements";
+import { PlanGatedToast, usePlanGatedToast } from "@/components/PlanGatedToast";
+import { Lock, Plus, X } from "lucide-react";
 
 export interface AddCrewMemberModalProps {
   isOpen: boolean;
@@ -19,6 +14,8 @@ export interface AddCrewMemberModalProps {
   studioSlug: string;
   initialName?: string;
   initialSkills?: string[];
+  hasWhatsAppOperations?: boolean;
+  onLockedWhatsAppAlert?: () => void;
   onSuccess?: (member: {
     id: string;
     name: string;
@@ -36,15 +33,40 @@ export function AddCrewMemberModal({
   studioSlug,
   initialName,
   initialSkills = ["PHOTOGRAPHY"],
+  hasWhatsAppOperations: hasWhatsAppProp,
+  onLockedWhatsAppAlert,
   onSuccess,
 }: AddCrewMemberModalProps) {
-  const { idToken: workspaceToken, getIdToken } = useStudioWorkspace();
+  const { idToken: workspaceToken, getIdToken, studio } = useStudioWorkspace();
+  const hasWhatsApp =
+    hasWhatsAppProp ??
+    getEffectiveStudioFeatures(studio?.ownerEmail, studio?.features, studio?.planInfo).whatsapp;
+
+  const {
+    message: localPlanWarning,
+    show: showLocalPlanWarning,
+    dismiss: dismissLocalPlanWarning,
+  } = usePlanGatedToast();
+
+  const triggerLockedWhatsAppToast = () => {
+    if (onLockedWhatsAppAlert) {
+      onLockedWhatsAppAlert();
+    } else {
+      showLocalPlanWarning(
+        "WhatsApp alerts and notifications require the Professional (₹1,999/mo) plan."
+      );
+    }
+  };
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [modalError, setModalError] = useState<string | null>(null);
+  const [showCustomSkillInput, setShowCustomSkillInput] = useState(false);
+  const [customSkillDraft, setCustomSkillDraft] = useState("");
   const [form, setForm] = useState({
     name: initialName || "",
     email: "",
     phone: "",
+    notifyWhatsApp: false,
     claimCode: "",
     skills: initialSkills,
   });
@@ -55,14 +77,21 @@ export function AddCrewMemberModal({
         name: initialName || "",
         email: "",
         phone: "",
+        notifyWhatsApp: false,
         claimCode: Math.floor(100000 + Math.random() * 900000).toString(),
         skills: initialSkills.length > 0 ? initialSkills : ["PHOTOGRAPHY"],
       });
+      setShowCustomSkillInput(false);
+      setCustomSkillDraft("");
       setModalError(null);
     }
   }, [isOpen, initialName, initialSkills]);
 
   if (!isOpen) return null;
+
+  const customSkills = form.skills.filter(
+    (s) => !(PRESET_SKILLS as readonly string[]).includes(s)
+  );
 
   const toggleSkill = (skill: string) => {
     setForm((prev) => ({
@@ -71,6 +100,23 @@ export function AddCrewMemberModal({
         ? prev.skills.filter((s) => s !== skill)
         : [...prev.skills, skill],
     }));
+  };
+
+  const handleAddCustomSkill = () => {
+    const trimmed = customSkillDraft.trim();
+    if (!trimmed) return;
+    const exists = form.skills.some(
+      (s) =>
+        s.toLowerCase() === trimmed.toLowerCase() ||
+        getSkillLabel(s).toLowerCase() === trimmed.toLowerCase()
+    );
+    if (!exists) {
+      setForm((prev) => ({
+        ...prev,
+        skills: [...prev.skills, trimmed],
+      }));
+    }
+    setCustomSkillDraft("");
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -105,6 +151,9 @@ export function AddCrewMemberModal({
         name: form.name.trim(),
         email: form.email.trim() || undefined,
         phone: form.phone.trim() || undefined,
+        notifyWhatsApp: Boolean(
+          hasWhatsApp && form.phone.trim() && form.notifyWhatsApp
+        ),
         claimCode: form.email.trim() ? undefined : form.claimCode.trim(),
         skills: form.skills,
       });
@@ -132,8 +181,8 @@ export function AddCrewMemberModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
-      <div className="w-full max-w-md rounded-3xl bg-white p-6 sm:p-8 shadow-2xl border border-border-default animate-in fade-in duration-150">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs overflow-y-auto">
+      <div className="w-full max-w-md max-h-[90vh] overflow-y-auto rounded-3xl bg-white p-6 sm:p-8 shadow-2xl border border-border-default animate-in fade-in duration-150 my-auto">
         <div className="flex items-center justify-between pb-3 border-b border-border-default">
           <div>
             <div className="badge-brand-purple mb-1">
@@ -248,10 +297,55 @@ export function AddCrewMemberModal({
             />
           </div>
 
+          {Boolean(form.phone.trim()) && (
+            <div className="rounded-2xl border border-purple-200/80 bg-purple-50/40 p-3 space-y-2 animate-in fade-in duration-150">
+              <span className="block text-[11px] font-bold text-text-primary">
+                Automated Crew Notifications
+              </span>
+              <label
+                onClick={(e) => {
+                  if (!hasWhatsApp) {
+                    e.preventDefault();
+                    triggerLockedWhatsAppToast();
+                  }
+                }}
+                aria-disabled={!hasWhatsApp}
+                className={`flex items-center justify-between gap-2.5 select-none cursor-pointer ${
+                  !hasWhatsApp ? "opacity-65" : ""
+                }`}
+              >
+                <span className="flex items-center gap-2.5">
+                  <input
+                    type="checkbox"
+                    checked={hasWhatsApp ? form.notifyWhatsApp : false}
+                    readOnly={!hasWhatsApp}
+                    onChange={(e) => {
+                      if (!hasWhatsApp) {
+                        triggerLockedWhatsAppToast();
+                        return;
+                      }
+                      setForm({ ...form, notifyWhatsApp: e.target.checked });
+                    }}
+                    className="h-3.5 w-3.5 rounded border-border-default text-brand-purple-primary focus:ring-brand-purple-primary"
+                  />
+                  <span className="text-xs font-medium text-text-primary">
+                    Send WhatsApp alerts and shoot notifications
+                  </span>
+                </span>
+                {!hasWhatsApp && (
+                  <span className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-text-secondary shrink-0">
+                    <Lock className="h-2.5 w-2.5" />
+                    Pro
+                  </span>
+                )}
+              </label>
+            </div>
+          )}
+
           <div>
             <label className="block font-bold text-text-primary mb-1.5">Certified Skills *</label>
             <div className="grid grid-cols-2 gap-2">
-              {ALL_SKILLS.map((skill) => (
+              {PRESET_SKILLS.map((skill) => (
                 <label
                   key={skill}
                   className={`flex cursor-pointer items-center gap-2 rounded-xl border p-2.5 text-[11px] font-semibold transition ${
@@ -266,10 +360,69 @@ export function AddCrewMemberModal({
                     onChange={() => toggleSkill(skill)}
                     className="rounded text-brand-purple-primary"
                   />
-                  <span>{SKILL_LABELS[skill] || skill}</span>
+                  <span>{getSkillLabel(skill)}</span>
                 </label>
               ))}
+              <button
+                type="button"
+                onClick={() => setShowCustomSkillInput((open) => !open)}
+                className={`flex cursor-pointer items-center gap-2 rounded-xl border p-2.5 text-[11px] font-semibold transition text-left ${
+                  showCustomSkillInput || customSkills.length > 0
+                    ? "border-brand-purple-primary bg-brand-purple-background/40 text-brand-purple-primary"
+                    : "border-dashed border-border-default text-text-secondary hover:bg-surface-app"
+                }`}
+              >
+                <Plus className="h-3.5 w-3.5 shrink-0" />
+                <span>Custom Role</span>
+              </button>
             </div>
+
+            {showCustomSkillInput && (
+              <div className="mt-2 flex gap-2">
+                <input
+                  type="text"
+                  placeholder="Type custom role (e.g. Gimbal Operator, Colorist)"
+                  value={customSkillDraft}
+                  onChange={(e) => setCustomSkillDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      handleAddCustomSkill();
+                    }
+                  }}
+                  className="flex-1 rounded-xl border border-border-default px-3 py-1.5 text-xs outline-none focus:border-brand-purple-primary focus:ring-1 focus:ring-brand-purple-primary"
+                />
+                <button
+                  type="button"
+                  onClick={handleAddCustomSkill}
+                  disabled={!customSkillDraft.trim()}
+                  className="rounded-xl bg-brand-purple-primary px-3 py-1.5 text-xs font-bold text-white hover:opacity-90 disabled:opacity-40 cursor-pointer"
+                >
+                  Add
+                </button>
+              </div>
+            )}
+
+            {customSkills.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {customSkills.map((skill) => (
+                  <span
+                    key={skill}
+                    className="inline-flex items-center gap-1 rounded-full border border-brand-purple-soft bg-brand-purple-background/50 px-2.5 py-0.5 text-[11px] font-semibold text-brand-purple-primary"
+                  >
+                    <span>{getSkillLabel(skill)}</span>
+                    <button
+                      type="button"
+                      onClick={() => toggleSkill(skill)}
+                      className="hover:text-red-600 cursor-pointer"
+                      aria-label={`Remove ${skill}`}
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="pt-2 flex justify-end gap-2.5">
@@ -290,6 +443,13 @@ export function AddCrewMemberModal({
           </div>
         </form>
       </div>
+      {!onLockedWhatsAppAlert && (
+        <PlanGatedToast
+          message={localPlanWarning}
+          onDismiss={dismissLocalPlanWarning}
+          upgradeHref={`/checkout?studio=${studioSlug}&plan=COMPLETE`}
+        />
+      )}
     </div>
   );
 }

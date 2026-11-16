@@ -308,6 +308,92 @@ export function OrderVerticalWorkflow({
     });
   };
 
+  const focusPipelinePhase = (phaseId: PhaseId) => {
+    setExpandedPhases((prev) => {
+      const next = new Set(prev);
+      next.add(phaseId);
+      return next;
+    });
+    if (typeof document !== "undefined") {
+      const target = document.getElementById(`workflow-phase-${phaseId}`);
+      target?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+  };
+
+  const isCancelled = order.orderStatus === "CANCELLED";
+  const isPhaseEventDone =
+    !isCancelled &&
+    (order.orderStatus === "POST_EVENT_IN_PROGRESS" || order.orderStatus === "COMPLETED");
+  const isPhasePreEventDone = !isCancelled && hasErp && preEventCompleted;
+  const isPhasePostEventDone =
+    !isCancelled &&
+    isProductionCompleted &&
+    (order.orderStatus === "POST_EVENT_IN_PROGRESS" || order.orderStatus === "COMPLETED");
+  const isPhaseDeliveryDone = !isCancelled && order.orderStatus === "COMPLETED";
+
+  const isPhaseEventActive = !isCancelled && !isPhaseEventDone && activePhaseId === "phase_event_day";
+  const isPhasePreEventActive = !isCancelled && !isPhasePreEventDone && activePhaseId === "phase_pre_event";
+  const isPhasePostEventActive = !isCancelled && !isPhasePostEventDone && activePhaseId === "phase_post_event";
+  const isPhaseDeliveryActive = !isCancelled && !isPhaseDeliveryDone && activePhaseId === "phase_delivery";
+
+  const pipelineStages = useMemo(() => {
+    const stages: Array<{
+      id: PhaseId;
+      stepNumber: number;
+      shortLabel: string;
+      isCompleted: boolean;
+      isActive: boolean;
+    }> = [
+      {
+        id: "phase_event_day",
+        stepNumber: 1,
+        shortLabel: "Schedule",
+        isCompleted: isPhaseEventDone,
+        isActive: isPhaseEventActive,
+      },
+    ];
+
+    if (hasErp) {
+      stages.push({
+        id: "phase_pre_event",
+        stepNumber: 2,
+        shortLabel: "Crew Prep",
+        isCompleted: isPhasePreEventDone,
+        isActive: isPhasePreEventActive,
+      });
+    }
+
+    stages.push({
+      id: "phase_post_event",
+      stepNumber: hasErp ? 3 : 2,
+      shortLabel: "Production",
+      isCompleted: isPhasePostEventDone,
+      isActive: isPhasePostEventActive,
+    });
+
+    stages.push({
+      id: "phase_delivery",
+      stepNumber: hasErp ? 4 : 3,
+      shortLabel: "Delivery",
+      isCompleted: isPhaseDeliveryDone,
+      isActive: isPhaseDeliveryActive,
+    });
+
+    return stages;
+  }, [
+    hasErp,
+    isPhaseDeliveryActive,
+    isPhaseDeliveryDone,
+    isPhaseEventActive,
+    isPhaseEventDone,
+    isPhasePostEventActive,
+    isPhasePostEventDone,
+    isPhasePreEventActive,
+    isPhasePreEventDone,
+  ]);
+
+  const completedPipelineCount = pipelineStages.filter((s) => s.isCompleted).length;
+
   // Multi-date toggle helpers for schedule editing in Phase 01
   const toggleDraftMainDate = (isoDate: string) => {
     setScheduleDatesDraft((prev) => {
@@ -1164,40 +1250,144 @@ export function OrderVerticalWorkflow({
         </div>
       ))}
 
-      {/* 2. Unified Vertical Workflow Timeline (Read-Only Status & Flow Overview for Tasks) */}
-      {displayMode !== "main-state-only" && (
-      <div className="relative pl-6 sm:pl-8 space-y-6 before:absolute before:left-3 sm:before:left-4 before:top-4 before:bottom-4 before:w-0.5 before:bg-slate-200/80">
-        {/* PHASE 1: Event Schedule & Execution (Basic Event Info, Multi-Date & Separate Event Shoot Dates) */}
-        <div className="relative group">
-          {/* Timeline Marker */}
-          <div
-            className={`absolute -left-6 sm:-left-8 top-0.5 flex h-6 w-6 sm:h-7 sm:w-7 items-center justify-center rounded-full font-bold text-xs ring-4 ring-white shadow-2xs transition-all ${
-              order.orderStatus === "POST_EVENT_IN_PROGRESS" || order.orderStatus === "COMPLETED"
-                ? "bg-emerald-500 text-white"
-                : activePhaseId === "phase_event_day"
-                ? "bg-brand-blue-primary text-white shadow-sm ring-blue-100 ring-4"
-                : "bg-slate-100 text-slate-500 border border-slate-300"
-            }`}
-          >
-            {order.orderStatus === "POST_EVENT_IN_PROGRESS" || order.orderStatus === "COMPLETED" ? "✓" : "1"}
-          </div>
-
-          <div
-            className={`rounded-2xl border p-4 shadow-2xs transition ${
-              activePhaseId === "phase_event_day"
-                ? "border-blue-200 bg-white ring-1 ring-blue-100/60"
-                : "border-border-default bg-white"
-            }`}
-          >
+      {/* 2. Unified Workflow Pipeline Panel */}
+      {displayMode !== "main-state-only" && (() => {
+        const renderVerticalConnector = (isCompleted: boolean, isActive: boolean) => (
+          <div className="flex flex-1 flex-col items-center py-1" aria-hidden="true">
             <div
-              className="flex items-center justify-between cursor-pointer select-none"
-              onClick={() => togglePhase("phase_event_day")}
+              className={`w-[3px] flex-1 min-h-[20px] rounded-full transition-colors duration-300 ${
+                isCompleted
+                  ? "bg-emerald-500"
+                  : isActive
+                  ? "bg-gradient-to-b from-brand-blue-primary via-sky-300 to-slate-200"
+                  : "bg-slate-200"
+              }`}
+            />
+            <svg
+              className={`h-3 w-3 -mt-0.5 shrink-0 transition-colors duration-300 ${
+                isCompleted ? "text-emerald-500" : isActive ? "text-sky-400" : "text-slate-300"
+              }`}
+              viewBox="0 0 12 12"
+              fill="currentColor"
             >
-              <div className="min-w-0 pr-2">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-text-tertiary">
-                    Phase 01
-                  </span>
+              <path d="M6 9.5L1.75 4.5h8.5L6 9.5z" />
+            </svg>
+          </div>
+        );
+
+        const pipelineContent = (
+          <div className="space-y-4">
+            {/* Horizontal Connected Pipeline Overview */}
+            <div
+              className="rounded-xl border border-border-default bg-slate-50/70 px-3 py-2.5 overflow-x-auto"
+              role="navigation"
+              aria-label="Pipeline stages"
+            >
+              <div className="flex items-center min-w-[380px]">
+                {pipelineStages.map((stage, idx) => {
+                  const isLast = idx === pipelineStages.length - 1;
+                  const isExpanded = expandedPhases.has(stage.id);
+
+                  return (
+                    <div key={stage.id} className={`flex items-center ${isLast ? "shrink-0" : "flex-1 min-w-0"}`}>
+                      <button
+                        type="button"
+                        onClick={() => focusPipelinePhase(stage.id)}
+                        className={`group flex items-center gap-1.5 rounded-md px-1.5 py-1 text-left transition whitespace-nowrap shrink-0 cursor-pointer ${
+                          isExpanded ? "bg-white shadow-2xs" : "hover:bg-white/80"
+                        }`}
+                        title={`Jump to Phase 0${stage.stepNumber}: ${stage.shortLabel}`}
+                      >
+                        <span
+                          className={`flex h-5 w-5 items-center justify-center rounded text-[10px] font-extrabold transition-colors shrink-0 ${
+                            stage.isCompleted
+                              ? "bg-emerald-500 text-white"
+                              : stage.isActive
+                              ? "bg-brand-blue-primary text-white"
+                              : "bg-slate-200 text-slate-600"
+                          }`}
+                        >
+                          {stage.isCompleted ? "✓" : stage.stepNumber}
+                        </span>
+                        <span
+                          className={`text-[11px] font-bold transition-colors ${
+                            stage.isCompleted
+                              ? "text-emerald-800"
+                              : stage.isActive
+                              ? "text-brand-blue-primary"
+                              : "text-text-secondary group-hover:text-text-primary"
+                          }`}
+                        >
+                          {stage.shortLabel}
+                        </span>
+                      </button>
+
+                      {!isLast && (
+                        <div className="flex flex-1 items-center px-1.5 min-w-[16px]" aria-hidden="true">
+                          <div
+                            className={`h-[3px] w-full rounded-full transition-colors duration-300 ${
+                              stage.isCompleted
+                                ? "bg-emerald-500"
+                                : stage.isActive
+                                ? "bg-gradient-to-r from-brand-blue-primary to-slate-200"
+                                : "bg-slate-200"
+                            }`}
+                          />
+                          <svg
+                            className={`h-2.5 w-2.5 -ml-1 shrink-0 transition-colors duration-300 ${
+                              stage.isCompleted ? "text-emerald-500" : "text-slate-300"
+                            }`}
+                            viewBox="0 0 12 12"
+                            fill="currentColor"
+                          >
+                            <path d="M9.5 6L4.5 1.75v8.5L9.5 6z" />
+                          </svg>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Vertical Segmented Pipeline Stages */}
+            <div className="space-y-0">
+              {/* PHASE 1: Event Schedule & Execution */}
+              <div id="workflow-phase-phase_event_day" className="flex items-stretch gap-3 sm:gap-3.5">
+                <div className="flex flex-col items-center w-7 shrink-0 pt-3">
+                  <div
+                    className={`flex h-7 w-7 items-center justify-center rounded-md font-extrabold text-xs transition-all shrink-0 ${
+                      isPhaseEventDone
+                        ? "bg-emerald-500 text-white shadow-2xs"
+                        : isPhaseEventActive
+                        ? "bg-brand-blue-primary text-white ring-2 ring-blue-100 shadow-2xs"
+                        : "bg-slate-100 text-slate-500 border border-slate-300"
+                    }`}
+                  >
+                    {isPhaseEventDone ? "✓" : "1"}
+                  </div>
+                  {renderVerticalConnector(isPhaseEventDone, isPhaseEventActive)}
+                </div>
+
+                <div className="flex-1 min-w-0 pb-3.5">
+                  <div
+                    className={`rounded-xl border p-3.5 sm:p-4 transition ${
+                      isPhaseEventDone
+                        ? "border-emerald-200/90 bg-emerald-50/15"
+                        : isPhaseEventActive
+                        ? "border-blue-200 bg-white ring-1 ring-blue-100/70"
+                        : "border-border-default bg-white"
+                    }`}
+                  >
+                    <div
+                      className="flex items-center justify-between cursor-pointer select-none"
+                      onClick={() => togglePhase("phase_event_day")}
+                    >
+                      <div className="min-w-0 pr-2">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-text-tertiary">
+                            Phase 01
+                          </span>
                   <span
                     className={`inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-bold border ${
                       order.orderStatus === "POST_EVENT_IN_PROGRESS" || order.orderStatus === "COMPLETED"
@@ -1537,43 +1727,47 @@ export function OrderVerticalWorkflow({
                 )}
               </div>
             )}
-          </div>
-        </div>
+                  </div>
+                </div>
+              </div>
 
-        {/* PHASE 2: Pre-Event Preparation & Crew Allocation (ERP / Starter & Professional Studios Only) */}
-        {hasErp && (
-        <div className="relative group">
-          {/* Timeline Marker */}
-          <div
-            className={`absolute -left-6 sm:-left-8 top-0.5 flex h-6 w-6 sm:h-7 sm:w-7 items-center justify-center rounded-full font-bold text-xs ring-4 ring-white shadow-2xs transition-all ${
-              preEventCompleted && (order.orderStatus === "POST_EVENT_IN_PROGRESS" || order.orderStatus === "COMPLETED")
-                ? "bg-emerald-500 text-white"
-                : activePhaseId === "phase_pre_event"
-                ? "bg-brand-blue-primary text-white shadow-sm ring-blue-100 ring-4"
-                : preEventCompleted
-                ? "bg-emerald-500 text-white"
-                : "bg-slate-100 text-slate-400 border border-slate-300"
-            }`}
-          >
-            {preEventCompleted && order.orderStatus !== "AWAITING_EVENT" ? "✓" : "2"}
-          </div>
+              {/* PHASE 2: Pre-Event Preparation & Crew Allocation (ERP / Starter & Professional Studios Only) */}
+              {hasErp && (
+              <div id="workflow-phase-phase_pre_event" className="flex items-stretch gap-3 sm:gap-3.5">
+                <div className="flex flex-col items-center w-7 shrink-0 pt-3">
+                  <div
+                    className={`flex h-7 w-7 items-center justify-center rounded-md font-extrabold text-xs transition-all shrink-0 ${
+                      isPhasePreEventDone
+                        ? "bg-emerald-500 text-white shadow-2xs"
+                        : isPhasePreEventActive
+                        ? "bg-brand-blue-primary text-white ring-2 ring-blue-100 shadow-2xs"
+                        : "bg-slate-100 text-slate-400 border border-slate-300"
+                    }`}
+                  >
+                    {isPhasePreEventDone ? "✓" : "2"}
+                  </div>
+                  {renderVerticalConnector(isPhasePreEventDone, isPhasePreEventActive)}
+                </div>
 
-          <div
-            className={`rounded-2xl border p-4 shadow-2xs transition ${
-              activePhaseId === "phase_pre_event"
-                ? "border-blue-200 bg-white ring-1 ring-blue-100/60"
-                : "border-border-default bg-white"
-            }`}
-          >
-            <div
-              className="flex items-center justify-between cursor-pointer select-none"
-              onClick={() => togglePhase("phase_pre_event")}
-            >
-              <div className="min-w-0 pr-2">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-text-tertiary">
-                    Phase 02
-                  </span>
+                <div className="flex-1 min-w-0 pb-3.5">
+                  <div
+                    className={`rounded-xl border p-3.5 sm:p-4 transition ${
+                      isPhasePreEventDone
+                        ? "border-emerald-200/90 bg-emerald-50/15"
+                        : isPhasePreEventActive
+                        ? "border-blue-200 bg-white ring-1 ring-blue-100/70"
+                        : "border-border-default bg-white"
+                    }`}
+                  >
+                    <div
+                      className="flex items-center justify-between cursor-pointer select-none"
+                      onClick={() => togglePhase("phase_pre_event")}
+                    >
+                      <div className="min-w-0 pr-2">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-text-tertiary">
+                            Phase 02
+                          </span>
                   <span
                     className={`inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-bold border ${
                       preEventCompleted
@@ -1832,41 +2026,47 @@ export function OrderVerticalWorkflow({
                 </div>
               </div>
             )}
-          </div>
-        </div>
-        )}
+                  </div>
+                </div>
+              </div>
+              )}
 
-        {/* PHASE 3 (or 2 for Free Tier): Post-Event Production (Parallel Photography & Videography Streams) */}
-        <div className="relative group">
-          {/* Timeline Marker */}
-          <div
-            className={`absolute -left-6 sm:-left-8 top-0.5 flex h-6 w-6 sm:h-7 sm:w-7 items-center justify-center rounded-full font-bold text-xs ring-4 ring-white shadow-2xs transition-all ${
-              isProductionCompleted && (order.orderStatus === "COMPLETED" || order.orderStatus === "POST_EVENT_IN_PROGRESS")
-                ? "bg-emerald-500 text-white"
-                : activePhaseId === "phase_post_event"
-                ? "bg-brand-blue-primary text-white shadow-sm ring-blue-100 ring-4"
-                : "bg-slate-100 text-slate-400 border border-slate-300"
-            }`}
-          >
-            {isProductionCompleted && order.orderStatus === "COMPLETED" ? "✓" : hasErp ? "3" : "2"}
-          </div>
+              {/* PHASE 3 (or 2 for Free Tier): Post-Event Production */}
+              <div id="workflow-phase-phase_post_event" className="flex items-stretch gap-3 sm:gap-3.5">
+                <div className="flex flex-col items-center w-7 shrink-0 pt-3">
+                  <div
+                    className={`flex h-7 w-7 items-center justify-center rounded-md font-extrabold text-xs transition-all shrink-0 ${
+                      isPhasePostEventDone
+                        ? "bg-emerald-500 text-white shadow-2xs"
+                        : isPhasePostEventActive
+                        ? "bg-brand-blue-primary text-white ring-2 ring-blue-100 shadow-2xs"
+                        : "bg-slate-100 text-slate-400 border border-slate-300"
+                    }`}
+                  >
+                    {isPhasePostEventDone ? "✓" : hasErp ? "3" : "2"}
+                  </div>
+                  {renderVerticalConnector(isPhasePostEventDone, isPhasePostEventActive)}
+                </div>
 
-          <div
-            className={`rounded-2xl border p-4 shadow-2xs transition ${
-              activePhaseId === "phase_post_event"
-                ? "border-blue-200 bg-white ring-1 ring-blue-100/60"
-                : "border-border-default bg-white"
-            }`}
-          >
-            <div
-              className="flex items-center justify-between cursor-pointer select-none"
-              onClick={() => togglePhase("phase_post_event")}
-            >
-              <div className="min-w-0 pr-2">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-text-tertiary">
-                    {hasErp ? "Phase 03" : "Phase 02"}
-                  </span>
+                <div className="flex-1 min-w-0 pb-3.5">
+                  <div
+                    className={`rounded-xl border p-3.5 sm:p-4 transition ${
+                      isPhasePostEventDone
+                        ? "border-emerald-200/90 bg-emerald-50/15"
+                        : isPhasePostEventActive
+                        ? "border-blue-200 bg-white ring-1 ring-blue-100/70"
+                        : "border-border-default bg-white"
+                    }`}
+                  >
+                    <div
+                      className="flex items-center justify-between cursor-pointer select-none"
+                      onClick={() => togglePhase("phase_post_event")}
+                    >
+                      <div className="min-w-0 pr-2">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-text-tertiary">
+                            {hasErp ? "Phase 03" : "Phase 02"}
+                          </span>
                   <span
                     className={`inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-bold border ${
                       isProductionCompleted
@@ -2008,42 +2208,45 @@ export function OrderVerticalWorkflow({
                 )}
               </div>
             )}
-          </div>
-        </div>
+                  </div>
+                </div>
+              </div>
 
-        {/* PHASE 4 (or 3 for Free Tier): Final Delivery and Order Completion */}
-        <div className="relative group">
-          {/* Timeline Marker */}
-          <div
-            className={`absolute -left-6 sm:-left-8 top-0.5 flex h-6 w-6 sm:h-7 sm:w-7 items-center justify-center rounded-full font-bold text-xs ring-4 ring-white shadow-2xs transition-all ${
-              order.orderStatus === "COMPLETED"
-                ? "bg-emerald-500 text-white shadow-sm ring-emerald-100 ring-4"
-                : activePhaseId === "phase_delivery"
-                ? "bg-brand-blue-primary text-white shadow-sm ring-blue-100 ring-4"
-                : "bg-slate-100 text-slate-400 border border-slate-300"
-            }`}
-          >
-            {order.orderStatus === "COMPLETED" ? "✓" : hasErp ? "4" : "3"}
-          </div>
+              {/* PHASE 4 (or 3 for Free Tier): Final Delivery and Order Completion */}
+              <div id="workflow-phase-phase_delivery" className="flex items-stretch gap-3 sm:gap-3.5">
+                <div className="flex flex-col items-center w-7 shrink-0 pt-3">
+                  <div
+                    className={`flex h-7 w-7 items-center justify-center rounded-md font-extrabold text-xs transition-all shrink-0 ${
+                      isPhaseDeliveryDone
+                        ? "bg-emerald-500 text-white shadow-2xs"
+                        : isPhaseDeliveryActive
+                        ? "bg-brand-blue-primary text-white ring-2 ring-blue-100 shadow-2xs"
+                        : "bg-slate-100 text-slate-400 border border-slate-300"
+                    }`}
+                  >
+                    {isPhaseDeliveryDone ? "✓" : hasErp ? "4" : "3"}
+                  </div>
+                </div>
 
-          <div
-            className={`rounded-2xl border p-4 shadow-2xs transition ${
-              order.orderStatus === "COMPLETED"
-                ? "border-emerald-300 bg-emerald-50/30"
-                : activePhaseId === "phase_delivery"
-                ? "border-blue-200 bg-white ring-1 ring-blue-100/60"
-                : "border-border-default bg-white"
-            }`}
-          >
-            <div
-              className="flex items-center justify-between cursor-pointer select-none"
-              onClick={() => togglePhase("phase_delivery")}
-            >
-              <div className="min-w-0 pr-2">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-text-tertiary">
-                    {hasErp ? "Phase 04" : "Phase 03"}
-                  </span>
+                <div className="flex-1 min-w-0">
+                  <div
+                    className={`rounded-xl border p-3.5 sm:p-4 transition ${
+                      isPhaseDeliveryDone
+                        ? "border-emerald-300 bg-emerald-50/30"
+                        : isPhaseDeliveryActive
+                        ? "border-blue-200 bg-white ring-1 ring-blue-100/70"
+                        : "border-border-default bg-white"
+                    }`}
+                  >
+                    <div
+                      className="flex items-center justify-between cursor-pointer select-none"
+                      onClick={() => togglePhase("phase_delivery")}
+                    >
+                      <div className="min-w-0 pr-2">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-text-tertiary">
+                            {hasErp ? "Phase 04" : "Phase 03"}
+                          </span>
                   <span
                     className={`inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-bold border ${
                       order.orderStatus === "COMPLETED"
@@ -2141,10 +2344,68 @@ export function OrderVerticalWorkflow({
                 </div>
               </div>
             )}
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
-      )}
+        );
+
+        const orderStatusBadgeClass =
+          order.orderStatus === "COMPLETED"
+            ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
+            : order.orderStatus === "POST_EVENT_IN_PROGRESS"
+            ? "bg-blue-100 text-blue-800 border border-blue-200"
+            : order.orderStatus === "CANCELLED"
+            ? "bg-rose-100 text-rose-800 border border-rose-200"
+            : "bg-amber-100 text-amber-800 border border-amber-200";
+
+        const orderStatusText =
+          order.orderStatus === "COMPLETED"
+            ? "Completed"
+            : order.orderStatus === "POST_EVENT_IN_PROGRESS"
+            ? "Post-Event In Progress"
+            : order.orderStatus === "CANCELLED"
+            ? "Cancelled"
+            : "Awaiting Event";
+
+        return displayMode === "full" ? (
+          <section
+            aria-label="Order Lifecycle Pipeline"
+            className="rounded-2xl border border-border-default bg-white p-4 sm:p-5 shadow-2xs space-y-4"
+          >
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-b border-border-divider pb-3">
+              <div className="min-w-0">
+                <h3 className="text-sm sm:text-base font-bold text-text-primary leading-snug">
+                  Order Lifecycle Pipeline
+                </h3>
+                <p className="text-[11px] text-text-tertiary mt-0.5">
+                  {hasErp
+                    ? "End-to-end workflow across schedule, prep, production, and delivery"
+                    : "End-to-end workflow across schedule, production, and delivery"}
+                </p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0 self-start sm:self-center">
+                <span
+                  className={`text-[11px] font-mono font-bold tabular-nums ${
+                    completedPipelineCount === pipelineStages.length
+                      ? "text-emerald-700"
+                      : "text-text-secondary"
+                  }`}
+                >
+                  {completedPipelineCount}/{pipelineStages.length}
+                </span>
+                <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-bold ${orderStatusBadgeClass}`}>
+                  {orderStatusText}
+                </span>
+              </div>
+            </div>
+            {pipelineContent}
+          </section>
+        ) : (
+          pipelineContent
+        );
+      })()}
     </div>
   );
 

@@ -21,8 +21,6 @@ import {
   getNextOrPrimaryOrderShootDate,
 } from "@/utils/dateUtils";
 import { OrderVerticalWorkflow } from "@/components/workflow/OrderVerticalWorkflow";
-import { FileText, Receipt } from "lucide-react";
-import { MinimalBillingModal } from "@/components/billing/MinimalBillingModal";
 import { GoogleDriveDeliverablesSection } from "@/components/deliverables/GoogleDriveDeliverablesSection";
 
 const STATUS_LABELS: Record<OrderStatus, string> = {
@@ -70,17 +68,12 @@ export function TrackOrderClient({ view, rawIdentifier }: TrackOrderClientProps)
   const [collaboratorError, setCollaboratorError] = useState<string | null>(null);
   const [showShareModal, setShowShareModal] = useState(false);
 
-  // Live Google Drive Deliverables, Tasks, Order Status & Billing Modal State
+  // Live Google Drive Deliverables, Tasks & Order Status State
   const [driveDeliverables, setDriveDeliverables] = useState<OrderDriveDeliverable[]>(
     order.driveDeliverables || []
   );
   const [tasksState, setTasksState] = useState(tasks);
   const [orderStatusState, setOrderStatusState] = useState<OrderStatus>(order.orderStatus);
-  const [billingModalState, setBillingModalState] = useState<{
-    isOpen: boolean;
-    tab: "INVOICE" | "RECEIPT";
-    receiptId?: string;
-  }>({ isOpen: false, tab: "INVOICE" });
 
   // Sync / Claim state
   const [isSyncing, setIsSyncing] = useState(false);
@@ -966,41 +959,15 @@ export function TrackOrderClient({ view, rawIdentifier }: TrackOrderClientProps)
             />
           </div>
 
-          {/* Payment Summary & Minimal Invoice / Receipts */}
+          {/* Payment Summary */}
           <div className="rounded-3xl border border-border-default bg-white p-6 shadow-sm sm:p-8 space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h2 className="text-lg font-bold text-text-primary">Payment Summary</h2>
                 <p className="text-xs text-text-tertiary">
-                  {order.canIssueBilling
-                    ? "Official order value, recorded payments, and downloadable invoices/receipts"
-                    : "Official order value, advance received, and remaining balance"}
+                  Official order value, advance received, and remaining balance
                 </p>
               </div>
-              {order.canIssueBilling && (
-                <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setBillingModalState({ isOpen: true, tab: "INVOICE" })
-                    }
-                    className="inline-flex items-center gap-1.5 rounded-xl border border-border-default bg-surface-app px-3.5 py-2 text-xs font-bold text-text-primary hover:border-brand-blue-primary hover:text-brand-blue-primary transition cursor-pointer"
-                  >
-                    <FileText className="h-3.5 w-3.5 text-brand-blue-primary" />
-                    <span>Invoice (PDF / Print)</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setBillingModalState({ isOpen: true, tab: "RECEIPT" })
-                    }
-                    className="inline-flex items-center gap-1.5 rounded-xl bg-brand-blue-primary px-3.5 py-2 text-xs font-bold text-white hover:bg-sky-600 transition cursor-pointer"
-                  >
-                    <Receipt className="h-3.5 w-3.5" />
-                    <span>Payment Receipts</span>
-                  </button>
-                </div>
-              )}
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -1083,50 +1050,6 @@ export function TrackOrderClient({ view, rawIdentifier }: TrackOrderClientProps)
           </div>
         </div>
       </main>
-
-      {/* Minimal Plain-White Invoice & Payment Receipt Modal */}
-      {order.canIssueBilling && (
-        <MinimalBillingModal
-          isOpen={billingModalState.isOpen}
-          onClose={() => setBillingModalState((prev) => ({ ...prev, isOpen: false }))}
-          order={{
-            id: order.id,
-            orderNumber: order.orderNumber,
-            eventType: order.eventType,
-            eventDate: order.eventDate,
-            eventLocation: order.eventLocation,
-            services: order.services,
-            packages: order.packages,
-            customerName: order.customerName,
-            customerPhone: order.customerPhone,
-            customerEmail: order.customerEmail,
-            paymentStatus: order.paymentStatus,
-            pricing: {
-              estimatedPrice: order.totalAmount,
-              finalConfirmedPrice: order.totalAmount,
-              advanceAmount: order.advanceAmount,
-              advanceDate: order.advanceDate,
-              advanceMethod: order.advanceMethod,
-              advanceReference: order.advanceReference,
-              advanceProofUrl: order.advanceProofUrl,
-              advanceNotes: order.advanceNotes,
-              remainingAmount: order.remainingAmount,
-              installments: order.installments || [],
-            },
-            createdAt: order.createdAt,
-          }}
-          studioId={order.studioId}
-          studioName={order.studioName}
-          studioLogoUrl={order.studioLogoUrl}
-          studioCity={order.studioCity}
-          studioPhone={order.studioPhone}
-          studioEmail={order.studioOwnerEmail}
-          initialProfile={order.studioBillingProfile}
-          initialTab={billingModalState.tab}
-          initialReceiptId={billingModalState.receiptId}
-          canEditProfile={isStaffMatch}
-        />
-      )}
 
       {/* Footer */}
       <footer className="border-t border-border-divider bg-white py-8">

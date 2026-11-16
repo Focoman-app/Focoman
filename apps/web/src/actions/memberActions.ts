@@ -32,6 +32,7 @@ import {
 } from "@/lib/invitationPasscode";
 import { updatePendingInvitationLinkTokenHash } from "@focoman/db";
 import { sendCrewInvitationEmail, sendCrewAcceptedOwnerEmail, sendCrewWelcomeMemberEmail } from "@/services/emailService";
+import { hasStudioCapability } from "@/lib/entitlementAuth";
 
 /**
  * Server Actions for Studio Crew & Resource Management (ERP)
@@ -223,6 +224,7 @@ export async function createMemberAction(input: {
   name: string;
   email?: string;
   phone?: string;
+  notifyWhatsApp?: boolean;
   claimCode?: string;
   skills: string[];
   idToken: string;
@@ -237,6 +239,16 @@ export async function createMemberAction(input: {
   try {
     const decoded = await requireVerifiedUser(input.idToken);
     await requireStudioMember(decoded.uid, input.studioId, "STUDIO_OWNER");
+
+    if (
+      input.notifyWhatsApp &&
+      !(await hasStudioCapability(input.studioId, "WHATSAPP_OPERATIONS"))
+    ) {
+      return {
+        success: false,
+        error: "WhatsApp alerts and notifications require the Professional (₹1,999/mo) plan.",
+      };
+    }
 
     if (!input.name || input.name.trim().length === 0) {
       return { success: false, error: "Member name is required." };
@@ -343,6 +355,9 @@ export async function createMemberAction(input: {
         studioName,
         ...(email ? { email } : {}),
         ...(input.phone?.trim() ? { phone: input.phone.trim() } : {}),
+        ...(input.notifyWhatsApp !== undefined
+          ? { notifyWhatsApp: Boolean(input.notifyWhatsApp && input.phone?.trim()) }
+          : {}),
         name: input.name.trim(),
         skills: input.skills,
         ...(input.claimCode && !email ? { claimCode: input.claimCode } : {}),
@@ -395,6 +410,7 @@ export async function updateMemberAction(input: {
   updates: {
     name?: string;
     phone?: string;
+    notifyWhatsApp?: boolean;
     skills?: string[];
     status?: 'ACTIVE' | 'INACTIVE';
   };
@@ -403,6 +419,16 @@ export async function updateMemberAction(input: {
   try {
     const decoded = await requireVerifiedUser(input.idToken);
     await requireStudioMember(decoded.uid, input.studioId, "STUDIO_OWNER");
+
+    if (
+      input.updates.notifyWhatsApp &&
+      !(await hasStudioCapability(input.studioId, "WHATSAPP_OPERATIONS"))
+    ) {
+      return {
+        success: false,
+        error: "WhatsApp alerts and notifications require the Professional (₹1,999/mo) plan.",
+      };
+    }
 
     const existing = await getMemberById(input.memberId);
     if (!existing) {
@@ -415,6 +441,9 @@ export async function updateMemberAction(input: {
     const updated = await updateMember(input.memberId, {
       ...(input.updates.name ? { name: input.updates.name.trim() } : {}),
       ...(input.updates.phone !== undefined ? { phone: input.updates.phone.trim() } : {}),
+      ...(input.updates.notifyWhatsApp !== undefined
+        ? { notifyWhatsApp: input.updates.notifyWhatsApp }
+        : {}),
       ...(input.updates.skills ? { skills: input.updates.skills } : {}),
       ...(input.updates.status ? { status: input.updates.status } : {}),
     });

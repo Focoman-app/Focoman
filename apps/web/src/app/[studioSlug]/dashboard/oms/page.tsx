@@ -64,6 +64,7 @@ import {
   type OmsNoticeDialogState,
 } from "@/components/oms/OmsOrderActionDialogs";
 import { MinimalBillingModal } from "@/components/billing/MinimalBillingModal";
+import { PlanGatedToast, usePlanGatedToast } from "@/components/PlanGatedToast";
 
 export default function OmsPage({
   params,
@@ -89,6 +90,11 @@ export default function OmsPage({
   const hasErp = effectiveFeatures.erp;
   const hasWhatsAppOperations = effectiveFeatures.whatsapp;
   const hasDriveReview = effectiveFeatures.driveReview;
+  const {
+    message: planWarning,
+    show: showPlanWarning,
+    dismiss: dismissPlanWarning,
+  } = usePlanGatedToast();
   const [orders, setOrders] = useState<Order[]>([]);
   const [omsSection, setOmsSection] = useState<"ORDERS" | "LEADS">("ORDERS");
   const [leads, setLeads] = useState<StudioLead[]>([]);
@@ -410,6 +416,7 @@ export default function OmsPage({
   const handleOpenCreateModal = useCallback(() => {
     setNewOrderForm({
       ...DEFAULT_ORDER_FORM,
+      notifyWhatsApp: hasWhatsAppOperations,
       services: [],
       finalConfirmedPrice: "" as unknown as number,
       advanceAmount: "" as unknown as number,
@@ -421,7 +428,7 @@ export default function OmsPage({
     setShowServicesDropdown(false);
     setShowCustomerDropdown(false);
     setShowCreateModal(true);
-  }, []);
+  }, [hasWhatsAppOperations]);
 
   const matchingCustomers = useMemo(() => {
     if (!hasCrm) return [];
@@ -716,6 +723,7 @@ export default function OmsPage({
       setAdvanceProofFile(null);
       setNewOrderForm({
         ...DEFAULT_ORDER_FORM,
+        notifyWhatsApp: hasWhatsAppOperations,
         passkeyPin: Math.floor(100000 + Math.random() * 900000).toString(),
       });
       setOrdersRefreshError(null);
@@ -1549,6 +1557,10 @@ export default function OmsPage({
   }, [orders, statusFilter, query, sortBy]);
 
   const handleExportOmsExcel = useCallback(() => {
+    if (!canExportOrders) {
+      showPlanWarning("Excel export is available only in the Professional (₹1,999/mo) plan.");
+      return;
+    }
     try {
       exportOmsOrdersToExcel(studioSlug, filtered);
     } catch (error) {
@@ -1558,7 +1570,7 @@ export default function OmsPage({
         tone: "error",
       });
     }
-  }, [filtered, studioSlug]);
+  }, [canExportOrders, filtered, studioSlug, showPlanWarning]);
 
   const handleSaveDriveDeliverables = useCallback(
     async (updatedDeliverables: OrderDriveDeliverable[]) => {
@@ -1733,6 +1745,13 @@ export default function OmsPage({
             onOpenReceipt={(receiptKey) =>
               setBillingModalState({ tab: "RECEIPT", receiptId: receiptKey })
             }
+            onLockedBillingAction={(kind) =>
+              showPlanWarning(
+                kind === "invoice"
+                  ? "Invoices are available only in the Professional (₹1,999/mo) plan."
+                  : "Payment receipts are available only in the Professional (₹1,999/mo) plan."
+              )
+            }
             isEditingPricing={isEditingPricing}
             onCancelEditingPricing={() => {
               setIsEditingPricing(false);
@@ -1827,7 +1846,7 @@ export default function OmsPage({
 
           {/* Cancellation, Audit History and Soft-Deletion Operations */}
           <div className="border-t border-border-divider pt-4 flex items-center justify-between gap-2 flex-wrap">
-            {selected.orderStatus !== "CANCELLED" && (
+            {selected.orderStatus !== "CANCELLED" && selected.orderStatus !== "COMPLETED" && (
               <button
                 type="button"
                 onClick={() => {
@@ -1917,6 +1936,11 @@ export default function OmsPage({
           .filter(Boolean)}
         hasCrm={hasCrm}
         hasWhatsAppOperations={hasWhatsAppOperations}
+        onLockedWhatsAppAlert={() =>
+          showPlanWarning(
+            "WhatsApp alerts and notifications require the Professional (₹1,999/mo) plan."
+          )
+        }
         advanceProofFile={advanceProofFile}
         onChangeAdvanceProofFile={setAdvanceProofFile}
       />
@@ -1977,9 +2001,20 @@ export default function OmsPage({
         studioSlug={studioSlug}
         initialName={addMemberInitialName}
         initialSkills={addMemberInitialSkills}
+        hasWhatsAppOperations={hasWhatsAppOperations}
+        onLockedWhatsAppAlert={() =>
+          showPlanWarning(
+            "WhatsApp alerts and notifications require the Professional (₹1,999/mo) plan."
+          )
+        }
         onSuccess={handleMemberCreated}
       />
 
+      <PlanGatedToast
+        message={planWarning}
+        onDismiss={dismissPlanWarning}
+        upgradeHref={`/checkout?studio=${studioSlug}&plan=COMPLETE`}
+      />
     </div>
   );
 }

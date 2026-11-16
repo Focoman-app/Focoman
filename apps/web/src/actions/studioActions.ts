@@ -166,6 +166,7 @@ export async function updateStudioAction(input: {
     website?: string;
     instagram?: string;
     configuredServices?: StudioServiceConfig[];
+    serviceCrewMapping?: Record<string, string[]>;
     features?: Partial<Studio['features']>;
     billingProfile?: Studio['billingProfile'];
     temporaryCrew?: Studio['temporaryCrew'];
@@ -183,6 +184,7 @@ export async function updateStudioAction(input: {
       ...(input.updates.website !== undefined ? { website: input.updates.website.trim() } : {}),
       ...(input.updates.instagram !== undefined ? { instagram: input.updates.instagram.trim() } : {}),
       ...(input.updates.configuredServices ? { configuredServices: input.updates.configuredServices } : {}),
+      ...(input.updates.serviceCrewMapping !== undefined ? { serviceCrewMapping: input.updates.serviceCrewMapping } : {}),
       ...(input.updates.features ? { features: input.updates.features as any } : {}),
       ...(input.updates.billingProfile ? { billingProfile: input.updates.billingProfile } : {}),
       ...(input.updates.temporaryCrew !== undefined ? { temporaryCrew: input.updates.temporaryCrew } : {}),
@@ -662,6 +664,9 @@ export async function selectStudioPlanAction(
           normalizedPlan !== "FREE"
             ? existingStudio?.features?.autoAssignCrew ?? true
             : false,
+        ...(existingStudio?.features?.autoAssignCrewConfigured !== undefined
+          ? { autoAssignCrewConfigured: existingStudio.features.autoAssignCrewConfigured }
+          : {}),
       },
     });
 

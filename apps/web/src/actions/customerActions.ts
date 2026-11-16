@@ -15,6 +15,7 @@ import { Customer } from "@focoman/types";
 import { CreateCustomerSchema, UpdateCustomerSchema } from "@focoman/validation";
 import { isContactMatch } from "@focoman/domain";
 import { requireVerifiedUser, requireStudioOwner } from "@/lib/serverAuth";
+import { hasStudioCapability } from "@/lib/entitlementAuth";
 
 /**
  * Server Actions for Customer Management (CRM)
@@ -63,6 +64,8 @@ export async function createCustomerAction(input: {
   phone?: string;
   email?: string;
   address?: string;
+  notifyWhatsApp?: boolean;
+  notifyEmail?: boolean;
   idToken: string;
 }): Promise<{ success: boolean; customer?: Customer; error?: string }> {
   try {
@@ -72,10 +75,22 @@ export async function createCustomerAction(input: {
       phone: input.phone || undefined,
       email: input.email || undefined,
       address: input.address || undefined,
+      notifyWhatsApp: input.notifyWhatsApp,
+      notifyEmail: input.notifyEmail,
     });
 
     const decoded = await requireVerifiedUser(input.idToken);
     await requireStudioOwner(decoded.uid, validated.studioId);
+
+    if (
+      validated.notifyWhatsApp &&
+      !(await hasStudioCapability(validated.studioId, "WHATSAPP_OPERATIONS"))
+    ) {
+      return {
+        success: false,
+        error: "WhatsApp alerts and notifications require the Professional (₹1,999/mo) plan.",
+      };
+    }
 
     // Duplicate detection check
     const existingCustomers = await getCustomersByStudio(validated.studioId);
@@ -103,6 +118,12 @@ export async function createCustomerAction(input: {
       phone: validated.phone?.trim() || undefined,
       email: validated.email?.trim() || undefined,
       address: validated.address?.trim() || undefined,
+      ...(validated.notifyWhatsApp !== undefined
+        ? { notifyWhatsApp: Boolean(validated.notifyWhatsApp && validated.phone?.trim()) }
+        : {}),
+      ...(validated.notifyEmail !== undefined
+        ? { notifyEmail: Boolean(validated.notifyEmail && validated.email?.trim()) }
+        : {}),
       isDeleted: false,
       createdAt: now,
       updatedAt: now,
@@ -127,6 +148,8 @@ export async function updateCustomerAction(input: {
     phone?: string;
     email?: string;
     address?: string;
+    notifyWhatsApp?: boolean;
+    notifyEmail?: boolean;
   };
   idToken: string;
 }): Promise<{ success: boolean; customer?: Customer; error?: string }> {
@@ -138,10 +161,22 @@ export async function updateCustomerAction(input: {
       phone: input.updates.phone,
       email: input.updates.email,
       address: input.updates.address,
+      notifyWhatsApp: input.updates.notifyWhatsApp,
+      notifyEmail: input.updates.notifyEmail,
     });
 
     const decoded = await requireVerifiedUser(input.idToken);
     await requireStudioOwner(decoded.uid, validated.studioId);
+
+    if (
+      validated.notifyWhatsApp &&
+      !(await hasStudioCapability(validated.studioId, "WHATSAPP_OPERATIONS"))
+    ) {
+      return {
+        success: false,
+        error: "WhatsApp alerts and notifications require the Professional (₹1,999/mo) plan.",
+      };
+    }
 
     const existing = await getCustomerById(validated.customerId);
     if (!existing) {
@@ -175,6 +210,12 @@ export async function updateCustomerAction(input: {
       ...(validated.phone !== undefined ? { phone: validated.phone.trim() || undefined } : {}),
       ...(validated.email !== undefined ? { email: validated.email.trim() || undefined } : {}),
       ...(validated.address !== undefined ? { address: validated.address.trim() || undefined } : {}),
+      ...(validated.notifyWhatsApp !== undefined
+        ? { notifyWhatsApp: validated.notifyWhatsApp }
+        : {}),
+      ...(validated.notifyEmail !== undefined
+        ? { notifyEmail: validated.notifyEmail }
+        : {}),
     });
 
     return { success: true, customer: updated || undefined };

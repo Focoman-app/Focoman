@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, use, useMemo } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { StudioMember, Order, StudioInvitationSummary } from "@focoman/types";
 import {
   getStudioMembersAction,
@@ -20,34 +21,44 @@ import {
 } from "@/actions/orderActions";
 import { updateStudioAction } from "@/actions/studioActions";
 import { useStudioWorkspace } from "@/components/StudioWorkspaceProvider";
-import { getEffectiveStudioTier, isLifetimeProEmail } from "@/lib/proEntitlements";
-import { FileSpreadsheet, Pencil, Trash2, RotateCcw, Clock, Send } from "lucide-react";
+import {
+  getEffectiveStudioFeatures,
+  getEffectiveStudioTier,
+  isLifetimeProEmail,
+} from "@/lib/proEntitlements";
+import {
+  PRESET_SKILLS,
+  getSkillBadgeClass,
+  getSkillLabel,
+  isSkillRelatedToService,
+} from "@/lib/crewSkills";
+import { DEFAULT_STUDIO_SERVICES } from "@/lib/studioServices";
+import {
+  FileSpreadsheet,
+  Pencil,
+  Trash2,
+  RotateCcw,
+  Clock,
+  Send,
+  SlidersHorizontal,
+  Sparkles,
+  Lock,
+  Plus,
+  X,
+} from "lucide-react";
 import { exportWorkbookToExcel } from "@/utils/excelExport";
-
-const SKILL_LABELS: Record<string, string> = {
-  PHOTOGRAPHY: "Photographer",
-  VIDEOGRAPHY: "Videographer",
-  PHOTO_EDITING: "Photo Editor",
-  ALBUM_DESIGN: "Album Designer",
-};
-
-const SKILL_COLORS: Record<string, string> = {
-  PHOTOGRAPHY: "badge-brand-blue",
-  VIDEOGRAPHY: "badge-brand-orange",
-  PHOTO_EDITING: "badge-brand-purple",
-  ALBUM_DESIGN: "badge-brand-blue",
-};
-
-const ALL_SKILLS = ["PHOTOGRAPHY", "VIDEOGRAPHY", "PHOTO_EDITING", "ALBUM_DESIGN"];
+import { PlanGatedToast, usePlanGatedToast } from "@/components/PlanGatedToast";
 
 export default function ErpPage({ params }: { params: Promise<{ studioSlug: string }> }) {
   const { studioSlug } = use(params);
+  const router = useRouter();
   const { idToken: workspaceToken, authLoading, getIdToken, user: workspaceUser, studio } = useStudioWorkspace();
   const [crewList, setCrewList] = useState<StudioMember[]>([]);
   const [deletedCrewList, setDeletedCrewList] = useState<StudioMember[]>([]);
   const [pendingInvitations, setPendingInvitations] = useState<StudioInvitationSummary[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [selected, setSelected] = useState<StudioMember | null>(null);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [skillFilter, setSkillFilter] = useState("ALL");
   const [viewMode, setViewMode] = useState<"ACTIVE" | "DELETED">("ACTIVE");
   const [search, setSearch] = useState("");
@@ -63,9 +74,16 @@ export default function ErpPage({ params }: { params: Promise<{ studioSlug: stri
     name: "",
     email: "",
     phone: "",
+    notifyWhatsApp: false,
     claimCode: "",
     skills: ["PHOTOGRAPHY"],
   });
+  const [showCustomSkillInput, setShowCustomSkillInput] = useState(false);
+  const [customSkillDraft, setCustomSkillDraft] = useState("");
+  const [serviceCrewMapping, setServiceCrewMapping] = useState<Record<string, string[]>>(
+    studio?.serviceCrewMapping || {}
+  );
+  const [savingServiceMapping, setSavingServiceMapping] = useState(false);
 
   // Temporary Crew Edit State
   const [editingTempCrew, setEditingTempCrew] = useState<{ id: string; name: string } | null>(null);
@@ -75,9 +93,11 @@ export default function ErpPage({ params }: { params: Promise<{ studioSlug: stri
   const [callTimeDrafts, setCallTimeDrafts] = useState<Record<string, { callTime: string; venueNotes: string }>>({});
   const [savingCallTimeOrderId, setSavingCallTimeOrderId] = useState<string | null>(null);
 
-  // Auto-Assign Crew workflow toggle state
-  const [autoAssignEnabled, setAutoAssignEnabled] = useState<boolean>(false);
-  const [togglingAutoAssign, setTogglingAutoAssign] = useState(false);
+  // One-Time Auto-Assign Crew Setup State
+  const [autoAssignConfigured, setAutoAssignConfigured] = useState<boolean>(
+    Boolean(studio?.features?.autoAssignCrewConfigured)
+  );
+  const [savingAutoAssignChoice, setSavingAutoAssignChoice] = useState(false);
 
   const [createdInvite, setCreatedInvite] = useState<{ code: string; email?: string; name: string; claimCode?: string; linkToken?: string } | null>(null);
   const [copied, setCopied] = useState(false);
@@ -87,6 +107,24 @@ export default function ErpPage({ params }: { params: Promise<{ studioSlug: stri
 
   const effectiveTier = getEffectiveStudioTier(studio);
   const canExportExcel = effectiveTier === "COMPLETE";
+  const hasWhatsAppOperations = getEffectiveStudioFeatures(
+    studio?.ownerEmail,
+    studio?.features,
+    studio?.planInfo
+  ).whatsapp;
+  const isOwner = Boolean(
+    studio &&
+      workspaceUser &&
+      (studio.ownerId === workspaceUser.uid ||
+        studio.ownerEmail?.toLowerCase() === workspaceUser.email?.toLowerCase())
+  );
+  const hasActiveFilters =
+    Boolean(search.trim()) || skillFilter !== "ALL" || viewMode !== "ACTIVE";
+  const {
+    message: planWarning,
+    show: showPlanWarning,
+    dismiss: dismissPlanWarning,
+  } = usePlanGatedToast();
 
   const showBannerMsg = (type: "success" | "error", text: string) => {
     setStatusBanner({ type, text });
@@ -98,10 +136,14 @@ export default function ErpPage({ params }: { params: Promise<{ studioSlug: stri
   }, []);
 
   useEffect(() => {
-    if (studio?.features?.autoAssignCrew !== undefined) {
-      setAutoAssignEnabled(Boolean(studio.features.autoAssignCrew));
+    if (studio?.features?.autoAssignCrewConfigured !== undefined) {
+      setAutoAssignConfigured(Boolean(studio.features.autoAssignCrewConfigured));
     }
-  }, [studio?.features?.autoAssignCrew]);
+  }, [studio?.features?.autoAssignCrewConfigured]);
+
+  useEffect(() => {
+    setServiceCrewMapping(studio?.serviceCrewMapping || {});
+  }, [studio?.serviceCrewMapping]);
 
   // Check URL query parameters (e.g. ?action=add-crew or ?addCrew=true)
   useEffect(() => {
@@ -180,35 +222,85 @@ export default function ErpPage({ params }: { params: Promise<{ studioSlug: stri
     }));
   };
 
-  const handleToggleAutoAssignCrew = async () => {
-    setTogglingAutoAssign(true);
+  const handleAddCustomSkill = () => {
+    const trimmed = customSkillDraft.trim();
+    if (!trimmed) return;
+    const exists = form.skills.some(
+      (s) =>
+        s.toLowerCase() === trimmed.toLowerCase() ||
+        getSkillLabel(s).toLowerCase() === trimmed.toLowerCase()
+    );
+    if (!exists) {
+      setForm((prev) => ({ ...prev, skills: [...prev.skills, trimmed] }));
+    }
+    setCustomSkillDraft("");
+  };
+
+  const handleToggleMemberServiceMapping = (serviceName: string, memberId: string) => {
+    setServiceCrewMapping((prev) => {
+      const current = Array.isArray(prev[serviceName]) ? prev[serviceName] : [];
+      const next = current.includes(memberId)
+        ? current.filter((id) => id !== memberId)
+        : [...current, memberId];
+      return { ...prev, [serviceName]: next };
+    });
+  };
+
+  const handleSaveMemberServiceMapping = async () => {
+    if (!isOwner) return;
+    setSavingServiceMapping(true);
+    try {
+      const token = await getIdToken(true);
+      if (!token) {
+        showBannerMsg("error", "Authentication error. Please sign in again.");
+        return;
+      }
+      const res = await updateStudioAction({
+        studioSlug,
+        updates: { serviceCrewMapping },
+        idToken: token,
+      });
+      if (res.success) {
+        showBannerMsg("success", "Service auto-assign mapping updated.");
+        router.refresh();
+      } else {
+        showBannerMsg("error", res.error || "Failed to save service mapping.");
+      }
+    } finally {
+      setSavingServiceMapping(false);
+    }
+  };
+
+  const handleChooseAutoAssignDefault = async (enableAutoAssign: boolean) => {
+    setSavingAutoAssignChoice(true);
     try {
       const token = await getIdToken(true);
       if (!token) return;
-      const nextVal = !autoAssignEnabled;
       const res = await updateStudioAction({
         studioSlug,
         updates: {
           features: {
             ...(studio?.features || { oms: true, crm: true, erp: true, whatsapp: true }),
-            autoAssignCrew: nextVal,
+            autoAssignCrew: enableAutoAssign,
+            autoAssignCrewConfigured: true,
           },
         },
         idToken: token,
       });
       if (res.success) {
-        setAutoAssignEnabled(nextVal);
+        setAutoAssignConfigured(true);
         showBannerMsg(
           "success",
-          nextVal
-            ? "Auto-Assign Crew enabled: New orders will automatically assign available skill-matched crew."
-            : "Auto-Assign Crew disabled: Crew assignments remain manual."
+          enableAutoAssign
+            ? "Auto-Assign Crew enabled on order confirmation. You can change this anytime in Studio Settings."
+            : "Manual crew assignment selected. You can change this anytime in Studio Settings."
         );
+        router.refresh();
       } else {
-        showBannerMsg("error", res.error || "Failed to update workflow automation.");
+        showBannerMsg("error", res.error || "Failed to save crew assignment preference.");
       }
     } finally {
-      setTogglingAutoAssign(false);
+      setSavingAutoAssignChoice(false);
     }
   };
 
@@ -275,6 +367,10 @@ export default function ErpPage({ params }: { params: Promise<{ studioSlug: stri
 
   const handleSaveMember = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (form.skills.length === 0) {
+      setModalError("At least one certified skill must be selected.");
+      return;
+    }
     setIsSubmitting(true);
     setModalError(null);
 
@@ -285,6 +381,10 @@ export default function ErpPage({ params }: { params: Promise<{ studioSlug: stri
       return;
     }
 
+    const notifyWhatsAppVal = Boolean(
+      hasWhatsAppOperations && form.phone.trim() && form.notifyWhatsApp
+    );
+
     if (editingMember) {
       const res = await updateMemberAction({
         memberId: editingMember.id,
@@ -292,6 +392,7 @@ export default function ErpPage({ params }: { params: Promise<{ studioSlug: stri
         updates: {
           name: form.name,
           phone: form.phone,
+          notifyWhatsApp: notifyWhatsAppVal,
           skills: form.skills,
         },
         idToken: token,
@@ -315,6 +416,7 @@ export default function ErpPage({ params }: { params: Promise<{ studioSlug: stri
       name: form.name,
       email: form.email || undefined,
       phone: form.phone || undefined,
+      notifyWhatsApp: notifyWhatsAppVal,
       claimCode: form.email ? undefined : form.claimCode,
       skills: form.skills,
     });
@@ -325,7 +427,16 @@ export default function ErpPage({ params }: { params: Promise<{ studioSlug: stri
       setShowModal(false);
       const memberName = form.name;
       const memberEmail = form.email;
-      setForm({ name: "", email: "", phone: "", claimCode: "", skills: ["PHOTOGRAPHY"] });
+      setForm({
+        name: "",
+        email: "",
+        phone: "",
+        notifyWhatsApp: false,
+        claimCode: "",
+        skills: ["PHOTOGRAPHY"],
+      });
+      setShowCustomSkillInput(false);
+      setCustomSkillDraft("");
       await loadData(token);
       if (res.invitationCode) {
         setCreatedInvite({
@@ -466,6 +577,26 @@ export default function ErpPage({ params }: { params: Promise<{ studioSlug: stri
     return ownerMember ? [ownerMember, ...crewList] : crewList;
   }, [ownerMember, crewList]);
 
+  const filterSkillOptions = useMemo(() => {
+    const customSet = new Set<string>();
+    [...allCrew, ...deletedCrewList].forEach((m) => {
+      (m.skills || []).forEach((skill) => {
+        if (!(PRESET_SKILLS as readonly string[]).includes(skill)) {
+          customSet.add(skill);
+        }
+      });
+    });
+    return [...PRESET_SKILLS, ...Array.from(customSet)];
+  }, [allCrew, deletedCrewList]);
+
+  const enabledCatalogServices = useMemo(() => {
+    const list =
+      studio?.configuredServices && studio.configuredServices.length > 0
+        ? studio.configuredServices
+        : DEFAULT_STUDIO_SERVICES;
+    return list.filter((s) => s.enabled !== false);
+  }, [studio?.configuredServices]);
+
   const activeSourceList = viewMode === "ACTIVE" ? allCrew : deletedCrewList;
 
   const filtered = useMemo(() => {
@@ -583,123 +714,13 @@ export default function ErpPage({ params }: { params: Promise<{ studioSlug: stri
       <div className={`flex flex-col ${selected ? "hidden lg:flex lg:w-1/2 border-r border-border-default" : "w-full"} h-full`}>
         {/* Header */}
         <header className="header-brand-purple">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-2 mb-1.5">
-                <span className="badge-brand-purple">
-                  <span className="h-1.5 w-1.5 rounded-full bg-brand-purple-primary" />
-                  ERP · Studio Operations
-                </span>
-                <span className="badge-status-neutral">
-                  Studio: <strong className="font-semibold text-text-primary">{studioSlug}</strong>
-                </span>
-              </div>
-              <h1 className="text-xl font-extrabold text-text-primary tracking-tight">
-                Studio Enterprise Resource Planning
-              </h1>
-              <p className="text-xs text-text-secondary mt-0.5">
-                Crew assignments, certified skills, and event availability tracking · {allCrew.length} Active Crew Members
-              </p>
-            </div>
+          <div className="flex flex-col gap-3">
+            <p className="text-xs text-text-secondary">
+              Crew roster, certified skills, and event availability · {allCrew.length} Active Crew
+            </p>
             <div className="flex flex-wrap items-center gap-2">
-              {canExportExcel ? (
-                <button
-                  type="button"
-                  disabled={filtered.length === 0 && temporaryCrewList.length === 0}
-                  onClick={() =>
-                    exportWorkbookToExcel(`${studioSlug}_Studio_ERP_Crew`, [
-                      {
-                        name: "Active Crew & Workload",
-                        rows: filtered,
-                        columns: [
-                          { header: "Crew ID", key: "id", width: 22 },
-                          { header: "Name", key: "name", width: 24 },
-                          {
-                            header: "Role",
-                            key: "role",
-                            width: 18,
-                            getValue: (m: StudioMember) =>
-                              m.role === "STUDIO_OWNER" ? "Studio Owner" : "Crew Member",
-                          },
-                          {
-                            header: "Email",
-                            key: "email",
-                            width: 26,
-                            getValue: (m: StudioMember) => m.email || "-",
-                          },
-                          {
-                            header: "Phone",
-                            key: "phone",
-                            width: 16,
-                            getValue: (m: StudioMember) => m.phone || "-",
-                          },
-                          {
-                            header: "Certified Skills",
-                            key: "skills",
-                            width: 30,
-                            getValue: (m: StudioMember) =>
-                              m.skills && m.skills.length > 0
-                                ? m.skills.map((s: string) => SKILL_LABELS[s] || s).join(", ")
-                                : "All / General",
-                          },
-                          {
-                            header: "Assigned Orders Count",
-                            key: "assignedOrders",
-                            type: "number",
-                            width: 20,
-                            sumInTotals: true,
-                            getValue: (m: StudioMember) =>
-                              orders.filter((o) =>
-                                (o.assignedResources || []).some(
-                                  (r) =>
-                                    r.memberId === m.id ||
-                                    (r.memberName || "").toLowerCase() ===
-                                      (m.name || "").toLowerCase()
-                                )
-                              ).length,
-                          },
-                        ],
-                      },
-                      {
-                        name: "Temporary Crew Workload",
-                        rows: temporaryCrewList,
-                        columns: [
-                          { header: "Temp Crew ID", key: "id", width: 20 },
-                          { header: "Name", key: "name", width: 24 },
-                          {
-                            header: "Assigned Services",
-                            key: "services",
-                            width: 30,
-                            getValue: (t: { services: string[] }) =>
-                              (t.services || []).join(", ") || "-",
-                          },
-                          {
-                            header: "Assigned Orders Count",
-                            key: "orderCount",
-                            type: "number",
-                            width: 20,
-                            sumInTotals: true,
-                          },
-                        ],
-                      },
-                    ])
-                  }
-                  className="rounded-xl border border-border-default bg-white px-3.5 py-2 text-xs font-bold text-text-primary hover:bg-surface-app hover:border-brand-purple-primary transition inline-flex items-center gap-1.5 shadow-2xs disabled:opacity-50 cursor-pointer"
-                  title="Export filtered Crew Members and Workload to Excel (.xlsx)"
-                >
-                  <FileSpreadsheet className="h-3.5 w-3.5 text-brand-purple-primary" />
-                  <span>Export Excel</span>
-                </button>
-              ) : (
-                <Link
-                  href={`/checkout?studio=${studioSlug}&plan=COMPLETE`}
-                  className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-[11px] font-bold text-amber-900 hover:bg-amber-100 transition inline-flex items-center gap-1.5"
-                >
-                  <FileSpreadsheet className="h-3.5 w-3.5 text-amber-700" />
-                  <span>Export Excel (₹1,999 Plan)</span>
-                </Link>
-              )}
               <button
+                type="button"
                 onClick={() => {
                   setEditingMember(null);
                   setShowModal(true);
@@ -708,101 +729,166 @@ export default function ErpPage({ params }: { params: Promise<{ studioSlug: stri
                     name: "",
                     email: "",
                     phone: "",
+                    notifyWhatsApp: false,
                     claimCode: Math.floor(100000 + Math.random() * 900000).toString(),
                     skills: ["PHOTOGRAPHY"],
                   });
+                  setShowCustomSkillInput(false);
+                  setCustomSkillDraft("");
                 }}
                 className="btn-brand-purple"
               >
                 + Add Crew Member
               </button>
+              <button
+                type="button"
+                onClick={() => setFiltersOpen((open) => !open)}
+                aria-expanded={filtersOpen}
+                aria-controls="erp-crew-filters"
+                className="inline-flex items-center gap-1.5 rounded-xl border border-border-default bg-white px-3 py-1.5 text-xs font-bold text-text-secondary hover:border-brand-purple-primary hover:text-text-primary transition cursor-pointer"
+              >
+                <SlidersHorizontal className="h-3.5 w-3.5" />
+                <span>Filters</span>
+                {hasActiveFilters && (
+                  <span className="h-1.5 w-1.5 rounded-full bg-brand-purple-primary" />
+                )}
+              </button>
+              <button
+                type="button"
+                disabled={canExportExcel && filtered.length === 0 && temporaryCrewList.length === 0}
+                onClick={() => {
+                  if (!canExportExcel) {
+                    showPlanWarning("Excel export is available only in the Professional (₹1,999/mo) plan.");
+                    return;
+                  }
+                  exportWorkbookToExcel(`${studioSlug}_Studio_ERP_Crew`, [
+                    {
+                      name: "Active Crew & Workload",
+                      rows: filtered,
+                      columns: [
+                        { header: "Crew ID", key: "id", width: 22 },
+                        { header: "Name", key: "name", width: 24 },
+                        {
+                          header: "Role",
+                          key: "role",
+                          width: 18,
+                          getValue: (m: StudioMember) =>
+                            m.role === "STUDIO_OWNER" ? "Studio Owner" : "Crew Member",
+                        },
+                        {
+                          header: "Email",
+                          key: "email",
+                          width: 26,
+                          getValue: (m: StudioMember) => m.email || "-",
+                        },
+                        {
+                          header: "Phone",
+                          key: "phone",
+                          width: 16,
+                          getValue: (m: StudioMember) => m.phone || "-",
+                        },
+                        {
+                          header: "Certified Skills",
+                          key: "skills",
+                          width: 30,
+                          getValue: (m: StudioMember) =>
+                            m.skills && m.skills.length > 0
+                              ? m.skills.map((s: string) => getSkillLabel(s)).join(", ")
+                              : "All / General",
+                        },
+                        {
+                          header: "Assigned Orders Count",
+                          key: "assignedOrders",
+                          type: "number",
+                          width: 20,
+                          sumInTotals: true,
+                          getValue: (m: StudioMember) =>
+                            orders.filter((o) =>
+                              (o.assignedResources || []).some(
+                                (r) =>
+                                  r.memberId === m.id ||
+                                  (r.memberName || "").toLowerCase() ===
+                                    (m.name || "").toLowerCase()
+                              )
+                            ).length,
+                        },
+                      ],
+                    },
+                    {
+                      name: "Temporary Crew Workload",
+                      rows: temporaryCrewList,
+                      columns: [
+                        { header: "Temp Crew ID", key: "id", width: 20 },
+                        { header: "Name", key: "name", width: 24 },
+                        {
+                          header: "Assigned Services",
+                          key: "services",
+                          width: 30,
+                          getValue: (t: { services: string[] }) =>
+                            (t.services || []).join(", ") || "-",
+                        },
+                        {
+                          header: "Assigned Orders Count",
+                          key: "orderCount",
+                          type: "number",
+                          width: 20,
+                          sumInTotals: true,
+                        },
+                      ],
+                    },
+                  ]);
+                }}
+                className="rounded-xl border border-border-default bg-white px-3.5 py-2 text-xs font-bold text-text-primary hover:bg-surface-app hover:border-brand-purple-primary transition inline-flex items-center gap-1.5 shadow-2xs disabled:opacity-50 cursor-pointer"
+                title="Export filtered Crew Members and Workload to Excel (.xlsx)"
+              >
+                <FileSpreadsheet className="h-3.5 w-3.5 text-brand-purple-primary" />
+                <span>Export Excel</span>
+              </button>
             </div>
           </div>
 
-          {/* Workflow Automation Bar (ERP-003) */}
-          <div className="mt-3 rounded-xl border border-brand-purple-soft/80 bg-brand-purple-background/40 px-3.5 py-2.5 flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <span className="text-xs font-bold text-text-primary">
-                Automated Crew Assignment on Order Confirmation
-              </span>
-              <p className="text-[11px] text-text-secondary">
-                Automatically assign available skill-matched crew members on order creation (falls back to manual assignment if busy).
-              </p>
-            </div>
-            <button
-              type="button"
-              disabled={togglingAutoAssign}
-              onClick={handleToggleAutoAssignCrew}
-              className={`rounded-full px-3 py-1 text-[11px] font-bold transition cursor-pointer ${
-                autoAssignEnabled
-                  ? "bg-brand-purple-primary text-white"
-                  : "border border-border-default bg-white text-text-secondary hover:text-text-primary"
-              }`}
-            >
-              {togglingAutoAssign ? "Updating..." : autoAssignEnabled ? "Auto-Assign: ON" : "Auto-Assign: OFF"}
-            </button>
-          </div>
-
-          <div className="mt-3 flex flex-col gap-3 sm:flex-row">
-            <input
-              suppressHydrationWarning
-              autoComplete="off"
-              type="text"
-              placeholder="Search by name, email, phone..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full rounded-xl border border-border-default bg-surface-app px-3.5 py-2 text-xs text-text-primary placeholder:text-text-tertiary focus:bg-white focus:outline-none focus:border-brand-purple-primary focus:ring-2 focus:ring-brand-purple-soft"
-            />
-          </div>
-
-          {/* Active vs Archived Toggle + Skill Filter Buttons */}
-          <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-            <div className="flex flex-wrap gap-1.5">
-              {["ALL", ...ALL_SKILLS].map((s) => (
-                <button
-                  key={s}
-                  onClick={() => setSkillFilter(s)}
-                  className={`rounded-full px-3 py-1 text-[11px] font-bold transition ${
-                    skillFilter === s
-                      ? "bg-brand-purple-primary text-white shadow-2xs"
-                      : "border border-border-default bg-white text-text-secondary hover:bg-surface-app hover:text-text-primary"
-                  }`}
+          {filtersOpen && (
+            <div id="erp-crew-filters" className="mt-3 flex flex-col sm:flex-row gap-2.5">
+              <input
+                suppressHydrationWarning
+                autoComplete="off"
+                type="text"
+                placeholder="Search by name, email, phone..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="flex-1 rounded-xl border border-border-default bg-surface-app px-3.5 py-2 text-xs text-text-primary placeholder:text-text-tertiary focus:bg-white focus:outline-none focus:border-brand-purple-primary focus:ring-2 focus:ring-brand-purple-soft"
+              />
+              <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto">
+                <select
+                  suppressHydrationWarning
+                  value={skillFilter}
+                  onChange={(e) => setSkillFilter(e.target.value)}
+                  aria-label="Filter by certified skill"
+                  className="min-w-0 w-full rounded-xl border border-border-default bg-surface-app px-3 py-2 text-xs font-semibold text-text-primary focus:bg-white focus:outline-none focus:border-brand-purple-primary focus:ring-2 focus:ring-brand-purple-soft sm:w-auto"
                 >
-                  {s === "ALL" ? "All Skills" : SKILL_LABELS[s] || s}
-                </button>
-              ))}
+                  <option value="ALL">All Skills</option>
+                  {filterSkillOptions.map((s) => (
+                    <option key={s} value={s}>
+                      {getSkillLabel(s)}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  suppressHydrationWarning
+                  value={viewMode}
+                  onChange={(e) => {
+                    setViewMode(e.target.value as "ACTIVE" | "DELETED");
+                    setSelected(null);
+                  }}
+                  aria-label="Filter by member status"
+                  className="min-w-0 w-full rounded-xl border border-border-default bg-surface-app px-3 py-2 text-xs font-semibold text-text-primary focus:bg-white focus:outline-none focus:border-brand-purple-primary focus:ring-2 focus:ring-brand-purple-soft sm:w-auto"
+                >
+                  <option value="ACTIVE">Active ({allCrew.length})</option>
+                  <option value="DELETED">Archived ({deletedCrewList.length})</option>
+                </select>
+              </div>
             </div>
-            <div className="flex items-center gap-1.5">
-              <button
-                type="button"
-                onClick={() => {
-                  setViewMode("ACTIVE");
-                  setSelected(null);
-                }}
-                className={`rounded-full px-3 py-1 text-[11px] font-bold transition ${
-                  viewMode === "ACTIVE"
-                    ? "bg-slate-900 text-white"
-                    : "border border-border-default bg-white text-text-secondary"
-                }`}
-              >
-                Active ({allCrew.length})
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setViewMode("DELETED");
-                  setSelected(null);
-                }}
-                className={`rounded-full px-3 py-1 text-[11px] font-bold transition ${
-                  viewMode === "DELETED"
-                    ? "bg-red-600 text-white"
-                    : "border border-border-default bg-white text-text-secondary"
-                }`}
-              >
-                Archived ({deletedCrewList.length})
-              </button>
-            </div>
-          </div>
+          )}
         </header>
 
         {/* Crew Member List */}
@@ -1003,11 +1089,14 @@ export default function ErpPage({ params }: { params: Promise<{ studioSlug: stri
                             name: temp.name,
                             email: "",
                             phone: "",
+                            notifyWhatsApp: false,
                             claimCode: Math.floor(100000 + Math.random() * 900000).toString(),
                             skills: temp.services.some((s) => s.toLowerCase().includes("video"))
                               ? ["VIDEOGRAPHY"]
                               : ["PHOTOGRAPHY"],
                           });
+                          setShowCustomSkillInput(false);
+                          setCustomSkillDraft("");
                           setModalError(null);
                           setShowModal(true);
                         }}
@@ -1088,9 +1177,9 @@ export default function ErpPage({ params }: { params: Promise<{ studioSlug: stri
                             emp.skills.map((skill, idx) => (
                               <span
                                 key={idx}
-                                className={SKILL_COLORS[skill] || "badge-status-neutral"}
+                                className={getSkillBadgeClass(skill)}
                               >
-                                {SKILL_LABELS[skill] || skill}
+                                {getSkillLabel(skill)}
                               </span>
                             ))
                           ) : (
@@ -1139,9 +1228,12 @@ export default function ErpPage({ params }: { params: Promise<{ studioSlug: stri
                         name: selected.name || "",
                         email: selected.email || "",
                         phone: selected.phone || "",
+                        notifyWhatsApp: Boolean(hasWhatsAppOperations && selected.notifyWhatsApp),
                         claimCode: "",
                         skills: selected.skills && selected.skills.length > 0 ? selected.skills : ["PHOTOGRAPHY"],
                       });
+                      setShowCustomSkillInput(false);
+                      setCustomSkillDraft("");
                       setModalError(null);
                       setShowModal(true);
                     }}
@@ -1235,9 +1327,9 @@ export default function ErpPage({ params }: { params: Promise<{ studioSlug: stri
                   selected.skills.map((skill, idx) => (
                     <span
                       key={idx}
-                      className={SKILL_COLORS[skill] || "badge-status-neutral"}
+                      className={getSkillBadgeClass(skill)}
                     >
-                      {SKILL_LABELS[skill] || skill}
+                      {getSkillLabel(skill)}
                     </span>
                   ))
                 ) : (
@@ -1245,6 +1337,70 @@ export default function ErpPage({ params }: { params: Promise<{ studioSlug: stri
                 )}
               </div>
             </div>
+
+            {!selected.isDeleted && enabledCatalogServices.length > 0 && (
+              <div className="rounded-2xl border border-border-default p-4 space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-text-tertiary">
+                      Service Auto-Assign Mapping
+                    </h3>
+                    <p className="text-[11px] text-text-secondary mt-0.5">
+                      Services this member is mapped to for automatic crew assignment on order confirmation.
+                    </p>
+                  </div>
+                  {isOwner && (
+                    <button
+                      type="button"
+                      disabled={savingServiceMapping}
+                      onClick={() => void handleSaveMemberServiceMapping()}
+                      className="rounded-lg bg-brand-purple-primary px-3 py-1.5 text-[11px] font-bold text-white hover:opacity-90 transition disabled:opacity-50 shrink-0 cursor-pointer"
+                    >
+                      {savingServiceMapping ? "Saving..." : "Save Mapping"}
+                    </button>
+                  )}
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {enabledCatalogServices.map((svc) => {
+                    const mappedIds = serviceCrewMapping[svc.name] || [];
+                    const isMapped = mappedIds.includes(selected.id);
+                    const skillMatches =
+                      selected.role === "STUDIO_OWNER" ||
+                      isSkillRelatedToService(selected.skills, svc.name, svc.category);
+                    return (
+                      <label
+                        key={svc.id}
+                        className={`flex items-center justify-between gap-2 rounded-xl border px-3 py-2 text-xs transition ${
+                          isOwner ? "cursor-pointer" : "opacity-80"
+                        } ${
+                          isMapped
+                            ? "border-brand-purple-primary bg-brand-purple-background/40 text-brand-purple-primary font-semibold"
+                            : "border-border-default bg-surface-app/40 text-text-secondary"
+                        }`}
+                      >
+                        <span className="flex items-center gap-2 min-w-0">
+                          <input
+                            type="checkbox"
+                            disabled={!isOwner}
+                            checked={isMapped}
+                            onChange={() =>
+                              handleToggleMemberServiceMapping(svc.name, selected.id)
+                            }
+                            className="rounded text-brand-purple-primary shrink-0"
+                          />
+                          <span className="truncate">{svc.name}</span>
+                        </span>
+                        {skillMatches && (
+                          <span className="rounded bg-purple-100/80 px-1.5 py-0.5 text-[9px] font-bold text-brand-purple-primary shrink-0">
+                            Skill Match
+                          </span>
+                        )}
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             <div className="rounded-2xl border border-border-default p-4">
               <h3 className="text-xs font-bold uppercase tracking-wider text-text-tertiary mb-3">
@@ -1272,7 +1428,7 @@ export default function ErpPage({ params }: { params: Promise<{ studioSlug: stri
                         `📅 *Event Date:* ${order.eventDate}\n` +
                         `⏰ *Call Time:* ${draft.callTime || "TBD"}\n` +
                         `📍 *Venue / Notes:* ${draft.venueNotes || order.eventLocation || "Studio Venue"}\n` +
-                        `📌 *Assigned Role:* ${SKILL_LABELS[assignment.skill] || assignment.skill}\n\n` +
+                        `📌 *Assigned Role:* ${getSkillLabel(assignment.skill)}\n\n` +
                         `Please arrive on time and confirm equipment readiness.`;
 
                       return (
@@ -1284,8 +1440,8 @@ export default function ErpPage({ params }: { params: Promise<{ studioSlug: stri
                                 <span className="font-bold text-brand-blue-primary">{order.orderNumber}</span> · {new Date(order.eventDate).toLocaleDateString()}
                               </p>
                             </div>
-                            <span className={SKILL_COLORS[assignment.skill] || "badge-status-neutral"}>
-                              {SKILL_LABELS[assignment.skill] || assignment.skill}
+                            <span className={getSkillBadgeClass(assignment.skill)}>
+                              {getSkillLabel(assignment.skill)}
                             </span>
                           </div>
 
@@ -1400,8 +1556,8 @@ export default function ErpPage({ params }: { params: Promise<{ studioSlug: stri
 
       {/* Add / Edit Member Modal */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-md rounded-3xl bg-white p-6 sm:p-8 shadow-2xl border border-border-default animate-in fade-in duration-150">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs overflow-y-auto">
+          <div className="w-full max-w-md max-h-[90vh] overflow-y-auto rounded-3xl bg-white p-6 sm:p-8 shadow-2xl border border-border-default animate-in fade-in duration-150 my-auto">
             <div className="flex items-center justify-between pb-3 border-b border-border-default">
               <div>
                 <div className="badge-brand-purple mb-1">
@@ -1549,10 +1705,60 @@ export default function ErpPage({ params }: { params: Promise<{ studioSlug: stri
                   className="mt-1 w-full rounded-xl border border-border-default px-3.5 py-2 text-xs outline-none focus:border-brand-purple-primary focus:ring-1 focus:ring-brand-purple-primary"
                 />
               </div>
+
+              {Boolean(form.phone.trim()) && (
+                <div className="rounded-2xl border border-purple-200/80 bg-purple-50/40 p-3 space-y-2 animate-in fade-in duration-150">
+                  <span className="block text-[11px] font-bold text-text-primary">
+                    Automated Crew Notifications
+                  </span>
+                  <label
+                    onClick={(e) => {
+                      if (!hasWhatsAppOperations) {
+                        e.preventDefault();
+                        showPlanWarning(
+                          "WhatsApp alerts and notifications require the Professional (₹1,999/mo) plan."
+                        );
+                      }
+                    }}
+                    aria-disabled={!hasWhatsAppOperations}
+                    className={`flex items-center justify-between gap-2.5 select-none cursor-pointer ${
+                      !hasWhatsAppOperations ? "opacity-65" : ""
+                    }`}
+                  >
+                    <span className="flex items-center gap-2.5">
+                      <input
+                        type="checkbox"
+                        checked={hasWhatsAppOperations ? form.notifyWhatsApp : false}
+                        readOnly={!hasWhatsAppOperations}
+                        onChange={(e) => {
+                          if (!hasWhatsAppOperations) {
+                            showPlanWarning(
+                              "WhatsApp alerts and notifications require the Professional (₹1,999/mo) plan."
+                            );
+                            return;
+                          }
+                          setForm({ ...form, notifyWhatsApp: e.target.checked });
+                        }}
+                        className="h-3.5 w-3.5 rounded border-border-default text-brand-purple-primary focus:ring-brand-purple-primary"
+                      />
+                      <span className="text-xs font-medium text-text-primary">
+                        Send WhatsApp alerts and shoot notifications
+                      </span>
+                    </span>
+                    {!hasWhatsAppOperations && (
+                      <span className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-text-secondary shrink-0">
+                        <Lock className="h-2.5 w-2.5" />
+                        Pro
+                      </span>
+                    )}
+                  </label>
+                </div>
+              )}
+
               <div>
                 <label className="block font-bold text-text-primary mb-1.5">Certified Skills *</label>
                 <div className="grid grid-cols-2 gap-2">
-                  {ALL_SKILLS.map((skill) => (
+                  {PRESET_SKILLS.map((skill) => (
                     <label
                       key={skill}
                       className={`flex cursor-pointer items-center gap-2 rounded-xl border p-2.5 text-[11px] font-semibold transition ${
@@ -1567,10 +1773,72 @@ export default function ErpPage({ params }: { params: Promise<{ studioSlug: stri
                         onChange={() => toggleSkill(skill)}
                         className="rounded text-brand-purple-primary"
                       />
-                      {SKILL_LABELS[skill] || skill}
+                      {getSkillLabel(skill)}
                     </label>
                   ))}
+                  <button
+                    type="button"
+                    onClick={() => setShowCustomSkillInput((open) => !open)}
+                    className={`flex cursor-pointer items-center gap-2 rounded-xl border p-2.5 text-[11px] font-semibold transition text-left ${
+                      showCustomSkillInput ||
+                      form.skills.some((s) => !(PRESET_SKILLS as readonly string[]).includes(s))
+                        ? "border-brand-purple-primary bg-brand-purple-background/40 text-brand-purple-primary"
+                        : "border-dashed border-border-default text-text-secondary hover:bg-surface-app"
+                    }`}
+                  >
+                    <Plus className="h-3.5 w-3.5 shrink-0" />
+                    <span>Custom Role</span>
+                  </button>
                 </div>
+
+                {showCustomSkillInput && (
+                  <div className="mt-2 flex gap-2">
+                    <input
+                      type="text"
+                      placeholder="Type custom role (e.g. Gimbal Operator, Colorist)"
+                      value={customSkillDraft}
+                      onChange={(e) => setCustomSkillDraft(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          handleAddCustomSkill();
+                        }
+                      }}
+                      className="flex-1 rounded-xl border border-border-default px-3 py-1.5 text-xs outline-none focus:border-brand-purple-primary focus:ring-1 focus:ring-brand-purple-primary"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddCustomSkill}
+                      disabled={!customSkillDraft.trim()}
+                      className="rounded-xl bg-brand-purple-primary px-3 py-1.5 text-xs font-bold text-white hover:opacity-90 disabled:opacity-40 cursor-pointer"
+                    >
+                      Add
+                    </button>
+                  </div>
+                )}
+
+                {form.skills.filter((s) => !(PRESET_SKILLS as readonly string[]).includes(s)).length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {form.skills
+                      .filter((s) => !(PRESET_SKILLS as readonly string[]).includes(s))
+                      .map((skill) => (
+                        <span
+                          key={skill}
+                          className="inline-flex items-center gap-1 rounded-full border border-brand-purple-soft bg-brand-purple-background/50 px-2.5 py-0.5 text-[11px] font-semibold text-brand-purple-primary"
+                        >
+                          <span>{getSkillLabel(skill)}</span>
+                          <button
+                            type="button"
+                            onClick={() => toggleSkill(skill)}
+                            className="hover:text-red-600 cursor-pointer"
+                            aria-label={`Remove ${skill}`}
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </span>
+                      ))}
+                  </div>
+                )}
               </div>
               <div className="pt-2 flex justify-end gap-2.5">
                 <button
@@ -1688,6 +1956,65 @@ export default function ErpPage({ params }: { params: Promise<{ studioSlug: stri
           </div>
         </div>
       )}
+      {/* One-Time Auto-Assign Crew Setup Dialog */}
+      {isOwner && !loading && studio && studio.features?.erp !== false && !autoAssignConfigured && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="erp-auto-assign-setup-title"
+            className="w-full max-w-md rounded-3xl bg-white p-6 sm:p-7 shadow-2xl border border-border-default space-y-4"
+          >
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-brand-purple-background text-brand-purple-primary">
+                <Sparkles className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 id="erp-auto-assign-setup-title" className="text-base font-extrabold text-text-primary">
+                  Crew Assignment Preference
+                </h3>
+                <p className="mt-1 text-xs text-text-secondary leading-relaxed">
+                  Choose how crew members should be assigned when confirming new orders. You can change this anytime in Studio Settings.
+                </p>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-border-default bg-surface-app p-3.5 text-xs text-text-secondary space-y-1.5">
+              <p>
+                <strong className="text-text-primary">Auto-Assign:</strong> Automatically matches available skill-certified crew when an order is created (falls back to manual if busy).
+              </p>
+              <p>
+                <strong className="text-text-primary">Keep Manual:</strong> Crew members are always selected manually per service or task.
+              </p>
+            </div>
+
+            <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2.5 pt-1">
+              <button
+                type="button"
+                disabled={savingAutoAssignChoice}
+                onClick={() => void handleChooseAutoAssignDefault(false)}
+                className="rounded-xl border border-border-default bg-white px-4 py-2 text-xs font-bold text-text-secondary hover:bg-surface-app hover:text-text-primary transition disabled:opacity-50 cursor-pointer"
+              >
+                Keep Manual
+              </button>
+              <button
+                type="button"
+                disabled={savingAutoAssignChoice}
+                onClick={() => void handleChooseAutoAssignDefault(true)}
+                className="btn-brand-purple disabled:opacity-50"
+              >
+                {savingAutoAssignChoice ? "Saving..." : "Enable Auto-Assign"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <PlanGatedToast
+        message={planWarning}
+        onDismiss={dismissPlanWarning}
+        upgradeHref={`/checkout?studio=${studioSlug}&plan=COMPLETE`}
+      />
     </div>
   );
 }

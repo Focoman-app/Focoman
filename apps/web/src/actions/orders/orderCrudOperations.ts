@@ -46,6 +46,11 @@ import {
 import { sendOrderConfirmedCustomerEmail } from "@/services/emailService";
 import { hasStudioCapability } from "@/lib/entitlementAuth";
 import { getFreeWorkflowTaskAssignee } from "@/lib/erpCrewPolicy";
+import { PRESET_SKILLS } from "@/lib/crewSkills";
+import {
+  computeAutoAssignedResources,
+  findWorkflowTaskAssignee,
+} from "@/lib/autoAssignCrew";
 import { requireAssignedOrderAccess } from "./orderAccessHelpers";
 
 export async function createOrderCore(rawInput: unknown): Promise<{
@@ -111,14 +116,21 @@ export async function createOrderCore(rawInput: unknown): Promise<{
     const initialOrderStatus: OrderStatus =
       finalInitialDate < todayStr ? "POST_EVENT_IN_PROGRESS" : "AWAITING_EVENT";
 
-    const [existingCustomers, studioMembers, studio, hasErp, hasDriveReviewEntitlement] =
-      await Promise.all([
-        getCustomersByStudio(validated.studioId),
-        getMembersByStudio(validated.studioId),
-        getStudioBySlug(validated.studioId),
-        hasStudioCapability(validated.studioId, "STUDIO_ERP"),
-        hasStudioCapability(validated.studioId, "DRIVE_CLIENT_REVIEW"),
-      ]);
+    const [
+      existingCustomers,
+      studioMembers,
+      studio,
+      existingOrders,
+      hasErp,
+      hasDriveReviewEntitlement,
+    ] = await Promise.all([
+      getCustomersByStudio(validated.studioId),
+      getMembersByStudio(validated.studioId),
+      getStudioBySlug(validated.studioId),
+      getOrdersByStudio(validated.studioId),
+      hasStudioCapability(validated.studioId, "STUDIO_ERP"),
+      hasStudioCapability(validated.studioId, "DRIVE_CLIENT_REVIEW"),
+    ]);
     const matchedCustomer = existingCustomers.find((c) =>
       isContactMatch(
         { phone: customerPhone, email: customerEmail },
@@ -130,28 +142,24 @@ export async function createOrderCore(rawInput: unknown): Promise<{
     const suggestions = hasErp
       ? generateResourceSuggestions(
           primaryEventDate,
-          ["PHOTOGRAPHY", "VIDEOGRAPHY", "ALBUM_DESIGN", "PHOTO_EDITING"],
+          [...PRESET_SKILLS],
           studioMembers,
           []
         )
       : [];
 
     const autoAssignEnabled = hasErp && studio?.features?.autoAssignCrew !== false;
-    const assignedResources: ResourceAssignment[] = [];
-    if (autoAssignEnabled) {
-      const usedMembers = new Set<string>();
-      for (const s of suggestions) {
-        if (s.availableOnDate && !usedMembers.has(s.memberId) && assignedResources.length < 2) {
-          usedMembers.add(s.memberId);
-          assignedResources.push({
-            memberId: s.memberId,
-            memberName: s.memberName,
-            skill: s.skill,
-            availabilityConfirmed: null,
-          });
-        }
-      }
-    }
+    const assignedResources: ResourceAssignment[] = autoAssignEnabled
+      ? computeAutoAssignedResources({
+          studio,
+          studioSlug: validated.studioId,
+          services: validated.services,
+          eventDates: normalizedEventDates,
+          serviceSchedules: validated.serviceSchedules,
+          studioMembers,
+          existingOrders,
+        })
+      : [];
 
     const newOrder: Order = {
       id: orderId,
@@ -265,7 +273,7 @@ export async function createOrderCore(rawInput: unknown): Promise<{
         const seqSuffix = String(idx + 1).padStart(2, "0");
         const matchedCrew =
           autoAssignEnabled && assignedResources.length > 0
-            ? assignedResources.find((r) => r.skill.includes(t.serviceCategory)) || assignedResources[0]
+            ? findWorkflowTaskAssignee(t.serviceCategory, assignedResources, studioMembers)
             : undefined;
 
         return {
@@ -616,6 +624,12 @@ export async function cancelOrderCore(input: {
     }
     if (existingOrder.studioId !== input.studioId.toLowerCase()) {
       return { success: false, error: "Unauthorized: Order belongs to another studio." };
+    }
+    if (existingOrder.orderStatus === "COMPLETED") {
+      return { success: false, error: "Completed orders cannot be cancelled." };
+    }
+    if (existingOrder.orderStatus === "CANCELLED") {
+      return { success: false, error: "Order is already cancelled." };
     }
 
     const cancelLog: OrderAuditEntry = {

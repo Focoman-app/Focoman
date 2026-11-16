@@ -39,7 +39,23 @@ export interface DashboardSidebarProps {
 const ACTIVE_NAV_CLASS = "bg-[#242932] text-slate-200 border border-slate-700/60 font-medium shadow-2xs";
 const INACTIVE_NAV_CLASS = "text-slate-400 hover:text-slate-200 hover:bg-[#22262E] border border-transparent transition-colors";
 
+const TIER_BADGE: Record<Plan, { label: "Free" | "Starter" | "Professional"; className: string }> = {
+  basic: {
+    label: "Free",
+    className: "bg-slate-700/40 text-slate-300 border border-slate-600/50",
+  },
+  professional: {
+    label: "Starter",
+    className: "bg-sky-400/10 text-sky-300 border border-sky-400/25",
+  },
+  complete: {
+    label: "Professional",
+    className: "bg-emerald-400/10 text-emerald-300 border border-emerald-400/25",
+  },
+};
+
 export function DashboardSidebar({ studioSlug, role, plan, studioName, studioLogoUrl, ownerName, features, appEnv, workspaces }: DashboardSidebarProps) {
+  const tierBadge = TIER_BADGE[plan] ?? TIER_BADGE.basic;
   const pathname = usePathname();
   const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -282,7 +298,7 @@ export function DashboardSidebar({ studioSlug, role, plan, studioName, studioLog
               <p className="text-xs font-semibold text-slate-200 truncate" title={studioName}>
                 {studioName}
               </p>
-              <div className="flex items-center gap-1.5 mt-0.5">
+              <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                 <span
                   className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold ${
                     role === "STUDIO_OWNER"
@@ -291,6 +307,12 @@ export function DashboardSidebar({ studioSlug, role, plan, studioName, studioLog
                   }`}
                 >
                   {role === "STUDIO_OWNER" ? "Owner" : "Member"}
+                </span>
+                <span
+                  className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold ${tierBadge.className}`}
+                  title={`Studio Tier: ${tierBadge.label}`}
+                >
+                  {tierBadge.label}
                 </span>
               </div>
             </div>
@@ -491,6 +513,12 @@ export function DashboardSidebar({ studioSlug, role, plan, studioName, studioLog
         <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
           <span className="text-[11px] sm:text-xs font-medium text-slate-200 max-w-[70px] sm:max-w-[120px] truncate" title={studioName}>
             {studioName}
+          </span>
+          <span
+            className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] sm:text-[10px] font-bold ${tierBadge.className}`}
+            title={`Studio Tier: ${tierBadge.label}`}
+          >
+            {tierBadge.label}
           </span>
           <button
             type="button"

@@ -167,7 +167,9 @@ export const CreateCustomerSchema = z.object({
   name: z.string().min(1, 'Customer name is required'),
   phone: z.string().optional(),
   email: z.string().email().optional().or(z.literal('')),
-  address: z.string().optional()
+  address: z.string().optional(),
+  notifyWhatsApp: z.boolean().optional(),
+  notifyEmail: z.boolean().optional(),
 });
 
 export type CreateCustomerInput = z.infer<typeof CreateCustomerSchema>;
@@ -178,7 +180,9 @@ export const UpdateCustomerSchema = z.object({
   name: z.string().min(1).optional(),
   phone: z.string().optional(),
   email: z.string().email().optional().or(z.literal('')),
-  address: z.string().optional()
+  address: z.string().optional(),
+  notifyWhatsApp: z.boolean().optional(),
+  notifyEmail: z.boolean().optional(),
 });
 
 export type UpdateCustomerInput = z.infer<typeof UpdateCustomerSchema>;
@@ -188,6 +192,7 @@ export const CreateMemberSchema = z.object({
   name: z.string().min(1, 'Member name is required'),
   email: z.string().email('Valid email is required').optional().or(z.literal('')),
   phone: z.string().optional(),
+  notifyWhatsApp: z.boolean().optional(),
   claimCode: z.string().regex(/^\d{6}$/, 'Passcode must be exactly 6 digits').optional(),
   skills: z.array(z.string()).min(1, 'At least one skill is required')
 });
@@ -200,6 +205,7 @@ export const UpdateMemberSchema = z.object({
   name: z.string().min(1).optional(),
   ownerAssignedName: z.string().optional(),
   phone: z.string().optional(),
+  notifyWhatsApp: z.boolean().optional(),
   skills: z.array(z.string()).min(1).optional(),
   status: z.enum(['ACTIVE', 'INACTIVE']).optional()
 });
@@ -214,6 +220,7 @@ export const UpdateStudioSchema = z.object({
   website: z.string().optional(),
   instagram: z.string().optional(),
   ownerPhone: z.string().optional(),
+  serviceCrewMapping: z.record(z.string(), z.array(z.string())).optional(),
   features: z.object({
     oms: z.boolean().optional(),
     crm: z.boolean().optional(),

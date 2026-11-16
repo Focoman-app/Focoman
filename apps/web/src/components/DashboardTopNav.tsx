@@ -170,10 +170,10 @@ export function DashboardTopNav({
                         }`}
                       >
                         {effectiveTier === "COMPLETE"
-                          ? "₹1,999 COMPLETE"
+                          ? "Professional · ₹1,999"
                           : effectiveTier === "PROFESSIONAL"
-                          ? "₹999 PRO"
-                          : "FREE · ₹0"}
+                          ? "Starter · ₹999"
+                          : "Free · ₹0"}
                       </span>
                     </div>
 

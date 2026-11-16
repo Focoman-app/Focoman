@@ -9,6 +9,7 @@ import type {
 } from "@focoman/types";
 import { PRESET_EVENT_TYPES, type NewOrderFormState } from "./omsConstants";
 import { formatMultiDateDisplay } from "@/utils/dateUtils";
+import { Lock } from "lucide-react";
 
 interface OmsCreateOrderModalProps {
   isOpen: boolean;
@@ -36,6 +37,7 @@ interface OmsCreateOrderModalProps {
   busyEventDates: string[];
   hasCrm?: boolean;
   hasWhatsAppOperations?: boolean;
+  onLockedWhatsAppAlert?: () => void;
   advanceProofFile?: File | null;
   onChangeAdvanceProofFile?: (file: File | null) => void;
 }
@@ -66,6 +68,7 @@ export function OmsCreateOrderModal({
   busyEventDates,
   hasCrm = true,
   hasWhatsAppOperations = false,
+  onLockedWhatsAppAlert,
   advanceProofFile = null,
   onChangeAdvanceProofFile,
 }: OmsCreateOrderModalProps) {
@@ -285,7 +288,7 @@ export function OmsCreateOrderModal({
 
             {/* Dynamic Automated Customer Notifications */}
             {(Boolean(newOrderForm.customerEmail.trim()) ||
-              (hasWhatsAppOperations && Boolean(newOrderForm.customerPhone.trim()))) && (
+              Boolean(newOrderForm.customerPhone.trim())) && (
               <div className="rounded-2xl border border-blue-200/80 bg-blue-50/50 p-3.5 space-y-2.5 animate-in fade-in duration-150">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-blue-950">
@@ -294,22 +297,46 @@ export function OmsCreateOrderModal({
                 </div>
 
                 <div className="space-y-2 pt-0.5">
-                  {hasWhatsAppOperations && Boolean(newOrderForm.customerPhone.trim()) && (
-                    <label className="flex items-center gap-2.5 select-none cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={newOrderForm.notifyWhatsApp}
-                        onChange={(e) =>
-                          setNewOrderForm({
-                            ...newOrderForm,
-                            notifyWhatsApp: e.target.checked,
-                          })
+                  {Boolean(newOrderForm.customerPhone.trim()) && (
+                    <label
+                      onClick={(e) => {
+                        if (!hasWhatsAppOperations) {
+                          e.preventDefault();
+                          onLockedWhatsAppAlert?.();
                         }
-                        className="h-3.5 w-3.5 rounded border-border-default text-brand-blue-primary focus:ring-brand-blue-primary"
-                      />
-                      <span className="text-xs font-medium text-text-primary">
-                        Send automated order updates via <strong>WhatsApp</strong>
+                      }}
+                      aria-disabled={!hasWhatsAppOperations}
+                      className={`flex items-center justify-between gap-2.5 select-none cursor-pointer ${
+                        !hasWhatsAppOperations ? "opacity-65" : ""
+                      }`}
+                    >
+                      <span className="flex items-center gap-2.5">
+                        <input
+                          type="checkbox"
+                          checked={hasWhatsAppOperations ? newOrderForm.notifyWhatsApp : false}
+                          readOnly={!hasWhatsAppOperations}
+                          onChange={(e) => {
+                            if (!hasWhatsAppOperations) {
+                              onLockedWhatsAppAlert?.();
+                              return;
+                            }
+                            setNewOrderForm({
+                              ...newOrderForm,
+                              notifyWhatsApp: e.target.checked,
+                            });
+                          }}
+                          className="h-3.5 w-3.5 rounded border-border-default text-brand-blue-primary focus:ring-brand-blue-primary"
+                        />
+                        <span className="text-xs font-medium text-text-primary">
+                          Send automated order updates via <strong>WhatsApp</strong>
+                        </span>
                       </span>
+                      {!hasWhatsAppOperations && (
+                        <span className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-text-secondary shrink-0">
+                          <Lock className="h-2.5 w-2.5" />
+                          Pro
+                        </span>
+                      )}
                     </label>
                   )}
 

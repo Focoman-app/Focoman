@@ -18,10 +18,23 @@ import {
   sendManualPaymentReminderAction,
 } from "@/actions/orderActions";
 import { useStudioWorkspace } from "@/components/StudioWorkspaceProvider";
-import { getEffectiveStudioTier, isLifetimeProEmail } from "@/lib/proEntitlements";
+import {
+  getEffectiveStudioFeatures,
+  getEffectiveStudioTier,
+  isLifetimeProEmail,
+} from "@/lib/proEntitlements";
 import { calculateOrderPaymentBreakdown } from "@focoman/domain";
-import { FileSpreadsheet, Pencil, Trash2, RotateCcw, BellRing } from "lucide-react";
+import {
+  FileSpreadsheet,
+  Pencil,
+  Trash2,
+  RotateCcw,
+  BellRing,
+  SlidersHorizontal,
+  Lock,
+} from "lucide-react";
 import { exportTableToExcel } from "@/utils/excelExport";
+import { PlanGatedToast, usePlanGatedToast } from "@/components/PlanGatedToast";
 
 const STATUS_COLORS: Record<string, string> = {
   AWAITING_EVENT: "badge-brand-blue",
@@ -44,6 +57,7 @@ export default function CrmPage({ params }: { params: Promise<{ studioSlug: stri
   const [deletedOrders, setDeletedOrders] = useState<Order[]>([]);
   const [restoringOrderId, setRestoringOrderId] = useState<string | null>(null);
   const [selected, setSelected] = useState<Customer | null>(null);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [viewMode, setViewMode] = useState<"ACTIVE" | "DELETED">("ACTIVE");
   const [loading, setLoading] = useState(true);
@@ -59,6 +73,8 @@ export default function CrmPage({ params }: { params: Promise<{ studioSlug: stri
     phone: "",
     email: "",
     address: "",
+    notifyWhatsApp: false,
+    notifyEmail: true,
   });
 
   // Payment Reminder state
@@ -66,6 +82,17 @@ export default function CrmPage({ params }: { params: Promise<{ studioSlug: stri
 
   const effectiveTier = getEffectiveStudioTier(studio);
   const canExportExcel = effectiveTier === "COMPLETE";
+  const hasWhatsAppOperations = getEffectiveStudioFeatures(
+    studio?.ownerEmail,
+    studio?.features,
+    studio?.planInfo
+  ).whatsapp;
+  const hasActiveFilters = Boolean(search.trim()) || viewMode !== "ACTIVE";
+  const {
+    message: planWarning,
+    show: showPlanWarning,
+    dismiss: dismissPlanWarning,
+  } = usePlanGatedToast();
 
   const showBanner = (type: "success" | "error", text: string) => {
     setStatusMessage({ type, text });
@@ -166,6 +193,11 @@ export default function CrmPage({ params }: { params: Promise<{ studioSlug: stri
       return;
     }
 
+    const notifyWhatsAppVal = Boolean(
+      hasWhatsAppOperations && form.phone.trim() && form.notifyWhatsApp
+    );
+    const notifyEmailVal = Boolean(form.email.trim() && form.notifyEmail);
+
     if (editingCustomer) {
       const res = await updateCustomerAction({
         customerId: editingCustomer.id,
@@ -175,6 +207,8 @@ export default function CrmPage({ params }: { params: Promise<{ studioSlug: stri
           phone: form.phone,
           email: form.email,
           address: form.address,
+          notifyWhatsApp: notifyWhatsAppVal,
+          notifyEmail: notifyEmailVal,
         },
         idToken: token,
       });
@@ -182,7 +216,14 @@ export default function CrmPage({ params }: { params: Promise<{ studioSlug: stri
       if (res.success && res.customer) {
         setShowModal(false);
         setEditingCustomer(null);
-        setForm({ name: "", phone: "", email: "", address: "" });
+        setForm({
+          name: "",
+          phone: "",
+          email: "",
+          address: "",
+          notifyWhatsApp: false,
+          notifyEmail: true,
+        });
         await loadData(token);
         setSelected(res.customer);
         showBanner("success", "Customer profile updated.");
@@ -199,13 +240,22 @@ export default function CrmPage({ params }: { params: Promise<{ studioSlug: stri
       phone: form.phone || undefined,
       email: form.email || undefined,
       address: form.address || undefined,
+      notifyWhatsApp: notifyWhatsAppVal,
+      notifyEmail: notifyEmailVal,
     });
 
     setIsSubmitting(false);
 
     if (res.success && res.customer) {
       setShowModal(false);
-      setForm({ name: "", phone: "", email: "", address: "" });
+      setForm({
+        name: "",
+        phone: "",
+        email: "",
+        address: "",
+        notifyWhatsApp: false,
+        notifyEmail: true,
+      });
       await loadData(token);
       setSelected(res.customer);
       showBanner("success", "Customer profile created.");
@@ -318,111 +368,23 @@ export default function CrmPage({ params }: { params: Promise<{ studioSlug: stri
         {/* Customer List Panel */}
         <div className={`flex flex-col ${selected ? "hidden lg:flex lg:w-1/2 border-r border-border-default" : "w-full"} h-full`}>
         <header className="header-brand-orange">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-2 mb-1.5">
-                <span className="badge-brand-orange">
-                  <span className="h-1.5 w-1.5 rounded-full bg-brand-orange-primary" />
-                  CRM · Customer Relations
-                </span>
-                <span className="badge-status-neutral">
-                  Studio: <strong className="font-semibold text-text-primary">{studioSlug}</strong>
-                </span>
-              </div>
-              <h1 className="text-xl font-extrabold text-text-primary tracking-tight">
-                Customer Relationship Management
-              </h1>
-              <p className="text-xs text-text-secondary mt-0.5">
-                Client records, lifetime value metrics, and booking histories · {customers.length} Confirmed Client Records
-              </p>
-            </div>
+          <div className="flex flex-col gap-3">
+            <p className="text-xs text-text-secondary">
+              Client records, lifetime value, and booking history · {customers.length} Active Clients
+            </p>
             <div className="flex flex-wrap items-center gap-2">
-              {canExportExcel ? (
-                <button
-                  type="button"
-                  disabled={filtered.length === 0}
-                  onClick={() =>
-                    exportTableToExcel(
-                      `${studioSlug}_Customer_CRM`,
-                      "Customers",
-                      [
-                        { header: "Customer ID", key: "id", width: 22 },
-                        { header: "Customer Name", key: "name", width: 24 },
-                        {
-                          header: "Phone",
-                          key: "phone",
-                          width: 16,
-                          getValue: (c) => c.phone || "-",
-                        },
-                        {
-                          header: "Email",
-                          key: "email",
-                          width: 26,
-                          getValue: (c) => c.email || "-",
-                        },
-                        {
-                          header: "Location / Address",
-                          key: "address",
-                          width: 26,
-                          getValue: (c) => c.address || "-",
-                        },
-                        {
-                          header: "Total Orders",
-                          key: "totalOrders",
-                          type: "number",
-                          width: 14,
-                          sumInTotals: true,
-                          getValue: (c) => customerMetrics[c.id]?.totalOrders || 0,
-                        },
-                        {
-                          header: "Lifetime Value (INR)",
-                          key: "lifetimeValue",
-                          type: "currency",
-                          width: 20,
-                          sumInTotals: true,
-                          getValue: (c) => customerMetrics[c.id]?.lifetimeValue || 0,
-                        },
-                        {
-                          header: "Pending Receivables (INR)",
-                          key: "pendingReceivables",
-                          type: "currency",
-                          width: 22,
-                          sumInTotals: true,
-                          getValue: (c) => customerMetrics[c.id]?.pendingReceivables || 0,
-                        },
-                        {
-                          header: "Latest Order Date",
-                          key: "latestOrder",
-                          width: 16,
-                          getValue: (c) =>
-                            customerMetrics[c.id]?.latestOrder
-                              ? customerMetrics[c.id].latestOrder!.slice(0, 10)
-                              : "-",
-                        },
-                      ],
-                      filtered
-                    )
-                  }
-                  className="rounded-xl border border-border-default bg-white px-3.5 py-2 text-xs font-bold text-text-primary hover:bg-surface-app hover:border-brand-orange-primary transition inline-flex items-center gap-1.5 shadow-2xs disabled:opacity-50 cursor-pointer"
-                  title="Export filtered customers with LTV & pending dues to Excel (.xlsx)"
-                >
-                  <FileSpreadsheet className="h-3.5 w-3.5 text-brand-orange-primary" />
-                  <span>Export Excel</span>
-                </button>
-              ) : (
-                <Link
-                  href={`/checkout?studio=${studioSlug}&plan=COMPLETE`}
-                  className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-[11px] font-bold text-amber-900 hover:bg-amber-100 transition inline-flex items-center gap-1.5"
-                  title="Excel Report Exports are included in the ₹1,999/month plan"
-                >
-                  <FileSpreadsheet className="h-3.5 w-3.5 text-amber-700" />
-                  <span>Export Excel (₹1,999 Plan)</span>
-                </Link>
-              )}
               <button
+                type="button"
                 onClick={() => {
                   setEditingCustomer(null);
-                  setForm({ name: "", phone: "", email: "", address: "" });
+                  setForm({
+                    name: "",
+                    phone: "",
+                    email: "",
+                    address: "",
+                    notifyWhatsApp: hasWhatsAppOperations,
+                    notifyEmail: true,
+                  });
                   setShowModal(true);
                   setModalError(null);
                 }}
@@ -430,53 +392,123 @@ export default function CrmPage({ params }: { params: Promise<{ studioSlug: stri
               >
                 + Add Customer
               </button>
-            </div>
-          </div>
-
-          <div className="mt-4 flex flex-col gap-3 sm:flex-row">
-            <input
-              suppressHydrationWarning
-              autoComplete="off"
-              type="text"
-              placeholder="Search by name, phone, email, location..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full rounded-xl border border-border-default bg-surface-app px-3.5 py-2 text-xs text-text-primary placeholder:text-text-tertiary focus:bg-white focus:outline-none focus:border-brand-orange-primary focus:ring-2 focus:ring-brand-orange-soft"
-            />
-          </div>
-
-          <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={() => {
-                  setViewMode("ACTIVE");
-                  setSelected(null);
-                }}
-                className={`rounded-full px-3 py-1 text-[11px] font-bold transition ${
-                  viewMode === "ACTIVE"
-                    ? "bg-brand-orange-primary text-white"
-                    : "border border-border-default bg-white text-text-secondary hover:text-text-primary"
-                }`}
+                onClick={() => setFiltersOpen((open) => !open)}
+                aria-expanded={filtersOpen}
+                aria-controls="crm-customer-filters"
+                className="inline-flex items-center gap-1.5 rounded-xl border border-border-default bg-white px-3 py-1.5 text-xs font-bold text-text-secondary hover:border-brand-orange-primary hover:text-text-primary transition cursor-pointer"
               >
-                Active Clients ({customers.length})
+                <SlidersHorizontal className="h-3.5 w-3.5" />
+                <span>Filters</span>
+                {hasActiveFilters && (
+                  <span className="h-1.5 w-1.5 rounded-full bg-brand-orange-primary" />
+                )}
               </button>
               <button
                 type="button"
+                disabled={canExportExcel && filtered.length === 0}
                 onClick={() => {
-                  setViewMode("DELETED");
-                  setSelected(null);
+                  if (!canExportExcel) {
+                    showPlanWarning("Excel export is available only in the Professional (₹1,999/mo) plan.");
+                    return;
+                  }
+                  exportTableToExcel(
+                    `${studioSlug}_Customer_CRM`,
+                    "Customers",
+                    [
+                      { header: "Customer ID", key: "id", width: 22 },
+                      { header: "Customer Name", key: "name", width: 24 },
+                      {
+                        header: "Phone",
+                        key: "phone",
+                        width: 16,
+                        getValue: (c) => c.phone || "-",
+                      },
+                      {
+                        header: "Email",
+                        key: "email",
+                        width: 26,
+                        getValue: (c) => c.email || "-",
+                      },
+                      {
+                        header: "Location / Address",
+                        key: "address",
+                        width: 26,
+                        getValue: (c) => c.address || "-",
+                      },
+                      {
+                        header: "Total Orders",
+                        key: "totalOrders",
+                        type: "number",
+                        width: 14,
+                        sumInTotals: true,
+                        getValue: (c) => customerMetrics[c.id]?.totalOrders || 0,
+                      },
+                      {
+                        header: "Lifetime Value (INR)",
+                        key: "lifetimeValue",
+                        type: "currency",
+                        width: 20,
+                        sumInTotals: true,
+                        getValue: (c) => customerMetrics[c.id]?.lifetimeValue || 0,
+                      },
+                      {
+                        header: "Pending Receivables (INR)",
+                        key: "pendingReceivables",
+                        type: "currency",
+                        width: 22,
+                        sumInTotals: true,
+                        getValue: (c) => customerMetrics[c.id]?.pendingReceivables || 0,
+                      },
+                      {
+                        header: "Latest Order Date",
+                        key: "latestOrder",
+                        width: 16,
+                        getValue: (c) =>
+                          customerMetrics[c.id]?.latestOrder
+                            ? customerMetrics[c.id].latestOrder!.slice(0, 10)
+                            : "-",
+                      },
+                    ],
+                    filtered
+                  );
                 }}
-                className={`rounded-full px-3 py-1 text-[11px] font-bold transition ${
-                  viewMode === "DELETED"
-                    ? "bg-red-600 text-white"
-                    : "border border-border-default bg-white text-text-secondary hover:text-text-primary"
-                }`}
+                className="rounded-xl border border-border-default bg-white px-3.5 py-2 text-xs font-bold text-text-primary hover:bg-surface-app hover:border-brand-orange-primary transition inline-flex items-center gap-1.5 shadow-2xs disabled:opacity-50 cursor-pointer"
+                title="Export filtered customers with LTV & pending dues to Excel (.xlsx)"
               >
-                Archived / Deleted ({deletedCustomers.length})
+                <FileSpreadsheet className="h-3.5 w-3.5 text-brand-orange-primary" />
+                <span>Export Excel</span>
               </button>
             </div>
           </div>
+
+          {filtersOpen && (
+            <div id="crm-customer-filters" className="mt-3 flex flex-col sm:flex-row gap-2.5">
+              <input
+                suppressHydrationWarning
+                autoComplete="off"
+                type="text"
+                placeholder="Search by name, phone, email, location..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="flex-1 rounded-xl border border-border-default bg-surface-app px-3.5 py-2 text-xs text-text-primary placeholder:text-text-tertiary focus:bg-white focus:outline-none focus:border-brand-orange-primary focus:ring-2 focus:ring-brand-orange-soft"
+              />
+              <select
+                suppressHydrationWarning
+                value={viewMode}
+                onChange={(e) => {
+                  setViewMode(e.target.value as "ACTIVE" | "DELETED");
+                  setSelected(null);
+                }}
+                aria-label="Filter by client status"
+                className="min-w-0 w-full rounded-xl border border-border-default bg-surface-app px-3 py-2 text-xs font-semibold text-text-primary focus:bg-white focus:outline-none focus:border-brand-orange-primary focus:ring-2 focus:ring-brand-orange-soft sm:w-auto"
+              >
+                <option value="ACTIVE">Active Clients ({customers.length})</option>
+                <option value="DELETED">Archived / Deleted ({deletedCustomers.length})</option>
+              </select>
+            </div>
+          )}
         </header>
 
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-2.5">
@@ -572,6 +604,10 @@ export default function CrmPage({ params }: { params: Promise<{ studioSlug: stri
                         phone: selected.phone || "",
                         email: selected.email || "",
                         address: selected.address || "",
+                        notifyWhatsApp: Boolean(
+                          hasWhatsAppOperations && selected.notifyWhatsApp
+                        ),
+                        notifyEmail: selected.notifyEmail ?? true,
                       });
                       setModalError(null);
                       setShowModal(true);
@@ -818,6 +854,72 @@ export default function CrmPage({ params }: { params: Promise<{ studioSlug: stri
                   className="mt-1 w-full rounded-xl border border-border-default px-3.5 py-2 text-xs outline-none focus:border-brand-orange-primary focus:ring-1 focus:ring-brand-orange-primary"
                 />
               </div>
+
+              {(Boolean(form.phone.trim()) || Boolean(form.email.trim())) && (
+                <div className="rounded-2xl border border-orange-200/80 bg-orange-50/40 p-3 space-y-2 animate-in fade-in duration-150">
+                  <span className="block text-[11px] font-bold text-text-primary">
+                    Automated Client Notifications
+                  </span>
+                  {Boolean(form.phone.trim()) && (
+                    <label
+                      onClick={(e) => {
+                        if (!hasWhatsAppOperations) {
+                          e.preventDefault();
+                          showPlanWarning(
+                            "WhatsApp alerts and notifications require the Professional (₹1,999/mo) plan."
+                          );
+                        }
+                      }}
+                      aria-disabled={!hasWhatsAppOperations}
+                      className={`flex items-center justify-between gap-2.5 select-none cursor-pointer ${
+                        !hasWhatsAppOperations ? "opacity-65" : ""
+                      }`}
+                    >
+                      <span className="flex items-center gap-2.5">
+                        <input
+                          type="checkbox"
+                          checked={hasWhatsAppOperations ? form.notifyWhatsApp : false}
+                          readOnly={!hasWhatsAppOperations}
+                          onChange={(e) => {
+                            if (!hasWhatsAppOperations) {
+                              showPlanWarning(
+                                "WhatsApp alerts and notifications require the Professional (₹1,999/mo) plan."
+                              );
+                              return;
+                            }
+                            setForm({ ...form, notifyWhatsApp: e.target.checked });
+                          }}
+                          className="h-3.5 w-3.5 rounded border-border-default text-brand-orange-primary focus:ring-brand-orange-primary"
+                        />
+                        <span className="text-xs font-medium text-text-primary">
+                          Send WhatsApp alerts and notifications
+                        </span>
+                      </span>
+                      {!hasWhatsAppOperations && (
+                        <span className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-text-secondary shrink-0">
+                          <Lock className="h-2.5 w-2.5" />
+                          Pro
+                        </span>
+                      )}
+                    </label>
+                  )}
+                  {Boolean(form.email.trim()) && (
+                    <label className="flex items-center gap-2.5 select-none cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={form.notifyEmail}
+                        onChange={(e) =>
+                          setForm({ ...form, notifyEmail: e.target.checked })
+                        }
+                        className="h-3.5 w-3.5 rounded border-border-default text-brand-orange-primary focus:ring-brand-orange-primary"
+                      />
+                      <span className="text-xs font-medium text-text-primary">
+                        Send automated updates via <strong>Email</strong>
+                      </span>
+                    </label>
+                  )}
+                </div>
+              )}
               <div>
                 <label className="block font-bold text-text-primary">Location / Address</label>
                 <input
@@ -851,6 +953,11 @@ export default function CrmPage({ params }: { params: Promise<{ studioSlug: stri
           </div>
         </div>
       )}
+      <PlanGatedToast
+        message={planWarning}
+        onDismiss={dismissPlanWarning}
+        upgradeHref={`/checkout?studio=${studioSlug}&plan=COMPLETE`}
+      />
     </div>
   );
 }

@@ -86,16 +86,16 @@ export function OmsOrdersListPanel({
               <SlidersHorizontal className="h-3.5 w-3.5" />
               Filters
             </button>
-            {canExport && <button
+            <button
               type="button"
               onClick={onExportExcel}
-              disabled={filtered.length === 0}
+              disabled={canExport && filtered.length === 0}
               className="rounded-xl border border-border-default bg-white px-3.5 py-2 text-xs font-bold text-text-primary hover:bg-surface-app hover:border-brand-blue-primary transition inline-flex items-center gap-1.5 shadow-2xs disabled:opacity-50 cursor-pointer"
               title="Export filtered orders and payment ledger to Excel (.xlsx)"
             >
               <FileSpreadsheet className="h-3.5 w-3.5 text-brand-blue-primary" />
               <span>Export Excel</span>
-            </button>}
+            </button>
           </div>
         </div>
 
