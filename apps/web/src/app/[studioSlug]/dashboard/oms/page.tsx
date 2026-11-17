@@ -20,7 +20,6 @@ import {
   StudioLeadWebhookConfig,
 } from "@focoman/types";
 import {
-  getStudioOrdersAction,
   getOrderAction,
   getOrderTasksAction,
   createOrderAction,
@@ -105,6 +104,7 @@ export default function OmsPage({
   const [loadingMore, setLoadingMore] = useState(false);
   const [moreError, setMoreError] = useState<string | null>(null);
   const listGeneration = useRef(0);
+  const detailGeneration = useRef(0);
   const moreInFlight = useRef(false);
   const [optionsAttempt, setOptionsAttempt] = useState(0);
   const [optionsReady, setOptionsReady] = useState(false);
@@ -133,6 +133,14 @@ export default function OmsPage({
   const [ordersRefreshError, setOrdersRefreshError] = useState<string | null>(null);
   const [copiedField, setCopiedField] = useState<"code" | "link" | null>(null);
   const [origin, setOrigin] = useState("");
+
+  const matchesCurrentList = useCallback((order: Order) => {
+    const normalizedQuery = query.trim().toLowerCase();
+    return (statusFilter === "ALL" || order.orderStatus === statusFilter) &&
+      (!normalizedQuery || `${order.customer.name} ${order.orderNumber} ${order.eventType}`
+        .toLowerCase()
+        .includes(normalizedQuery));
+  }, [query, statusFilter]);
 
   useEffect(() => {
     setOrigin(window.location.origin);
@@ -569,7 +577,7 @@ export default function OmsPage({
       const page = await getOmsNextPageAction(studioSlug, token, ids);
       if (generation !== listGeneration.current) return;
       setOrders(previous => Array.from(new Map([...previous, ...page].map(order => [order.id, order])).values()));
-      setRemainingOrderIds(previous => previous.slice(ids.length));
+      setRemainingOrderIds(previous => previous.filter(id => !ids.includes(id)));
     } catch (error) {
       if (generation === listGeneration.current) setMoreError(error instanceof Error ? error.message : 'Unable to load more orders.');
     } finally {
@@ -581,9 +589,10 @@ export default function OmsPage({
     if (!selectedId) return;
     const token = workspaceToken ?? await getIdToken(false);
     if (!token) throw new Error('Please sign in again.');
+    const request = ++detailGeneration.current;
     const result = await getOrderAction(selectedId, studioSlug, token);
     if (!result.order) throw new Error('This order is no longer available.');
-    if (selectedIdRef.current !== selectedId) return;
+    if (selectedIdRef.current !== selectedId || request !== detailGeneration.current) return;
     setOrders(previous => Array.from(new Map([...previous, result.order!].map(order => [order.id, order])).values()));
     setSelectedTasks(result.tasks);
   }, [selectedId, studioSlug, workspaceToken, getIdToken]);
@@ -592,8 +601,9 @@ export default function OmsPage({
     let active = true;
     if (!selectedId || !workspaceToken) { setSelectedTasks([]); return; }
     // Load a deep-linked order even if it is not in the first page.
+    const request = ++detailGeneration.current;
     void getOrderAction(selectedId, studioSlug, workspaceToken).then(result => {
-      if (!active) return;
+      if (!active || request !== detailGeneration.current) return;
       if (!result.order) throw new Error('This order is no longer available.');
       setOrders(previous => Array.from(new Map([...previous, result.order!].map(order => [order.id, order])).values()));
       setSelectedTasks(result.tasks);
@@ -791,10 +801,11 @@ export default function OmsPage({
         });
         setOrdersRefreshError(null);
         ++listGeneration.current;
+        ++detailGeneration.current;
         setLoadingMore(false);
         moreInFlight.current = false;
         setOrders(previous => [res.order!, ...previous.filter(order => order.id !== res.order!.id)]);
-        if ((statusFilter === 'ALL' || res.order.orderStatus === statusFilter) && (!query || `${res.order.customer.name} ${res.order.orderNumber} ${res.order.eventType}`.toLowerCase().includes(query.toLowerCase()))) setOrderTotal(total => total + 1);
+        if (matchesCurrentList(res.order)) setOrderTotal(total => total + 1);
         setOptionsReady(false);
         setSelectedId(res.order.id);
         if (res.tasks) setSelectedTasks(res.tasks);
@@ -1472,6 +1483,8 @@ export default function OmsPage({
       }
     }
 
+    // The new crew member must be visible to the next assignment immediately.
+    setOptionsReady(false);
     await refreshSelectedOrder();
     setShowAddMemberModal(false);
     setTargetAssignContext(null);
@@ -1498,9 +1511,16 @@ export default function OmsPage({
 
     setIsCancelling(false);
     if (res.success && res.order) {
+      ++listGeneration.current;
+      ++detailGeneration.current;
+      const wasVisible = matchesCurrentList(cancelTargetOrder);
+      const isVisible = matchesCurrentList(res.order);
       setOrders((prev) =>
-        prev.map((o) => (o.id === res.order!.id ? res.order! : o))
+        isVisible
+          ? prev.map((o) => (o.id === res.order!.id ? res.order! : o))
+          : prev.filter((o) => o.id !== res.order!.id)
       );
+      if (wasVisible !== isVisible) setOrderTotal(total => Math.max(0, total + (isVisible ? 1 : -1)));
       setCancelTargetOrder(null);
       setCancelReason("");
     } else {
@@ -1530,8 +1550,11 @@ export default function OmsPage({
 
     setIsDeleting(false);
     if (res.success) {
+      ++listGeneration.current;
+      ++detailGeneration.current;
+      const wasVisible = matchesCurrentList(deleteTargetOrder);
       setOrders((prev) => prev.filter((o) => o.id !== deleteTargetOrder.id));
-      setOrderTotal(total => Math.max(0, total - 1));
+      if (wasVisible) setOrderTotal(total => Math.max(0, total - 1));
       setRemainingOrderIds(ids => ids.filter(id => id !== deleteTargetOrder.id));
       setScheduleHistory(history => history.filter(order => order.id !== deleteTargetOrder.id));
       if (selectedId === deleteTargetOrder.id) {
@@ -1612,9 +1635,13 @@ export default function OmsPage({
     try {
       const token = workspaceToken ?? await getIdToken(false);
       if (!token) throw new Error('Please sign in again.');
-      const allOrders = await getStudioOrdersAction(studioSlug, token);
-      const matching = allOrders.filter(order => (statusFilter === 'ALL' || order.orderStatus === statusFilter) && (!query || `${order.customer.name} ${order.orderNumber} ${order.eventType}`.toLowerCase().includes(query.toLowerCase())));
-      exportOmsOrdersToExcel(studioSlug, matching);
+      const firstPage = await getOmsPageAction(studioSlug, token, { query, status: statusFilter, sort: sortBy });
+      const allOrders = [...firstPage.items];
+      for (let offset = 0; offset < firstPage.remainingIds.length; offset += 50) {
+        const page = await getOmsNextPageAction(studioSlug, token, firstPage.remainingIds.slice(offset, offset + 50));
+        allOrders.push(...page);
+      }
+      exportOmsOrdersToExcel(studioSlug, allOrders);
     } catch (error) {
       setNoticeDialog({
         title: "Export Failed",
@@ -1622,7 +1649,7 @@ export default function OmsPage({
         tone: "error",
       });
     }
-  }, [canExportOrders, statusFilter, query, studioSlug, showPlanWarning, workspaceToken, getIdToken]);
+  }, [canExportOrders, statusFilter, query, sortBy, studioSlug, showPlanWarning, workspaceToken, getIdToken]);
 
   const handleSaveDriveDeliverables = useCallback(
     async (updatedDeliverables: OrderDriveDeliverable[]) => {
@@ -1832,10 +1859,10 @@ export default function OmsPage({
             studioOwnerName={studio?.ownerName || workspaceUser?.displayName || "Studio Owner"}
             allSelectableCrew={allSelectableCrew}
             temporaryCrewList={temporaryCrewList}
-            onSaveServiceCrew={handleSaveServiceCrewAssignments}
-            onOpenErpWizard={hasErp ? openErpWizardForService : undefined}
-            onAssignTaskCrew={handleAssignTaskCrew}
-            onSaveSchedule={handleSaveOrderSchedule}
+            onSaveServiceCrew={optionsReady ? handleSaveServiceCrewAssignments : undefined}
+            onOpenErpWizard={hasErp && optionsReady ? openErpWizardForService : undefined}
+            onAssignTaskCrew={optionsReady ? handleAssignTaskCrew : undefined}
+            onSaveSchedule={optionsReady ? handleSaveOrderSchedule : undefined}
             busyEventDates={schedulingOrders
               .filter(
                 (order) =>

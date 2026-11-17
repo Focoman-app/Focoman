@@ -1,5 +1,7 @@
 "use server";
 
+import { measurePerformance } from "@/lib/performance";
+
 import type {
   CustomerTrackingView,
   Order,
@@ -60,7 +62,7 @@ export async function createOrderAction(rawInput: unknown): Promise<{
   tasks?: Task[];
   error?: string;
 }> {
-  return createOrderCore(rawInput);
+  return measurePerformance("order.save", () => createOrderCore(rawInput));
 }
 
 export async function getStudioOrdersAction(

@@ -1,3 +1,4 @@
+import { getDashboardStudio } from "@/lib/dashboardStudio";
 import { notFound } from "next/navigation";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { StudioWorkspaceProvider } from "@/components/StudioWorkspaceProvider";
@@ -21,7 +22,7 @@ export default async function DashboardLayout({
 }) {
   const { studioSlug } = await params;
   const access = await requireDashboardStudioAccess(studioSlug);
-  const studio = await getStudioBySlug(studioSlug);
+  const studio = await getDashboardStudio(studioSlug);
 
   if (!studio) {
     // Studio slug not found — surface truthful 404

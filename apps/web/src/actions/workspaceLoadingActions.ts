@@ -1,6 +1,7 @@
 "use server";
 
 import { readOrderListPage, readOrderPageByIds, readStudioPage, getOrderScheduleProjection } from '@focoman/db';
+import { measurePerformance } from "@/lib/performance";
 import type { OrderStatus } from '@focoman/types';
 import { requireVerifiedUser, requireStudioOwner } from '@/lib/serverAuth';
 import { getStudioCustomersAction } from './customerActions';
@@ -13,13 +14,13 @@ export async function getOmsPageAction(studioId: string, idToken: string, input:
 }) {
   const user = await requireVerifiedUser(idToken);
   await requireStudioOwner(user.uid, studioId);
-  return readOrderListPage({ ...input, studioId, pageSize: 20 });
+  return measurePerformance("oms.load", () => readOrderListPage({ ...input, studioId, pageSize: 20 }));
 }
 
 export async function getOmsNextPageAction(studioId: string, idToken: string, ids: string[]) {
   const user = await requireVerifiedUser(idToken);
   await requireStudioOwner(user.uid, studioId);
-  return readOrderPageByIds(studioId, ids);
+  return measurePerformance("table.page", () => readOrderPageByIds(studioId, ids));
 }
 
 export async function getWorkspacePageAction(studioId: string, idToken: string, input: {
@@ -27,16 +28,16 @@ export async function getWorkspacePageAction(studioId: string, idToken: string, 
 }) {
   const user = await requireVerifiedUser(idToken);
   await requireStudioOwner(user.uid, studioId);
-  return readStudioPage({ ...input, studioId });
+  return measurePerformance("table.page", () => readStudioPage({ ...input, studioId }));
 }
 
 /** Parallelism lives on the server; options never block the orders table. */
 export async function getOmsOptionsAction(studioId: string, idToken: string) {
   const user = await requireVerifiedUser(idToken);
   await requireStudioOwner(user.uid, studioId);
-  const hasErp = await hasStudioCapability(studioId, 'STUDIO_ERP');
+  const [hasErp, hasCrm] = await Promise.all([hasStudioCapability(studioId, 'STUDIO_ERP'), hasStudioCapability(studioId, 'CUSTOMER_CRM')]);
   const [customers, members, services, schedules] = await Promise.all([
-    getStudioCustomersAction(studioId, idToken),
+    hasCrm ? getStudioCustomersAction(studioId, idToken) : Promise.resolve([]),
     hasErp ? getStudioMembersAction(studioId, idToken) : Promise.resolve([]),
     getStudioServicesAction(studioId, idToken),
     getOrderScheduleProjection(studioId),

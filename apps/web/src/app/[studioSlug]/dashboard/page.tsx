@@ -1,3 +1,5 @@
+import { getDashboardStudio } from "@/lib/dashboardStudio";
+import { measurePerformance } from "@/lib/performance";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { toMemberWorkView } from "@focoman/domain";
@@ -38,7 +40,7 @@ export default async function DashboardPage({ params }: { params: Promise<{ stud
   }
 
   // Studio owner / admin — fetch orders and studio features
-  const studio = await getStudioBySlug(studioSlug);
+  const studio = await getDashboardStudio(studioSlug);
 
   const effectiveTier = getEffectiveStudioTier(studio?.ownerEmail || access.decoded.email, studio?.planInfo);
   const effectiveFeatures = getEffectiveStudioFeatures(studio?.ownerEmail || access.decoded.email, studio?.features, studio?.planInfo);
@@ -56,6 +58,6 @@ export default async function DashboardPage({ params }: { params: Promise<{ stud
 }
 
 async function OwnerDashboard({ studioSlug, planTier }: { studioSlug: string; planTier: 'FREE' | 'PROFESSIONAL' | 'COMPLETE' }) {
-  const orders = await getDashboardOrderProjection(studioSlug);
+  const orders = await measurePerformance("dashboard.load", () => getDashboardOrderProjection(studioSlug));
   return <DashboardHomeView studioSlug={studioSlug} initialOrders={orders} planTier={planTier} />;
 }
