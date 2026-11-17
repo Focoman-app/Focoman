@@ -6,7 +6,7 @@ import { motion, useMotionValue, useTransform, animate } from "framer-motion";
 export function RetroHeroVisual() {
   const [isMounted, setIsMounted] = useState(false);
   const [isFinished, setIsFinished] = useState(false);
-  const [isPlaying, setIsPlaying] = useState(false);
+  const isPlayingRef = useRef(false);
   const animationRef = useRef<ReturnType<typeof animate> | null>(null);
   const isScrollingRef = useRef(false);
   const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -85,14 +85,14 @@ export function RetroHeroVisual() {
     }
     progress.set(0);
     setIsFinished(false);
-    setIsPlaying(true);
+    isPlayingRef.current = true;
 
     animationRef.current = animate(progress, 1, {
       duration,
       ease: [0.2, 0, 0.2, 1],
       onComplete: () => {
         setIsFinished(true);
-        setIsPlaying(false);
+        isPlayingRef.current = false;
       },
     });
   }, [progress]);
@@ -116,8 +116,10 @@ export function RetroHeroVisual() {
       setIsFinished(true);
     }
 
-    const handleScroll = () => {
-      const heroSection = document.getElementById("home");
+    const heroSection = document.getElementById("home");
+    let scrollFrame: number | null = null;
+    const updateScroll = () => {
+      scrollFrame = null;
       if (!heroSection) return;
 
       const rect = heroSection.getBoundingClientRect();
@@ -133,7 +135,7 @@ export function RetroHeroVisual() {
       isScrollingRef.current = true;
       if (animationRef.current) {
         animationRef.current.stop();
-        setIsPlaying(false);
+        isPlayingRef.current = false;
       }
 
       // Sync progress directly to scroll
@@ -153,21 +155,27 @@ export function RetroHeroVisual() {
         // Reset scroll timeout to allow autoplay if idle at top
         if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
         scrollTimeoutRef.current = setTimeout(() => {
-          if (window.scrollY <= 15 && !isPlaying) {
+          if (window.scrollY <= 15 && !isPlayingRef.current) {
             startAutoplay(16.5);
           }
         }, 1200);
       }
     };
 
+    // At most one layout read/update per animation frame, even on trackpads.
+    const handleScroll = () => {
+      if (scrollFrame === null) scrollFrame = requestAnimationFrame(updateScroll);
+    };
+
     window.addEventListener("scroll", handleScroll, { passive: true });
 
     return () => {
       window.removeEventListener("scroll", handleScroll);
+      if (scrollFrame !== null) cancelAnimationFrame(scrollFrame);
       if (animationRef.current) animationRef.current.stop();
       if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
     };
-  }, [progress, startAutoplay, isPlaying]);
+  }, [progress, startAutoplay]);
 
   if (!isMounted) {
     return (

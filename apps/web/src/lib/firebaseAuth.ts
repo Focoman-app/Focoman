@@ -12,6 +12,7 @@ import {
   UserCredential,
 } from "firebase/auth";
 import { auth } from "./firebase";
+import { measurePerformance } from "./performance";
 
 /**
  * Client-side Firebase Authentication helper functions
@@ -24,6 +25,8 @@ googleProvider.setCustomParameters({
 });
 
 let inFlightSync: Promise<boolean> | null = null;
+let inFlightSyncUid: string | null = null;
+let signingOut = false;
 let lastSyncedToken: string | null = null;
 let redirectHandlingPromise: Promise<UserCredential | null> | null = null;
 
@@ -43,6 +46,9 @@ export function markLegalConsentAuthCandidate(): void {
 }
 
 export function markLegalConsentPending(): void {
+  // A consent flow deletes the cookie; the previously synced token no longer
+  // proves a server session exists.
+  lastSyncedToken = null;
   if (typeof window !== 'undefined') {
     sessionStorage.removeItem(LEGAL_CONSENT_AUTH_CANDIDATE_KEY);
     sessionStorage.setItem(LEGAL_CONSENT_PENDING_KEY, 'true');
@@ -76,10 +82,14 @@ export function clearLegalConsentAuthState(): void {
  */
 export async function syncServerSession(force = false): Promise<boolean> {
   if (typeof window === "undefined") return false;
+  if (signingOut) return false;
   if (isLegalConsentSessionDeferred()) return false;
   const origin = window.location.origin;
+  const currentUser = auth.currentUser;
 
-  if (!auth.currentUser) {
+  if (!currentUser) {
+    if (inFlightSync) await inFlightSync;
+    if (auth.currentUser) return syncServerSession(force);
     try {
       await fetch(`${origin}/api/session`, { method: "DELETE", credentials: "same-origin" });
     } catch {
@@ -89,11 +99,22 @@ export async function syncServerSession(force = false): Promise<boolean> {
     return false;
   }
 
-  if (inFlightSync) return inFlightSync;
+  if (inFlightSync) {
+    if (inFlightSyncUid === currentUser.uid) return inFlightSync;
+    // Never reuse another identity's session result. Serialize cookie writes
+    // so an older account's response cannot overwrite the newer session.
+    await inFlightSync;
+    if (auth.currentUser?.uid !== currentUser.uid) return false;
+    return syncServerSession(force);
+  }
 
-  inFlightSync = (async () => {
+  inFlightSyncUid = currentUser.uid;
+  inFlightSync = measurePerformance("auth.session.sync", async () => {
     try {
-      const idToken = await auth.currentUser!.getIdToken(force);
+      // Force repairs the server cookie, not the Firebase token. The SDK already
+      // refreshes expired tokens; forcing both creates an extra network round trip.
+      const idToken = await currentUser.getIdToken();
+      if (auth.currentUser?.uid !== currentUser.uid || isLegalConsentSessionDeferred()) return false;
       if (!force && lastSyncedToken === idToken) {
         return true;
       }
@@ -104,6 +125,7 @@ export async function syncServerSession(force = false): Promise<boolean> {
         credentials: "same-origin",
       });
       if (response.ok) {
+        if (auth.currentUser?.uid !== currentUser.uid || isLegalConsentSessionDeferred()) return false;
         lastSyncedToken = idToken;
         return true;
       }
@@ -113,8 +135,9 @@ export async function syncServerSession(force = false): Promise<boolean> {
       return false;
     } finally {
       inFlightSync = null;
+      inFlightSyncUid = null;
     }
-  })();
+  });
 
   return inFlightSync;
 }
@@ -146,7 +169,7 @@ export async function signInWithGoogle(): Promise<UserCredential | void> {
   if (isIframe || isVercel || isCustomHost) {
     console.log("[Focoman Auth] Using popup sign-in for cross-domain / Vercel host:", typeof window !== "undefined" ? window.location.hostname : "");
     const credential = await signInWithPopup(auth, googleProvider);
-    await syncServerSession(true);
+    await syncServerSession();
     return credential;
   }
 
@@ -156,7 +179,7 @@ export async function signInWithGoogle(): Promise<UserCredential | void> {
   } catch (error) {
     console.warn("[Focoman Auth] signInWithRedirect encountered error, attempting fallback popup:", error);
     const credential = await signInWithPopup(auth, googleProvider);
-    await syncServerSession(true);
+    await syncServerSession();
     return credential;
   }
 }
@@ -173,14 +196,10 @@ export async function handleRedirectAuth(): Promise<UserCredential | null> {
     try {
       console.log("[Focoman Auth] Checking getRedirectResult(auth)...");
       const credential = await getRedirectResult(auth);
-      console.log("[Focoman Auth] getRedirectResult returned:", credential ? {
-        uid: credential.user?.uid,
-        email: credential.user?.email,
-      } : "null (no pending redirect credential)");
+      console.log("[Focoman Auth] Redirect credential received:", Boolean(credential));
 
       if (credential?.user) {
-        console.log("[Focoman Auth] Syncing server session for user:", credential.user.email);
-        await syncServerSession(true);
+        await syncServerSession();
         return credential;
       }
       return null;
@@ -199,17 +218,24 @@ export async function handleRedirectAuth(): Promise<UserCredential | null> {
 export async function signInWithGooglePopup(): Promise<UserCredential> {
   console.log("[Focoman Auth] Initiating signInWithPopup as fallback...");
   const credential = await signInWithPopup(auth, googleProvider);
-  await syncServerSession(true);
+  await syncServerSession();
   return credential;
 }
 
 export async function signOutUser(): Promise<void> {
-  lastSyncedToken = null;
-  const response = await fetch('/api/session', { method: 'DELETE' });
-  if (!response.ok) {
-    throw new Error('Unable to clear the secure server session. Please try signing out again.');
+  signingOut = true;
+  try {
+    // Finish any cookie POST before deleting it, so sign-out remains final.
+    if (inFlightSync) await inFlightSync;
+    lastSyncedToken = null;
+    const response = await fetch('/api/session', { method: 'DELETE' });
+    if (!response.ok) {
+      throw new Error('Unable to clear the secure server session. Please try signing out again.');
+    }
+    await signOut(auth);
+  } finally {
+    signingOut = false;
   }
-  await signOut(auth);
 }
 
 export function subscribeToAuthState(callback: (user: User | null) => void) {

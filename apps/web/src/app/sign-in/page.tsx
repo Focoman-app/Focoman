@@ -26,6 +26,7 @@ import { Navbar } from "@/components/Navbar";
 import { BackButton } from "@/components/BackButton";
 import { FocomanSpinner } from "@/components/FocomanSpinner";
 import { LegalDocumentContent, type LegalDocumentKind } from "@/components/legal/LegalDocumentContent";
+import { measurePerformance } from "@/lib/performance";
 
 function LegalDocument({ kind, onRead }: { kind: LegalDocumentKind; onRead: () => void }) {
   const terms = kind === "terms";
@@ -114,7 +115,8 @@ function SignInContent() {
     recoveryCheckPending.current = true;
     try {
       const token = await authedUser.getIdToken();
-      const status = await getRecoverableAccountStatusAction(token);
+      const status = await measurePerformance("auth.recovery.check", () => getRecoverableAccountStatusAction(token));
+      if (!status.success) throw new Error("Unable to check your account. Please try signing in again.");
       if (status.success && status.hasRecoverableData && status.studios.length > 0) {
         setRecoverablePrompt({
           user: authedUser,
@@ -138,10 +140,15 @@ function SignInContent() {
         recoveryCheckPending.current = false;
         return;
       }
-      await syncServerSession(true);
+      if (!(await syncServerSession(true))) {
+        throw new Error("Unable to establish your secure session. Please try signing in again.");
+      }
     } catch (err) {
-      console.warn("[SignInContent] Recoverable check failed, proceeding to target:", err);
-      await syncServerSession(true).catch(() => false);
+      setAuthError(err instanceof Error ? err.message : "Unable to check your account. Please try again.");
+      setIsSigningIn(false);
+      recoveryCheckPending.current = false;
+      interactiveAttempt.current = false;
+      return;
     }
     continueToTarget();
   }, [continueToTarget]);
@@ -252,6 +259,7 @@ function SignInContent() {
       if (!res.success) {
         throw new Error(res.error || "Failed to recover account data.");
       }
+      if (!(await syncServerSession(true))) throw new Error("Your data was recovered, but the secure session could not be established. Please sign in again.");
       if (res.firstStudioId) {
         await setDefaultWorkspace(recoverablePrompt.user.uid, res.firstStudioId, token);
         continueToTarget(`/${res.firstStudioId}/dashboard`);
