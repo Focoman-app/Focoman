@@ -10,6 +10,7 @@ import { subscribeToAuthState, getCurrentUserIdToken, syncServerSession } from "
 import { registerStudioAction, checkStudioSlugAvailabilityAction, getUserWorkspacesAction } from "@/actions/studioActions";
 import { setDefaultWorkspace } from "@/lib/workspaceDefaults";
 import { User } from "firebase/auth";
+import { measurePerformance } from "@/lib/performance";
 
 export default function RegisterStudioPage() {
   const router = useRouter();
@@ -142,8 +143,8 @@ export default function RegisterStudioPage() {
     setIsSubmitting(true);
     setErrorMessage(null);
 
-    // CHG-010: Get a fresh ID token — UID and profile are verified server-side from the token.
-    const idToken = await getCurrentUserIdToken(true);
+    // Firebase refreshes expired tokens automatically; no claims changed here.
+    const idToken = await getCurrentUserIdToken();
     if (!idToken) {
       setErrorMessage("Authentication error. Please sign in again.");
       setIsSubmitting(false);
@@ -153,14 +154,14 @@ export default function RegisterStudioPage() {
     const cleanWebsite = form.website.trim().replace(/^https?:\/\//i, "");
     const formattedWebsite = cleanWebsite ? `https://${cleanWebsite}` : undefined;
 
-    const res = await registerStudioAction({
+    const res = await measurePerformance("studio.register", () => registerStudioAction({
       name: form.name,
       city: form.city,
       logoUrl: form.logoUrl || undefined,
       website: formattedWebsite,
       instagram: form.instagram || undefined,
       idToken,
-    });
+    }));
 
     setIsSubmitting(false);
 

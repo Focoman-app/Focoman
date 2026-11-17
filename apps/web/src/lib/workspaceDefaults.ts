@@ -148,10 +148,8 @@ export async function resolveAndSyncDefaultWorkspace(
 
   // 2. Local value is set and exists in active workspaces
   if (local.status === "set" && local.studioId && activeIds.has(local.studioId.toLowerCase())) {
-    if (idToken) {
-      // Background sync to ensure Firestore user_preferences is up to date
-      setUserDefaultStudioAction(local.studioId, idToken).catch(() => {});
-    }
+    // Preference writes belong to an explicit set/clear action, not every
+    // dashboard visit. Membership above still validates this local routing hint.
     return local.studioId;
   }
 
