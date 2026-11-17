@@ -130,9 +130,9 @@ export default function CrmPage({ params }: { params: Promise<{ studioSlug: stri
       }
       const [customersData, deletedCustomersData, ordersData, deletedOrdersData] = await Promise.all([
         getStudioCustomersAction(studioSlug, token),
-        getDeletedStudioCustomersAction(studioSlug, token).catch(() => [] as Customer[]),
+        Promise.resolve([] as Customer[]),
         getStudioOrdersAction(studioSlug, token),
-        getDeletedStudioOrdersAction(studioSlug, token).catch(() => [] as Order[]),
+        Promise.resolve([] as Order[]),
       ]);
       setCustomers(customersData);
       setDeletedCustomers(deletedCustomersData);
@@ -144,6 +144,30 @@ export default function CrmPage({ params }: { params: Promise<{ studioSlug: stri
       setLoading(false);
     }
   }, [studioSlug, workspaceToken, getIdToken]);
+
+  // Archive/recovery data is not needed for the active customer screen. Load it
+  // only when the user opens the archive, so it cannot delay the normal CRM view.
+  useEffect(() => {
+    if (viewMode !== "DELETED" || authLoading) return;
+    let active = true;
+    void (async () => {
+      const token = workspaceToken ?? await getIdToken(false);
+      if (!token) return;
+      try {
+        const [archivedCustomers, archivedOrders] = await Promise.all([
+          getDeletedStudioCustomersAction(studioSlug, token),
+          getDeletedStudioOrdersAction(studioSlug, token),
+        ]);
+        if (!active) return;
+        setDeletedCustomers(archivedCustomers);
+        setDeletedOrders(archivedOrders);
+      } catch (err) {
+        console.error("[CrmPage] Failed to load archived data:", err);
+        if (active) setStatusMessage({ type: "error", text: "Unable to load archived customers. Please try again." });
+      }
+    })();
+    return () => { active = false; };
+  }, [viewMode, authLoading, workspaceToken, getIdToken, studioSlug]);
 
   const handleRestoreOrder = async (orderId: string) => {
     try {

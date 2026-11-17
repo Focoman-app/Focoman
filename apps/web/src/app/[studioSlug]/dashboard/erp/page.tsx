@@ -192,7 +192,7 @@ export default function ErpPage({ params }: { params: Promise<{ studioSlug: stri
       }
       const [membersData, deletedMembersData, ordersData, invitationData] = await Promise.all([
         getStudioMembersAction(studioSlug, token),
-        getDeletedStudioMembersAction(studioSlug, token).catch(() => [] as StudioMember[]),
+        Promise.resolve([] as StudioMember[]),
         getStudioOrdersAction(studioSlug, token),
         getStudioInvitationsAction(studioSlug, token),
       ]);
@@ -206,6 +206,25 @@ export default function ErpPage({ params }: { params: Promise<{ studioSlug: stri
       setLoading(false);
     }
   }, [studioSlug, workspaceToken, getIdToken]);
+
+  // Keep archived crew out of the critical ERP load. It is only required by the
+  // archive tab and has its own truthful error path through the existing banner.
+  useEffect(() => {
+    if (viewMode !== "DELETED" || authLoading) return;
+    let active = true;
+    void (async () => {
+      const token = workspaceToken ?? await getIdToken(false);
+      if (!token) return;
+      try {
+        const archivedMembers = await getDeletedStudioMembersAction(studioSlug, token);
+        if (active) setDeletedCrewList(archivedMembers);
+      } catch (err) {
+        console.error("[ErpPage] Failed to load archived crew:", err);
+        if (active) setStatusBanner({ type: "error", text: "Unable to load archived crew. Please try again." });
+      }
+    })();
+    return () => { active = false; };
+  }, [viewMode, authLoading, workspaceToken, getIdToken, studioSlug]);
 
   useEffect(() => {
     if (!authLoading) {
