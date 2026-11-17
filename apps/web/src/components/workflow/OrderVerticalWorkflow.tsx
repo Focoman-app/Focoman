@@ -55,6 +55,13 @@ interface OrderVerticalWorkflowProps {
   ) => Promise<void>;
   busyEventDates?: string[];
   hasErp?: boolean;
+  canManageDriveLinks?: boolean;
+  onSendTaskForReviewWithDriveLink?: (input: {
+    taskId: string;
+    title: string;
+    driveUrl: string;
+    notes?: string;
+  }) => Promise<void>;
   displayMode?: "full" | "main-state-only" | "timeline-only";
 }
 
@@ -88,6 +95,8 @@ export function OrderVerticalWorkflow({
   onSaveSchedule,
   busyEventDates = [],
   hasErp = true,
+  canManageDriveLinks = false,
+  onSendTaskForReviewWithDriveLink,
   displayMode = "full",
 }: OrderVerticalWorkflowProps) {
   const isOms = variant === "oms";
@@ -96,6 +105,9 @@ export function OrderVerticalWorkflow({
 
   const [reworkOpenTaskId, setReworkOpenTaskId] = useState<string | null>(null);
   const [reworkNotesDraft, setReworkNotesDraft] = useState<Record<string, string>>({});
+  const [taskDriveDrafts, setTaskDriveDrafts] = useState<
+    Record<string, { title?: string; driveUrl?: string; notes?: string }>
+  >({});
   const [submittingTaskId, setSubmittingTaskId] = useState<string | null>(null);
   const [actionFeedbackError, setActionFeedbackError] = useState<string | null>(null);
 
@@ -276,25 +288,23 @@ export function OrderVerticalWorkflow({
       return "phase_post_event";
     }
 
-    return "phase_event_day";
+    return "phase_pre_event";
   }, [order.orderStatus, isTodayEvent, hasErp, preEventCompleted, isProductionCompleted]);
 
   // Phase expansion state: defaults to expanding active phase (and Phase 01/02 when awaiting event)
   const [expandedPhases, setExpandedPhases] = useState<Set<PhaseId>>(() =>
     order.orderStatus === "AWAITING_EVENT"
-      ? new Set<PhaseId>(hasErp ? ["phase_event_day", "phase_pre_event"] : ["phase_event_day"])
+      ? new Set<PhaseId>(["phase_pre_event", "phase_event_day"])
       : new Set<PhaseId>([activePhaseId])
   );
 
   useEffect(() => {
     if (order.orderStatus === "AWAITING_EVENT") {
-      setExpandedPhases(
-        new Set<PhaseId>(hasErp ? ["phase_event_day", "phase_pre_event"] : ["phase_event_day"])
-      );
+      setExpandedPhases(new Set<PhaseId>(["phase_pre_event", "phase_event_day"]));
     } else {
       setExpandedPhases(new Set<PhaseId>([activePhaseId]));
     }
-  }, [activePhaseId, hasErp, order.id, order.orderStatus]);
+  }, [activePhaseId, order.id, order.orderStatus]);
 
   const togglePhase = (phaseId: PhaseId) => {
     setExpandedPhases((prev) => {
@@ -324,62 +334,54 @@ export function OrderVerticalWorkflow({
   const isPhaseEventDone =
     !isCancelled &&
     (order.orderStatus === "POST_EVENT_IN_PROGRESS" || order.orderStatus === "COMPLETED");
-  const isPhasePreEventDone = !isCancelled && hasErp && preEventCompleted;
+  const isPhasePreEventDone =
+    !isCancelled &&
+    (order.orderStatus === "POST_EVENT_IN_PROGRESS" ||
+      order.orderStatus === "COMPLETED" ||
+      !hasErp ||
+      preEventCompleted);
   const isPhasePostEventDone =
     !isCancelled &&
     isProductionCompleted &&
     (order.orderStatus === "POST_EVENT_IN_PROGRESS" || order.orderStatus === "COMPLETED");
   const isPhaseDeliveryDone = !isCancelled && order.orderStatus === "COMPLETED";
 
-  const isPhaseEventActive = !isCancelled && !isPhaseEventDone && activePhaseId === "phase_event_day";
   const isPhasePreEventActive = !isCancelled && !isPhasePreEventDone && activePhaseId === "phase_pre_event";
+  const isPhaseEventActive = !isCancelled && !isPhaseEventDone && activePhaseId === "phase_event_day";
   const isPhasePostEventActive = !isCancelled && !isPhasePostEventDone && activePhaseId === "phase_post_event";
   const isPhaseDeliveryActive = !isCancelled && !isPhaseDeliveryDone && activePhaseId === "phase_delivery";
 
   const pipelineStages = useMemo(() => {
-    const stages: Array<{
-      id: PhaseId;
-      stepNumber: number;
-      shortLabel: string;
-      isCompleted: boolean;
-      isActive: boolean;
-    }> = [
+    return [
       {
-        id: "phase_event_day",
+        id: "phase_pre_event" as PhaseId,
         stepNumber: 1,
-        shortLabel: "Schedule",
+        shortLabel: hasErp ? "Schedule & Prep" : "Schedule",
+        isCompleted: isPhasePreEventDone,
+        isActive: isPhasePreEventActive,
+      },
+      {
+        id: "phase_event_day" as PhaseId,
+        stepNumber: 2,
+        shortLabel: "Event Day",
         isCompleted: isPhaseEventDone,
         isActive: isPhaseEventActive,
       },
+      {
+        id: "phase_post_event" as PhaseId,
+        stepNumber: 3,
+        shortLabel: "Production",
+        isCompleted: isPhasePostEventDone,
+        isActive: isPhasePostEventActive,
+      },
+      {
+        id: "phase_delivery" as PhaseId,
+        stepNumber: 4,
+        shortLabel: "Delivery",
+        isCompleted: isPhaseDeliveryDone,
+        isActive: isPhaseDeliveryActive,
+      },
     ];
-
-    if (hasErp) {
-      stages.push({
-        id: "phase_pre_event",
-        stepNumber: 2,
-        shortLabel: "Crew Prep",
-        isCompleted: isPhasePreEventDone,
-        isActive: isPhasePreEventActive,
-      });
-    }
-
-    stages.push({
-      id: "phase_post_event",
-      stepNumber: hasErp ? 3 : 2,
-      shortLabel: "Production",
-      isCompleted: isPhasePostEventDone,
-      isActive: isPhasePostEventActive,
-    });
-
-    stages.push({
-      id: "phase_delivery",
-      stepNumber: hasErp ? 4 : 3,
-      shortLabel: "Delivery",
-      isCompleted: isPhaseDeliveryDone,
-      isActive: isPhaseDeliveryActive,
-    });
-
-    return stages;
   }, [
     hasErp,
     isPhaseDeliveryActive,
@@ -901,6 +903,19 @@ export function OrderVerticalWorkflow({
                 const { isMember, memberName } = isTaskAssignedToNonOwnerMember(task);
                 const isBusy = submittingTaskId === task.id;
                 const isReworkBoxOpen = reworkOpenTaskId === task.id;
+                const linkedDeliverables = (order.driveDeliverables || []).filter(
+                  (d) => d.linkedTaskId === task.id
+                );
+                const showInlineDriveForm =
+                  isOms &&
+                  (isInProgress || isRework) &&
+                  canManageDriveLinks &&
+                  Boolean(onSendTaskForReviewWithDriveLink);
+                const driveDraft = taskDriveDrafts[task.id] || {};
+                const draftTitle =
+                  driveDraft.title !== undefined ? driveDraft.title : displayTitle;
+                const draftUrl = driveDraft.driveUrl || "";
+                const draftNotes = driveDraft.notes || "";
 
                 const stateHeadline = isReview
                   ? `Pending Customer Review — ${displayTitle}`
@@ -969,14 +984,46 @@ export function OrderVerticalWorkflow({
                           </div>
                         )}
 
+                        {linkedDeliverables.length > 0 && (
+                          <div className="space-y-1.5 pt-1">
+                            {linkedDeliverables.map((deliv) => (
+                              <div
+                                key={deliv.id}
+                                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border-default bg-white px-2.5 py-2 text-xs"
+                              >
+                                <div className="min-w-0">
+                                  <p className="font-semibold text-text-primary truncate">
+                                    {deliv.title}
+                                  </p>
+                                  {deliv.notes && (
+                                    <p className="text-[11px] text-text-secondary">
+                                      {deliv.notes}
+                                    </p>
+                                  )}
+                                </div>
+                                <a
+                                  href={deliv.driveUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="rounded-lg border border-brand-blue-primary bg-blue-50/60 px-2.5 py-1 text-[11px] font-bold text-brand-blue-primary hover:bg-blue-100 transition shrink-0"
+                                >
+                                  Open Drive Link
+                                </a>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
                         <p className="text-[11px] text-text-secondary">
                           {isReview
                             ? isOms
                               ? "Studio has submitted this step for customer review. Customer can mark it Completed or Rework on their tracking page, or Studio Owner can update below on behalf of customer."
-                              : "Studio has updated this step for your review. You can mark it Completed or request Rework directly below."
+                              : "Studio has shared this step for your review. Open the Drive link above, then mark it Completed or request Rework below."
                             : isOms
                             ? isMember
                               ? `Assigned to ${memberName}. Studio Owner can also update this step on behalf of ${memberName}.`
+                              : showInlineDriveForm
+                              ? "Add the Google Drive link below and send this step to the customer for review."
                               : "Update the current studio step below to move the workflow forward."
                             : "Studio is currently working on this step. Once updated by the studio, you will be able to review and mark Completed or Rework here."}
                         </p>
@@ -1053,7 +1100,7 @@ export function OrderVerticalWorkflow({
                               </button>
                             )}
 
-                            {status === "IN_PROGRESS" && (
+                            {(status === "IN_PROGRESS" || status === "REWORK") && !showInlineDriveForm && (
                               <>
                                 <button
                                   type="button"
@@ -1070,48 +1117,7 @@ export function OrderVerticalWorkflow({
                                   }
                                   className="rounded-lg bg-purple-600 px-2.5 py-1.5 text-[11px] font-bold text-white hover:bg-purple-700 transition cursor-pointer shadow-2xs disabled:opacity-50"
                                 >
-                                  Send for Customer Review
-                                  {hasErp && isMember ? ` (On Behalf of ${memberName})` : ""}
-                                </button>
-                                <button
-                                  type="button"
-                                  disabled={isBusy}
-                                  onClick={() =>
-                                    void (async () => {
-                                      setSubmittingTaskId(task.id);
-                                      try {
-                                        await onUpdateTaskStatus(task.id, "COMPLETED");
-                                      } finally {
-                                        setSubmittingTaskId(null);
-                                      }
-                                    })()
-                                  }
-                                  className="rounded-lg bg-emerald-600 px-2.5 py-1.5 text-[11px] font-bold text-white hover:bg-emerald-700 transition cursor-pointer shadow-2xs disabled:opacity-50"
-                                >
-                                  Mark Completed
-                                  {hasErp && isMember ? ` (On Behalf of ${memberName})` : ""}
-                                </button>
-                              </>
-                            )}
-
-                            {status === "REWORK" && (
-                              <>
-                                <button
-                                  type="button"
-                                  disabled={isBusy}
-                                  onClick={() =>
-                                    void (async () => {
-                                      setSubmittingTaskId(task.id);
-                                      try {
-                                        await onUpdateTaskStatus(task.id, "REVIEW");
-                                      } finally {
-                                        setSubmittingTaskId(null);
-                                      }
-                                    })()
-                                  }
-                                  className="rounded-lg bg-purple-600 px-2.5 py-1.5 text-[11px] font-bold text-white hover:bg-purple-700 transition cursor-pointer shadow-2xs disabled:opacity-50"
-                                >
-                                  Re-submit for Customer Review
+                                  {status === "REWORK" ? "Re-submit for Customer Review" : "Send for Customer Review"}
                                   {hasErp && isMember ? ` (On Behalf of ${memberName})` : ""}
                                 </button>
                                 <button
@@ -1171,6 +1177,160 @@ export function OrderVerticalWorkflow({
                         )}
                       </div>
                     </div>
+
+                    {/* Inline 3-Field Google Drive Deliverable & Send for Customer Review (OMS Active Step) */}
+                    {showInlineDriveForm && onSendTaskForReviewWithDriveLink && onUpdateTaskStatus && (
+                      <div className="pt-2.5 border-t border-border-divider space-y-2.5">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                          <div>
+                            <label className="block text-[10px] font-bold text-text-secondary mb-1">
+                              Deliverable Title *
+                            </label>
+                            <input
+                              type="text"
+                              value={draftTitle}
+                              onChange={(e) =>
+                                setTaskDriveDrafts((prev) => ({
+                                  ...prev,
+                                  [task.id]: { ...prev[task.id], title: e.target.value },
+                                }))
+                              }
+                              placeholder={displayTitle}
+                              className="w-full rounded-lg border border-border-default bg-white px-2.5 py-1.5 text-xs text-text-primary outline-none focus:border-brand-blue-primary"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-bold text-text-secondary mb-1">
+                              Google Drive Link *
+                            </label>
+                            <input
+                              type="url"
+                              value={draftUrl}
+                              onChange={(e) =>
+                                setTaskDriveDrafts((prev) => ({
+                                  ...prev,
+                                  [task.id]: { ...prev[task.id], driveUrl: e.target.value },
+                                }))
+                              }
+                              placeholder="https://drive.google.com/drive/folders/..."
+                              className="w-full rounded-lg border border-border-default bg-white px-2.5 py-1.5 text-xs text-text-primary outline-none focus:border-brand-blue-primary"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-bold text-text-secondary mb-1">
+                              Optional Notes
+                            </label>
+                            <input
+                              type="text"
+                              value={draftNotes}
+                              onChange={(e) =>
+                                setTaskDriveDrafts((prev) => ({
+                                  ...prev,
+                                  [task.id]: { ...prev[task.id], notes: e.target.value },
+                                }))
+                              }
+                              placeholder="Instructions for customer (optional)"
+                              className="w-full rounded-lg border border-border-default bg-white px-2.5 py-1.5 text-xs text-text-primary outline-none focus:border-brand-blue-primary"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <button
+                              type="button"
+                              disabled={isBusy}
+                              onClick={() =>
+                                void (async () => {
+                                  setActionFeedbackError(null);
+                                  const cleanUrl = draftUrl.trim();
+                                  const cleanTitle = draftTitle.trim() || displayTitle;
+                                  if (!cleanUrl && linkedDeliverables.length === 0) {
+                                    setActionFeedbackError("Please enter a Google Drive link to share with the customer for review.");
+                                    return;
+                                  }
+                                  if (cleanUrl) {
+                                    try {
+                                      new URL(cleanUrl);
+                                    } catch {
+                                      setActionFeedbackError("Please enter a valid Google Drive URL (starting with https://).");
+                                      return;
+                                    }
+                                  }
+                                  setSubmittingTaskId(task.id);
+                                  try {
+                                    await onSendTaskForReviewWithDriveLink({
+                                      taskId: task.id,
+                                      title: cleanTitle,
+                                      driveUrl: cleanUrl,
+                                      notes: draftNotes.trim() || undefined,
+                                    });
+                                    setTaskDriveDrafts((prev) => {
+                                      const next = { ...prev };
+                                      delete next[task.id];
+                                      return next;
+                                    });
+                                  } catch (err) {
+                                    setActionFeedbackError(
+                                      err instanceof Error ? err.message : "Failed to submit Drive link for review."
+                                    );
+                                  } finally {
+                                    setSubmittingTaskId(null);
+                                  }
+                                })()
+                              }
+                              className="rounded-lg bg-purple-600 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-purple-700 transition cursor-pointer shadow-2xs disabled:opacity-50"
+                            >
+                              {isBusy
+                                ? "Sending…"
+                                : isRework
+                                ? "Re-submit & Send for Customer Review"
+                                : "Submit & Send for Customer Review"}
+                            </button>
+
+                            {linkedDeliverables.length === 0 && (
+                              <button
+                                type="button"
+                                disabled={isBusy}
+                                onClick={() =>
+                                  void (async () => {
+                                    setActionFeedbackError(null);
+                                    setSubmittingTaskId(task.id);
+                                    try {
+                                      await onUpdateTaskStatus(task.id, "REVIEW");
+                                    } finally {
+                                      setSubmittingTaskId(null);
+                                    }
+                                  })()
+                                }
+                                className="rounded-lg border border-border-default bg-white px-2.5 py-1.5 text-[11px] font-semibold text-text-secondary hover:bg-slate-50 transition cursor-pointer disabled:opacity-50"
+                              >
+                                Send without Drive link
+                              </button>
+                            )}
+                          </div>
+
+                          <button
+                            type="button"
+                            disabled={isBusy}
+                            onClick={() =>
+                              void (async () => {
+                                setSubmittingTaskId(task.id);
+                                try {
+                                  await onUpdateTaskStatus(task.id, "COMPLETED");
+                                } finally {
+                                  setSubmittingTaskId(null);
+                                }
+                              })()
+                            }
+                            className="rounded-lg bg-emerald-600 px-2.5 py-1.5 text-[11px] font-bold text-white hover:bg-emerald-700 transition cursor-pointer shadow-2xs disabled:opacity-50"
+                          >
+                            Mark Completed
+                            {hasErp && isMember ? ` (On Behalf of ${memberName})` : ""}
+                          </button>
+                        </div>
+                      </div>
+                    )}
 
                     {/* Inline Rework Note Box (for Customer or Studio Owner On Behalf of Customer) */}
                     {isReview && isReworkBoxOpen && (
@@ -1277,29 +1437,44 @@ export function OrderVerticalWorkflow({
 
         const pipelineContent = (
           <div className="space-y-4">
-            {/* Horizontal Connected Pipeline Overview */}
+            {/* Horizontal Connected Pipeline Overview (Full-width responsive, zero horizontal scroll) */}
             <div
-              className="rounded-xl border border-border-default bg-slate-50/70 px-3 py-2.5 overflow-x-auto"
+              className="rounded-xl border border-border-default bg-slate-50/70 px-2 sm:px-3 py-2.5"
               role="navigation"
               aria-label="Pipeline stages"
             >
-              <div className="flex items-center min-w-[380px]">
+              <div className="grid grid-cols-4 items-start w-full">
                 {pipelineStages.map((stage, idx) => {
+                  const isFirst = idx === 0;
                   const isLast = idx === pipelineStages.length - 1;
+                  const prevStage = !isFirst ? pipelineStages[idx - 1] : null;
                   const isExpanded = expandedPhases.has(stage.id);
 
                   return (
-                    <div key={stage.id} className={`flex items-center ${isLast ? "shrink-0" : "flex-1 min-w-0"}`}>
-                      <button
-                        type="button"
-                        onClick={() => focusPipelinePhase(stage.id)}
-                        className={`group flex items-center gap-1.5 rounded-md px-1.5 py-1 text-left transition whitespace-nowrap shrink-0 cursor-pointer ${
-                          isExpanded ? "bg-white shadow-2xs" : "hover:bg-white/80"
-                        }`}
-                        title={`Jump to Phase 0${stage.stepNumber}: ${stage.shortLabel}`}
-                      >
+                    <button
+                      key={stage.id}
+                      type="button"
+                      onClick={() => focusPipelinePhase(stage.id)}
+                      className={`group flex flex-col items-center gap-1.5 rounded-lg px-1 py-1.5 text-center transition cursor-pointer min-w-0 ${
+                        isExpanded ? "bg-white shadow-2xs" : "hover:bg-white/80"
+                      }`}
+                      title={`Jump to Phase 0${stage.stepNumber}: ${stage.shortLabel}`}
+                    >
+                      <div className="flex items-center w-full">
+                        <div
+                          className={`h-[2px] flex-1 transition-colors ${
+                            isFirst
+                              ? "bg-transparent"
+                              : prevStage?.isCompleted
+                              ? "bg-emerald-500"
+                              : prevStage?.isActive
+                              ? "bg-brand-blue-primary/60"
+                              : "bg-slate-200"
+                          }`}
+                          aria-hidden="true"
+                        />
                         <span
-                          className={`flex h-5 w-5 items-center justify-center rounded text-[10px] font-extrabold transition-colors shrink-0 ${
+                          className={`flex h-5 w-5 items-center justify-center rounded-md text-[10px] font-extrabold transition-colors shrink-0 ${
                             stage.isCompleted
                               ? "bg-emerald-500 text-white"
                               : stage.isActive
@@ -1309,42 +1484,31 @@ export function OrderVerticalWorkflow({
                         >
                           {stage.isCompleted ? "✓" : stage.stepNumber}
                         </span>
-                        <span
-                          className={`text-[11px] font-bold transition-colors ${
-                            stage.isCompleted
-                              ? "text-emerald-800"
+                        <div
+                          className={`h-[2px] flex-1 transition-colors ${
+                            isLast
+                              ? "bg-transparent"
+                              : stage.isCompleted
+                              ? "bg-emerald-500"
                               : stage.isActive
-                              ? "text-brand-blue-primary"
-                              : "text-text-secondary group-hover:text-text-primary"
+                              ? "bg-brand-blue-primary/60"
+                              : "bg-slate-200"
                           }`}
-                        >
-                          {stage.shortLabel}
-                        </span>
-                      </button>
-
-                      {!isLast && (
-                        <div className="flex flex-1 items-center px-1.5 min-w-[16px]" aria-hidden="true">
-                          <div
-                            className={`h-[3px] w-full rounded-full transition-colors duration-300 ${
-                              stage.isCompleted
-                                ? "bg-emerald-500"
-                                : stage.isActive
-                                ? "bg-gradient-to-r from-brand-blue-primary to-slate-200"
-                                : "bg-slate-200"
-                            }`}
-                          />
-                          <svg
-                            className={`h-2.5 w-2.5 -ml-1 shrink-0 transition-colors duration-300 ${
-                              stage.isCompleted ? "text-emerald-500" : "text-slate-300"
-                            }`}
-                            viewBox="0 0 12 12"
-                            fill="currentColor"
-                          >
-                            <path d="M9.5 6L4.5 1.75v8.5L9.5 6z" />
-                          </svg>
-                        </div>
-                      )}
-                    </div>
+                          aria-hidden="true"
+                        />
+                      </div>
+                      <span
+                        className={`text-[10px] sm:text-[11px] font-bold leading-tight w-full px-0.5 transition-colors ${
+                          stage.isCompleted
+                            ? "text-emerald-800"
+                            : stage.isActive
+                            ? "text-brand-blue-primary"
+                            : "text-text-secondary group-hover:text-text-primary"
+                        }`}
+                      >
+                        {stage.shortLabel}
+                      </span>
+                    </button>
                   );
                 })}
               </div>
@@ -1352,36 +1516,36 @@ export function OrderVerticalWorkflow({
 
             {/* Vertical Segmented Pipeline Stages */}
             <div className="space-y-0">
-              {/* PHASE 1: Event Schedule & Execution */}
-              <div id="workflow-phase-phase_event_day" className="flex items-stretch gap-3 sm:gap-3.5">
+              {/* PHASE 1: Pre-Event Schedule & Preparation (ERP) / Pre-Event Schedule (Free) */}
+              <div id="workflow-phase-phase_pre_event" className="flex items-stretch gap-3 sm:gap-3.5">
                 <div className="flex flex-col items-center w-7 shrink-0 pt-3">
                   <div
                     className={`flex h-7 w-7 items-center justify-center rounded-md font-extrabold text-xs transition-all shrink-0 ${
-                      isPhaseEventDone
+                      isPhasePreEventDone
                         ? "bg-emerald-500 text-white shadow-2xs"
-                        : isPhaseEventActive
+                        : isPhasePreEventActive
                         ? "bg-brand-blue-primary text-white ring-2 ring-blue-100 shadow-2xs"
                         : "bg-slate-100 text-slate-500 border border-slate-300"
                     }`}
                   >
-                    {isPhaseEventDone ? "✓" : "1"}
+                    {isPhasePreEventDone ? "✓" : "1"}
                   </div>
-                  {renderVerticalConnector(isPhaseEventDone, isPhaseEventActive)}
+                  {renderVerticalConnector(isPhasePreEventDone, isPhasePreEventActive)}
                 </div>
 
                 <div className="flex-1 min-w-0 pb-3.5">
                   <div
                     className={`rounded-xl border p-3.5 sm:p-4 transition ${
-                      isPhaseEventDone
+                      isPhasePreEventDone
                         ? "border-emerald-200/90 bg-emerald-50/15"
-                        : isPhaseEventActive
+                        : isPhasePreEventActive
                         ? "border-blue-200 bg-white ring-1 ring-blue-100/70"
                         : "border-border-default bg-white"
                     }`}
                   >
                     <div
                       className="flex items-center justify-between cursor-pointer select-none"
-                      onClick={() => togglePhase("phase_event_day")}
+                      onClick={() => togglePhase("phase_pre_event")}
                     >
                       <div className="min-w-0 pr-2">
                         <div className="flex items-center gap-2 flex-wrap">
@@ -1390,36 +1554,32 @@ export function OrderVerticalWorkflow({
                           </span>
                   <span
                     className={`inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-bold border ${
-                      order.orderStatus === "POST_EVENT_IN_PROGRESS" || order.orderStatus === "COMPLETED"
+                      isPhasePreEventDone
                         ? "bg-emerald-50 text-emerald-800 border-emerald-200"
-                        : isTodayEvent
-                        ? "bg-blue-50 text-brand-blue-primary border-blue-200"
-                        : "bg-slate-100 text-slate-600 border-slate-200"
+                        : "bg-blue-50 text-brand-blue-primary border-blue-200"
                     }`}
                   >
                     {order.orderStatus === "POST_EVENT_IN_PROGRESS" || order.orderStatus === "COMPLETED"
-                      ? "Shoot Completed"
-                      : isTodayEvent
-                      ? "Shoot Active Today"
-                      : "Awaiting Event"}
+                      ? "Completed"
+                      : !hasErp
+                      ? "Scheduled"
+                      : preEventCompleted
+                      ? "Schedule & Prep Ready"
+                      : "Crew Allocation In Progress"}
                   </span>
-                  {eventRem && (
-                    <span
-                      className={`rounded-md px-2 py-0.5 text-[10px] font-bold border ${
-                        eventRem.diffDays > 0
-                          ? "bg-blue-50 text-brand-blue-primary border-blue-200"
-                          : eventRem.diffDays === 0
-                          ? "bg-amber-50 text-amber-800 border-amber-200"
-                          : "bg-slate-100 text-slate-600 border-slate-200"
-                      }`}
-                    >
-                      {eventRem.display}
+                  {hasErp && services.length > 0 && (
+                    <span className="text-[10px] font-mono font-semibold text-text-tertiary">
+                      ({assignedServicesCount}/{services.length} services allocated)
                     </span>
                   )}
                 </div>
-                <h3 className="text-sm font-bold text-text-primary mt-0.5">Event Schedule &amp; Execution</h3>
+                <h3 className="text-sm font-bold text-text-primary mt-0.5">
+                  {hasErp ? "Pre-Event Schedule & Preparation" : "Pre-Event Schedule"}
+                </h3>
                 <p className="text-xs text-text-secondary mt-0.5">
-                  Basic event schedule, venue, multi-day dates, and separate event shoot dates
+                  {hasErp
+                    ? "Basic event details, schedule, booked services, and shoot crew assignment"
+                    : "Basic event details, schedule, venue, and booked services"}
                 </p>
               </div>
               <button
@@ -1429,7 +1589,7 @@ export function OrderVerticalWorkflow({
               >
                 <svg
                   className={`h-4 w-4 transition-transform duration-200 ${
-                    expandedPhases.has("phase_event_day") ? "rotate-180" : ""
+                    expandedPhases.has("phase_pre_event") ? "rotate-180" : ""
                   }`}
                   fill="none"
                   stroke="currentColor"
@@ -1440,7 +1600,7 @@ export function OrderVerticalWorkflow({
               </button>
             </div>
 
-            {expandedPhases.has("phase_event_day") && (
+            {expandedPhases.has("phase_pre_event") && (
               <div className="mt-4 pt-3.5 border-t border-border-default/60 space-y-3 text-xs">
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-text-tertiary">
@@ -1654,7 +1814,7 @@ export function OrderVerticalWorkflow({
                       </div>
                       <div className="rounded-xl bg-slate-50 p-2.5 border border-border-default/60">
                         <span className="text-[10px] uppercase font-bold text-text-tertiary block">
-                          Coverage Status
+                          Event Schedule
                         </span>
                         <span
                           className={`font-semibold block ${
@@ -1665,11 +1825,7 @@ export function OrderVerticalWorkflow({
                               : "text-text-secondary"
                           }`}
                         >
-                          {order.orderStatus === "POST_EVENT_IN_PROGRESS" || order.orderStatus === "COMPLETED"
-                            ? "Shoot completed & wrapped up"
-                            : isTodayEvent
-                            ? "Event underway today"
-                            : `Scheduled (${formattedMainDates})`}
+                          {formattedMainDates || "Date TBD"}
                         </span>
                       </div>
                     </div>
@@ -1723,99 +1879,14 @@ export function OrderVerticalWorkflow({
                         </div>
                       </div>
                     )}
-                  </div>
-                )}
-              </div>
-            )}
-                  </div>
-                </div>
-              </div>
 
-              {/* PHASE 2: Pre-Event Preparation & Crew Allocation (ERP / Starter & Professional Studios Only) */}
-              {hasErp && (
-              <div id="workflow-phase-phase_pre_event" className="flex items-stretch gap-3 sm:gap-3.5">
-                <div className="flex flex-col items-center w-7 shrink-0 pt-3">
-                  <div
-                    className={`flex h-7 w-7 items-center justify-center rounded-md font-extrabold text-xs transition-all shrink-0 ${
-                      isPhasePreEventDone
-                        ? "bg-emerald-500 text-white shadow-2xs"
-                        : isPhasePreEventActive
-                        ? "bg-brand-blue-primary text-white ring-2 ring-blue-100 shadow-2xs"
-                        : "bg-slate-100 text-slate-400 border border-slate-300"
-                    }`}
-                  >
-                    {isPhasePreEventDone ? "✓" : "2"}
-                  </div>
-                  {renderVerticalConnector(isPhasePreEventDone, isPhasePreEventActive)}
-                </div>
-
-                <div className="flex-1 min-w-0 pb-3.5">
-                  <div
-                    className={`rounded-xl border p-3.5 sm:p-4 transition ${
-                      isPhasePreEventDone
-                        ? "border-emerald-200/90 bg-emerald-50/15"
-                        : isPhasePreEventActive
-                        ? "border-blue-200 bg-white ring-1 ring-blue-100/70"
-                        : "border-border-default bg-white"
-                    }`}
-                  >
-                    <div
-                      className="flex items-center justify-between cursor-pointer select-none"
-                      onClick={() => togglePhase("phase_pre_event")}
-                    >
-                      <div className="min-w-0 pr-2">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-text-tertiary">
-                            Phase 02
-                          </span>
-                  <span
-                    className={`inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-bold border ${
-                      preEventCompleted
-                        ? "bg-emerald-50 text-emerald-800 border-emerald-200"
-                        : "bg-blue-50 text-brand-blue-primary border-blue-200"
-                    }`}
-                  >
-                    {hasErp && !preEventCompleted ? "Crew Allocation In Progress" : "Preparation Ready"}
-                  </span>
-                  {hasErp && services.length > 0 && (
-                    <span className="text-[10px] font-mono font-semibold text-text-tertiary">
-                      ({assignedServicesCount}/{services.length} services allocated)
-                    </span>
-                  )}
-                </div>
-                <h3 className="text-sm font-bold text-text-primary mt-0.5">Pre-Event Preparation</h3>
-                <p className="text-xs text-text-secondary mt-0.5">
-                  {hasErp
-                    ? "Booked services mapping, shoot crew assignment, and preparation readiness"
-                    : "Booked services and event preparation"}
-                </p>
-              </div>
-              <button
-                type="button"
-                aria-label="Toggle Phase 2"
-                className="rounded-lg p-1 text-text-tertiary hover:bg-slate-100 transition shrink-0"
-              >
-                <svg
-                  className={`h-4 w-4 transition-transform duration-200 ${
-                    expandedPhases.has("phase_pre_event") ? "rotate-180" : ""
-                  }`}
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-                </svg>
-              </button>
-            </div>
-
-            {expandedPhases.has("phase_pre_event") && (
-              <div className="mt-4 pt-3.5 border-t border-border-default/60 space-y-3">
-                {/* Service Mapping & Crew Assignments */}
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between text-[11px] font-bold text-text-tertiary uppercase tracking-wider">
-                    <span>Booked Services</span>
-                    {isOms && hasErp && <span>Assigned Shoot Crew</span>}
-                  </div>
+                    {/* Crew & Service Allocation inside Phase 01 (Starter & Professional) */}
+                    {hasErp && (
+                      <div className="pt-2 border-t border-border-default/60 space-y-1.5">
+                        <div className="flex items-center justify-between text-[11px] font-bold text-text-tertiary uppercase tracking-wider">
+                          <span>Booked Services</span>
+                          {isOms && <span>Assigned Shoot Crew</span>}
+                        </div>
 
                   {services.length === 0 ? (
                     <p className="text-xs text-text-tertiary py-2 italic">No services listed for this order.</p>
@@ -2022,16 +2093,125 @@ export function OrderVerticalWorkflow({
                         );
                       })}
                     </div>
-                  )}
-                </div>
+                    )}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
                   </div>
                 </div>
               </div>
-              )}
 
-              {/* PHASE 3 (or 2 for Free Tier): Post-Event Production */}
+              {/* PHASE 2: Event Day (Compact Phase between Pre-Event Schedule & Post-Event Production) */}
+              <div id="workflow-phase-phase_event_day" className="flex items-stretch gap-3 sm:gap-3.5">
+                <div className="flex flex-col items-center w-7 shrink-0 pt-3">
+                  <div
+                    className={`flex h-7 w-7 items-center justify-center rounded-md font-extrabold text-xs transition-all shrink-0 ${
+                      isPhaseEventDone
+                        ? "bg-emerald-500 text-white shadow-2xs"
+                        : isPhaseEventActive
+                        ? "bg-brand-blue-primary text-white ring-2 ring-blue-100 shadow-2xs"
+                        : "bg-slate-100 text-slate-400 border border-slate-300"
+                    }`}
+                  >
+                    {isPhaseEventDone ? "✓" : "2"}
+                  </div>
+                  {renderVerticalConnector(isPhaseEventDone, isPhaseEventActive)}
+                </div>
+
+                <div className="flex-1 min-w-0 pb-3.5">
+                  <div
+                    className={`rounded-xl border p-3.5 sm:p-4 transition ${
+                      isPhaseEventDone
+                        ? "border-emerald-200/90 bg-emerald-50/15"
+                        : isPhaseEventActive
+                        ? "border-blue-200 bg-white ring-1 ring-blue-100/70"
+                        : "border-border-default bg-white"
+                    }`}
+                  >
+                    <div
+                      className="flex items-center justify-between cursor-pointer select-none"
+                      onClick={() => togglePhase("phase_event_day")}
+                    >
+                      <div className="min-w-0 pr-2">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-text-tertiary">
+                            Phase 02
+                          </span>
+                          <span
+                            className={`inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-bold border ${
+                              isPhaseEventDone
+                                ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                                : isTodayEvent
+                                ? "bg-amber-50 text-amber-800 border-amber-200"
+                                : "bg-blue-50 text-brand-blue-primary border-blue-200"
+                            }`}
+                          >
+                            {isPhaseEventDone
+                              ? "Shoot Completed"
+                              : isTodayEvent
+                              ? "Event Day Today"
+                              : "Get Ready for Event"}
+                          </span>
+                          {eventRem && !isPhaseEventDone && (
+                            <span className="text-[10px] font-mono font-semibold text-text-tertiary">
+                              ({eventRem.display})
+                            </span>
+                          )}
+                        </div>
+                        <h3 className="text-sm font-bold text-text-primary mt-0.5">Event Day</h3>
+                        <p className="text-xs text-text-secondary mt-0.5">
+                          {isPhaseEventDone
+                            ? `Event coverage concluded (${formattedMainDates}) — moved to post-event production`
+                            : isTodayEvent
+                            ? `Get ready for the event — scheduled today (${formattedMainDates})`
+                            : `Get ready for the event on ${formattedMainDates || "scheduled date"}`}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        aria-label="Toggle Phase 2"
+                        className="rounded-lg p-1 text-text-tertiary hover:bg-slate-100 transition shrink-0"
+                      >
+                        <svg
+                          className={`h-4 w-4 transition-transform duration-200 ${
+                            expandedPhases.has("phase_event_day") ? "rotate-180" : ""
+                          }`}
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </button>
+                    </div>
+
+                    {expandedPhases.has("phase_event_day") && (
+                      <div className="mt-3 pt-3 border-t border-border-default/60 text-xs">
+                        <div
+                          className={`rounded-lg border px-3 py-2 ${
+                            isPhaseEventDone
+                              ? "border-emerald-200 bg-emerald-50/50 text-emerald-900"
+                              : isTodayEvent
+                              ? "border-amber-200 bg-amber-50/60 text-amber-950"
+                              : "border-blue-200/80 bg-blue-50/40 text-text-primary"
+                          }`}
+                        >
+                          {isPhaseEventDone
+                            ? `Event day completed (${formattedMainDates}). Post-event production workflow is active below.`
+                            : isTodayEvent
+                            ? `Get ready for the event! Today (${formattedMainDates}) is the scheduled event day${order.eventLocation ? ` at ${order.eventLocation}` : ""}. Post-event production starts automatically after the event date.`
+                            : `Get ready for the event on ${formattedMainDates || "Date TBD"}${order.eventLocation ? ` · ${order.eventLocation}` : ""}.`}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* PHASE 3: Post-Event Production */}
               <div id="workflow-phase-phase_post_event" className="flex items-stretch gap-3 sm:gap-3.5">
                 <div className="flex flex-col items-center w-7 shrink-0 pt-3">
                   <div
@@ -2043,7 +2223,7 @@ export function OrderVerticalWorkflow({
                         : "bg-slate-100 text-slate-400 border border-slate-300"
                     }`}
                   >
-                    {isPhasePostEventDone ? "✓" : hasErp ? "3" : "2"}
+                    {isPhasePostEventDone ? "✓" : "3"}
                   </div>
                   {renderVerticalConnector(isPhasePostEventDone, isPhasePostEventActive)}
                 </div>
@@ -2065,7 +2245,7 @@ export function OrderVerticalWorkflow({
                       <div className="min-w-0 pr-2">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="text-[10px] font-bold uppercase tracking-wider text-text-tertiary">
-                            {hasErp ? "Phase 03" : "Phase 02"}
+                            Phase 03
                           </span>
                   <span
                     className={`inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-bold border ${
@@ -2212,7 +2392,7 @@ export function OrderVerticalWorkflow({
                 </div>
               </div>
 
-              {/* PHASE 4 (or 3 for Free Tier): Final Delivery and Order Completion */}
+              {/* PHASE 4: Final Delivery and Order Completion */}
               <div id="workflow-phase-phase_delivery" className="flex items-stretch gap-3 sm:gap-3.5">
                 <div className="flex flex-col items-center w-7 shrink-0 pt-3">
                   <div
@@ -2224,7 +2404,7 @@ export function OrderVerticalWorkflow({
                         : "bg-slate-100 text-slate-400 border border-slate-300"
                     }`}
                   >
-                    {isPhaseDeliveryDone ? "✓" : hasErp ? "4" : "3"}
+                    {isPhaseDeliveryDone ? "✓" : "4"}
                   </div>
                 </div>
 
@@ -2245,7 +2425,7 @@ export function OrderVerticalWorkflow({
                       <div className="min-w-0 pr-2">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="text-[10px] font-bold uppercase tracking-wider text-text-tertiary">
-                            {hasErp ? "Phase 04" : "Phase 03"}
+                            Phase 04
                           </span>
                   <span
                     className={`inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-bold border ${
@@ -2264,7 +2444,7 @@ export function OrderVerticalWorkflow({
                       ? "Final Delivery Done · Pending Payment Clearance"
                       : isProductionCompleted && order.orderStatus !== "AWAITING_EVENT"
                       ? "Unlocked · Final Delivery in Progress"
-                      : `Locked · Complete ${hasErp ? "Phase 03" : "Phase 02"} First`}
+                      : "Locked · Complete Phase 03 First"}
                   </span>
                 </div>
                 <h3 className="text-sm font-bold text-text-primary mt-0.5">
@@ -2276,7 +2456,7 @@ export function OrderVerticalWorkflow({
               </div>
               <button
                 type="button"
-                aria-label={`Toggle ${hasErp ? "Phase 4" : "Phase 3"}`}
+                aria-label="Toggle Phase 4"
                 className="rounded-lg p-1 text-text-tertiary hover:bg-slate-100 transition shrink-0"
               >
                 <svg
@@ -2310,7 +2490,7 @@ export function OrderVerticalWorkflow({
                         ? "✓ All workflow phases and deliverable handovers have been officially concluded."
                         : isProductionCompleted && order.orderStatus !== "AWAITING_EVENT"
                         ? "Unlocked — Ready for digital album and deliverable dispatch"
-                        : `Locked until ${hasErp ? "Phase 03" : "Phase 02"} (Post-Event Production) is completed.`}
+                        : "Locked until Phase 03 (Post-Event Production) is completed."}
                     </p>
                     <p className="text-[11px] text-text-tertiary">
                       All deliverables will be presented to the client via their passkey-secured tracking link.
@@ -2381,8 +2561,8 @@ export function OrderVerticalWorkflow({
                 </h3>
                 <p className="text-[11px] text-text-tertiary mt-0.5">
                   {hasErp
-                    ? "End-to-end workflow across schedule, prep, production, and delivery"
-                    : "End-to-end workflow across schedule, production, and delivery"}
+                    ? "End-to-end workflow across schedule & prep, event day, production, and delivery"
+                    : "End-to-end workflow across schedule, event day, production, and delivery"}
                 </p>
               </div>
               <div className="flex items-center gap-2 shrink-0 self-start sm:self-center">
@@ -2527,7 +2707,7 @@ export function OrderVerticalWorkflow({
                           {crewInfo.name}
                           {crewInfo.isAuto && (
                             <span className="text-[9px] text-text-tertiary font-normal ml-1">
-                              (auto from Phase 2)
+                              (auto from Phase 1)
                             </span>
                           )}
                         </span>

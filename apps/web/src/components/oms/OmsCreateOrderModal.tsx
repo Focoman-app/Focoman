@@ -426,7 +426,11 @@ export function OmsCreateOrderModal({
                     setCalendarMonth(new Date(base.getFullYear(), base.getMonth(), 1));
                     setIsEventDatePickerOpen((open) => !open);
                   }}
-                  className="mt-1 flex w-full items-center justify-between rounded-xl border border-border-default bg-white px-3.5 py-2 text-left text-xs outline-none transition focus:border-brand-blue-primary focus:ring-1 focus:ring-brand-blue-primary disabled:cursor-not-allowed disabled:opacity-50"
+                  className={`mt-1 flex w-full items-center justify-between rounded-xl border bg-white px-3.5 py-2 text-left text-xs outline-none transition focus:border-brand-blue-primary focus:ring-1 focus:ring-brand-blue-primary disabled:cursor-not-allowed disabled:opacity-50 ${
+                    formError && !newOrderForm.eventDate
+                      ? "border-red-400 ring-1 ring-red-300"
+                      : "border-border-default"
+                  }`}
                 >
                   <span
                     className={`truncate font-mono ${
@@ -699,7 +703,11 @@ export function OmsCreateOrderModal({
                       }
                     }
                   }}
-                  className="w-full rounded-xl border border-border-default px-3.5 py-2 pr-10 text-xs outline-none focus:border-brand-blue-primary focus:ring-1 focus:ring-brand-blue-primary"
+                  className={`w-full rounded-xl border px-3.5 py-2 pr-10 text-xs outline-none focus:border-brand-blue-primary focus:ring-1 focus:ring-brand-blue-primary ${
+                    formError && newOrderForm.services.length === 0
+                      ? "border-red-400 ring-1 ring-red-300"
+                      : "border-border-default"
+                  }`}
                 />
                 <div
                   className="absolute right-3 top-1/2 -translate-y-1/2 cursor-pointer text-text-tertiary hover:text-brand-blue-primary"
@@ -1144,34 +1152,44 @@ export function OmsCreateOrderModal({
           </div>
 
           {/* Modal Footer (Pinned at Bottom) */}
-          <div className="p-4 sm:px-6 border-t border-border-default bg-surface-app/40 shrink-0 flex gap-3 justify-end rounded-b-3xl">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={isSubmitting}
-              className="btn-brand-outline"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={
-                isSubmitting ||
-                (newOrderForm.customerName.match(/[a-zA-Z]/g) || []).length < 3 ||
-                newOrderForm.passkeyPin.length !== 6 ||
-                (Number(newOrderForm.advanceAmount) >
-                  Number(newOrderForm.finalConfirmedPrice) &&
-                  Number(newOrderForm.finalConfirmedPrice) > 0)
-              }
-              className="btn-brand-blue disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isSubmitting ? (
-                <>
-                  <FocomanSpinner size="xs" />
-                  <span>Registering…</span>
-                </>
-              ) : "Confirm and Save Order"}
-            </button>
+          <div className="p-4 sm:px-6 border-t border-border-default bg-surface-app/40 shrink-0 space-y-3 rounded-b-3xl">
+            {formError && (
+              <div
+                role="alert"
+                className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 font-semibold"
+              >
+                {formError}
+              </div>
+            )}
+            <div className="flex gap-3 justify-end">
+              <button
+                type="button"
+                onClick={onClose}
+                disabled={isSubmitting}
+                className="btn-brand-outline"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={
+                  isSubmitting ||
+                  (newOrderForm.customerName.match(/[a-zA-Z]/g) || []).length < 3 ||
+                  newOrderForm.passkeyPin.length !== 6 ||
+                  (Number(newOrderForm.advanceAmount) >
+                    Number(newOrderForm.finalConfirmedPrice) &&
+                    Number(newOrderForm.finalConfirmedPrice) > 0)
+                }
+                className="btn-brand-blue disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isSubmitting ? (
+                  <>
+                    <FocomanSpinner size="xs" />
+                    <span>Registering…</span>
+                  </>
+                ) : "Confirm and Save Order"}
+              </button>
+            </div>
           </div>
         </form>
       </div>

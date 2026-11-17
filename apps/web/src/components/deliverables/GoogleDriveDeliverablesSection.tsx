@@ -22,7 +22,6 @@ import { parseGoogleDriveUrl } from "@/utils/googleDriveUtils";
 export interface GoogleDriveDeliverablesSectionProps {
   orderId: string;
   deliverables: OrderDriveDeliverable[];
-  reviewTasks?: Array<{ id: string; title: string }>;
   /** True for Studio Owner/Staff in OMS so they can add/remove Drive deliverable links */
   canManageLinks?: boolean;
   /** True for Primary Customer or Editor collaborator on /track/[passkey] to approve or request changes */
@@ -69,7 +68,6 @@ function CategoryIcon({
 
 export function GoogleDriveDeliverablesSection({
   deliverables = [],
-  reviewTasks = [],
   canManageLinks = false,
   canSubmitClientReview = false,
   onSaveDeliverables,
@@ -78,12 +76,8 @@ export function GoogleDriveDeliverablesSection({
   const [activePreviewId, setActivePreviewId] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [newTitle, setNewTitle] = useState("");
-  const [newCategory, setNewCategory] =
-    useState<OrderDriveDeliverable["category"]>("FOLDER");
   const [newUrl, setNewUrl] = useState("");
   const [newNotes, setNewNotes] = useState("");
-  const [newLinkedTaskId, setNewLinkedTaskId] = useState("");
-  const [newReviewPurpose, setNewReviewPurpose] = useState<"PHOTO_SELECTION" | "FINAL_PROOF">("PHOTO_SELECTION");
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -109,11 +103,7 @@ export function GoogleDriveDeliverablesSection({
 
     const parsed = parseGoogleDriveUrl(cleanUrl);
     const detectedCategory: OrderDriveDeliverable["category"] =
-      newCategory === "FOLDER" && parsed.kind === "FILE"
-        ? "IMAGE"
-        : parsed.kind === "FOLDER"
-        ? "FOLDER"
-        : newCategory;
+      parsed.kind === "FILE" ? "IMAGE" : "FOLDER";
 
     const item: OrderDriveDeliverable = {
       id: `drv_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
@@ -122,7 +112,6 @@ export function GoogleDriveDeliverablesSection({
       driveUrl: parsed.openUrl || cleanUrl,
       ...(parsed.id ? { driveId: parsed.id } : {}),
       ...(newNotes.trim() ? { notes: newNotes.trim() } : {}),
-      ...(newLinkedTaskId ? { linkedTaskId: newLinkedTaskId, reviewPurpose: newReviewPurpose } : {}),
       addedAt: new Date().toISOString(),
     };
 
@@ -135,7 +124,6 @@ export function GoogleDriveDeliverablesSection({
         setNewTitle("");
         setNewUrl("");
         setNewNotes("");
-        setNewLinkedTaskId("");
         setShowAddForm(false);
       }
     } finally {
@@ -241,8 +229,8 @@ export function GoogleDriveDeliverablesSection({
           onSubmit={handleAddDeliverable}
           className="space-y-3 rounded-xl border border-border-default bg-surface-app/40 p-4"
         >
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <div className="sm:col-span-2">
+          <div className="space-y-3">
+            <div>
               <label className="mb-1 block text-[11px] font-semibold text-text-secondary">
                 Deliverable Title *
               </label>
@@ -251,78 +239,40 @@ export function GoogleDriveDeliverablesSection({
                 required
                 value={newTitle}
                 onChange={(e) => setNewTitle(e.target.value)}
-                placeholder="e.g. Raw Photo Selection Folder, Wedding Highlight Film, Album Draft PDF"
+                placeholder="e.g. Raw Photo Selection Folder, Wedding Highlight Film, Album Proof"
                 className="w-full rounded-xl border border-border-default bg-white px-3 py-1.5 text-xs text-text-primary placeholder:text-text-tertiary focus:border-brand-blue-primary focus:outline-none focus:ring-1 focus:ring-brand-blue-primary"
               />
             </div>
 
-            <div>
-              <label className="mb-1 block text-[11px] font-semibold text-text-secondary">
-                Media Type
-              </label>
-              <select
-                value={newCategory}
-                onChange={(e) =>
-                  setNewCategory(
-                    e.target.value as OrderDriveDeliverable["category"]
-                  )
-                }
-                className="w-full rounded-xl border border-border-default bg-white px-2.5 py-1.5 text-xs text-text-primary focus:border-brand-blue-primary focus:outline-none focus:ring-1 focus:ring-brand-blue-primary"
-              >
-                <option value="FOLDER">Google Drive Folder</option>
-                <option value="IMAGE">Photo / Image File</option>
-                <option value="VIDEO">Video / Film File</option>
-                <option value="PDF">Album Proof / PDF</option>
-                <option value="OTHER">Other Drive Link</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <div>
-              <label className="mb-1 block text-[11px] font-semibold text-text-secondary">
-                Google Drive Share URL *
-              </label>
-              <input
-                type="url"
-                required
-                value={newUrl}
-                onChange={(e) => setNewUrl(e.target.value)}
-                placeholder="https://drive.google.com/drive/folders/... or /file/d/..."
-                className="w-full rounded-xl border border-border-default bg-white px-3 py-1.5 text-xs text-text-primary placeholder:text-text-tertiary focus:border-brand-blue-primary focus:outline-none focus:ring-1 focus:ring-brand-blue-primary"
-              />
-            </div>
-
-            <div>
-              <label className="mb-1 block text-[11px] font-semibold text-text-secondary">
-                Instructions / Notes for Client (Optional)
-              </label>
-              <input
-                type="text"
-                value={newNotes}
-                onChange={(e) => setNewNotes(e.target.value)}
-                placeholder="e.g. Please shortlist 250 photos for album design"
-                className="w-full rounded-xl border border-border-default bg-white px-3 py-1.5 text-xs text-text-primary placeholder:text-text-tertiary focus:border-brand-blue-primary focus:outline-none focus:ring-1 focus:ring-brand-blue-primary"
-              />
-            </div>
-          </div>
-
-          {reviewTasks.length > 0 && (
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <label className="text-[11px] font-semibold text-text-secondary">Link to customer-review task <span className="font-normal">(Optional)</span>
-                <select value={newLinkedTaskId} onChange={(event) => setNewLinkedTaskId(event.target.value)} className="mt-1 w-full rounded-xl border border-border-default bg-white px-2.5 py-1.5 text-xs text-text-primary focus:border-brand-blue-primary focus:outline-none">
-                  <option value="">Regular deliverable — does not change workflow</option>
-                  {reviewTasks.map((task) => <option key={task.id} value={task.id}>{task.title}</option>)}
-                </select>
-              </label>
-              {newLinkedTaskId && <label className="text-[11px] font-semibold text-text-secondary">Review purpose
-                <select value={newReviewPurpose} onChange={(event) => setNewReviewPurpose(event.target.value as "PHOTO_SELECTION" | "FINAL_PROOF")} className="mt-1 w-full rounded-xl border border-border-default bg-white px-2.5 py-1.5 text-xs text-text-primary focus:border-brand-blue-primary focus:outline-none">
-                  <option value="PHOTO_SELECTION">Photo selection</option>
-                  <option value="FINAL_PROOF">Final proof approval</option>
-                </select>
-              </label>}
+              <div>
+                <label className="mb-1 block text-[11px] font-semibold text-text-secondary">
+                  Google Drive Link *
+                </label>
+                <input
+                  type="url"
+                  required
+                  value={newUrl}
+                  onChange={(e) => setNewUrl(e.target.value)}
+                  placeholder="https://drive.google.com/drive/folders/..."
+                  className="w-full rounded-xl border border-border-default bg-white px-3 py-1.5 text-xs text-text-primary placeholder:text-text-tertiary focus:border-brand-blue-primary focus:outline-none focus:ring-1 focus:ring-brand-blue-primary"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-[11px] font-semibold text-text-secondary">
+                  Optional Notes
+                </label>
+                <input
+                  type="text"
+                  value={newNotes}
+                  onChange={(e) => setNewNotes(e.target.value)}
+                  placeholder="e.g. Please shortlist 250 photos for album design"
+                  className="w-full rounded-xl border border-border-default bg-white px-3 py-1.5 text-xs text-text-primary placeholder:text-text-tertiary focus:border-brand-blue-primary focus:outline-none focus:ring-1 focus:ring-brand-blue-primary"
+                />
+              </div>
             </div>
-          )}
+          </div>
 
           <div className="flex justify-end gap-2 pt-1">
             <button
@@ -405,7 +355,6 @@ export function GoogleDriveDeliverablesSection({
                           {item.notes}
                         </p>
                       )}
-                      {item.linkedTaskId && <span className="rounded-md border border-purple-200 bg-purple-50 px-2 py-0.5 text-[10px] font-semibold text-purple-800">{item.reviewPurpose === "PHOTO_SELECTION" ? "Photo selection review" : "Final proof review"}</span>}
                       {item.selectedPhotos && item.selectedPhotos.length > 0 && !canSubmitClientReview && (
                         <div className="mt-2 flex flex-wrap items-center gap-1.5">
                           <span className="text-[10px] font-bold uppercase tracking-wider text-text-tertiary">
