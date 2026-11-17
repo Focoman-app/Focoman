@@ -949,7 +949,7 @@ export function TrackOrderClient({ view, rawIdentifier }: TrackOrderClientProps)
           {/* Current Main State & Customer Action Center (Top of Track Order, above Pipeline) */}
           <div className="rounded-3xl border border-border-default bg-white p-5 sm:p-6 shadow-sm">
             <OrderVerticalWorkflow
-              order={{ ...order, orderStatus: orderStatusState }}
+              order={{ ...order, orderStatus: orderStatusState, driveDeliverables }}
               tasks={tasksState}
               variant="tracking"
               displayMode="main-state-only"
@@ -1019,8 +1019,8 @@ export function TrackOrderClient({ view, rawIdentifier }: TrackOrderClientProps)
                 <h2 className="text-lg font-bold text-text-primary">Order Lifecycle Pipeline</h2>
                 <p className="text-xs text-text-tertiary mt-0.5">
                   {order.hasErp
-                    ? "Live end-to-end vertical workflow tracking event schedule, pre-event preparation, post-event production, and final delivery & order completion"
-                    : "Live end-to-end vertical workflow tracking event schedule, post-event production, and final delivery & order completion"}
+                    ? "Live end-to-end vertical workflow tracking pre-event schedule & preparation, event day, post-event production, and final delivery & order completion"
+                    : "Live end-to-end vertical workflow tracking pre-event schedule, event day, post-event production, and final delivery & order completion"}
                 </p>
               </div>
               <div className="self-start sm:self-center">
@@ -1039,7 +1039,7 @@ export function TrackOrderClient({ view, rawIdentifier }: TrackOrderClientProps)
             </div>
 
             <OrderVerticalWorkflow
-              order={{ ...order, orderStatus: orderStatusState }}
+              order={{ ...order, orderStatus: orderStatusState, driveDeliverables }}
               tasks={tasksState}
               variant="tracking"
               displayMode="timeline-only"

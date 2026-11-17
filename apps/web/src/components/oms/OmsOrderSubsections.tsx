@@ -48,11 +48,6 @@ export function OmsTurnaroundSlaBanner({
             </span>
           ) : null}
         </div>
-        {!aging.isUpcoming && (
-          <span className="text-[10px] font-bold text-text-secondary">
-            {aging.statusLabel}
-          </span>
-        )}
       </div>
 
       <div className="grid grid-cols-3 gap-2.5">

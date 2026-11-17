@@ -244,5 +244,5 @@ export function findWorkflowTaskAssignee(
     return false;
   });
 
-  return exactMatch || assignedResources[0];
+  return exactMatch;
 }

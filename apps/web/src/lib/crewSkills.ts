@@ -54,10 +54,19 @@ export function isSkillRelatedToService(
       return true;
     }
 
+    const isAlbumDeliverable =
+      svcText.includes("album") ||
+      svcText.includes("photobook") ||
+      svcText.includes("book") ||
+      svcText.includes("print");
+
     if (skill === "DRONE_OPERATOR") {
       return svcText.includes("drone") || svcText.includes("aerial");
     }
     if (skill === "PHOTOGRAPHY") {
+      if (isAlbumDeliverable && !svcText.includes("photography") && !svcText.includes("photoshoot")) {
+        return false;
+      }
       return (
         svcText.includes("photo") ||
         svcText.includes("candid") ||
@@ -78,6 +87,9 @@ export function isSkillRelatedToService(
       );
     }
     if (skill === "PHOTO_EDITING") {
+      if (isAlbumDeliverable && !svcText.includes("photo edit")) {
+        return false;
+      }
       return (
         svcText.includes("edit") ||
         svcText.includes("photo") ||
@@ -88,9 +100,7 @@ export function isSkillRelatedToService(
     }
     if (skill === "ALBUM_DESIGN") {
       return (
-        svcText.includes("album") ||
-        svcText.includes("book") ||
-        svcText.includes("print") ||
+        isAlbumDeliverable ||
         svcText.includes("design")
       );
     }

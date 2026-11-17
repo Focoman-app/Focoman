@@ -8,7 +8,6 @@ import {
   Order,
   Task,
   PaymentStatus,
-  ResourceSuggestion,
   Customer,
   OrderInstallment,
   StudioMember,
@@ -53,9 +52,9 @@ import { OmsOrdersListPanel } from "@/components/oms/OmsOrdersListPanel";
 import { OmsLeadsPanel } from "@/components/oms/OmsLeadsPanel";
 import {
   OmsCustomerAccessCard,
-  OmsResourceSuggestionsSection,
   OmsTurnaroundSlaBanner,
 } from "@/components/oms/OmsOrderSubsections";
+import { parseGoogleDriveUrl } from "@/utils/googleDriveUtils";
 import { OmsAuditHistorySection } from "@/components/oms/OmsAuditHistorySection";
 import { OmsPaymentSummarySection } from "@/components/oms/OmsPaymentSummarySection";
 import { OmsCreateOrderModal } from "@/components/oms/OmsCreateOrderModal";
@@ -594,71 +593,69 @@ export default function OmsPage({
     setIsSubmitting(true);
     setFormError(null);
 
-    const parsedFinalPrice = Number(newOrderForm.finalConfirmedPrice) || 0;
-    const parsedAdvance = Number(newOrderForm.advanceAmount) || 0;
+    try {
+      const parsedFinalPrice = Number(newOrderForm.finalConfirmedPrice) || 0;
+      const parsedAdvance = Number(newOrderForm.advanceAmount) || 0;
+      const trimmedCustomerName = newOrderForm.customerName.trim();
+      const trimmedCustomerEmail = newOrderForm.customerEmail.trim();
 
-    if (!newOrderForm.customerName.trim()) {
-      setFormError("Customer full name is required.");
-      setIsSubmitting(false);
-      return;
-    }
+      if (!trimmedCustomerName) {
+        setFormError("Customer full name is required.");
+        return;
+      }
 
-    if (!newOrderForm.eventDate) {
-      setFormError("Event date is required.");
-      setIsSubmitting(false);
-      return;
-    }
+      if ((trimmedCustomerName.match(/[a-zA-Z]/g) || []).length < 3) {
+        setFormError("Name must have at least 3 letters.");
+        return;
+      }
 
-    if (newOrderForm.services.length === 0) {
-      setFormError("Please select at least one service.");
-      setIsSubmitting(false);
-      return;
-    }
+      if (!newOrderForm.eventDate) {
+        setFormError("Event date is required.");
+        return;
+      }
 
-    if (parsedAdvance > parsedFinalPrice) {
-      setFormError("Advance amount cannot exceed the confirmed total price.");
-      setIsSubmitting(false);
-      return;
-    }
+      if (newOrderForm.services.length === 0) {
+        setFormError("Please select at least one service.");
+        return;
+      }
 
-    const resolvedEventType =
-      newOrderForm.eventType === "Other"
-        ? newOrderForm.customEventType.trim() || "Special Occasion"
-        : newOrderForm.eventType;
+      if (parsedAdvance > parsedFinalPrice) {
+        setFormError("Advance amount cannot exceed the confirmed total price.");
+        return;
+      }
 
-    const trimmedPhone = newOrderForm.customerPhone.trim();
-    const resolvedPhone = trimmedPhone
-      ? trimmedPhone.startsWith("+")
-        ? trimmedPhone
-        : `${newOrderForm.countryCode.trim() || "+91"} ${trimmedPhone}`
-      : undefined;
+      if (!/^\d{6}$/.test(newOrderForm.passkeyPin.trim())) {
+        setFormError("PIN must be 6 digits.");
+        return;
+      }
 
-    if ((newOrderForm.customerName.match(/[a-zA-Z]/g) || []).length < 3) {
-      setFormError("Name must have at least 3 letters.");
-      setIsSubmitting(false);
-      return;
-    }
+      const resolvedEventType =
+        newOrderForm.eventType === "Other"
+          ? newOrderForm.customEventType.trim() || "Special Occasion"
+          : newOrderForm.eventType;
 
-    if (!/^\d{6}$/.test(newOrderForm.passkeyPin.trim())) {
-      setFormError("PIN must be 6 digits.");
-      setIsSubmitting(false);
-      return;
-    }
+      const trimmedPhone = newOrderForm.customerPhone.trim();
+      const resolvedPhone = trimmedPhone
+        ? trimmedPhone.startsWith("+")
+          ? trimmedPhone
+          : `${newOrderForm.countryCode.trim() || "+91"} ${trimmedPhone}`
+        : undefined;
 
-    const token = await getIdToken(true);
-    if (!token) {
-      setFormError("Authentication error. Please sign in again.");
-      setIsSubmitting(false);
-      return;
-    }
+      const token =
+        (await getIdToken(true).catch(() => null)) ??
+        (await getIdToken(false).catch(() => null)) ??
+        workspaceToken;
+      if (!token) {
+        setFormError("Authentication error. Please sign in again.");
+        return;
+      }
 
-    let advanceProofUrl: string | undefined;
-    if (
-      parsedAdvance > 0 &&
-      newOrderForm.advanceMethod === "UPI" &&
-      advanceProofFile
-    ) {
-      try {
+      let advanceProofUrl: string | undefined;
+      if (
+        parsedAdvance > 0 &&
+        newOrderForm.advanceMethod === "UPI" &&
+        advanceProofFile
+      ) {
         const paymentId = `adv_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
         advanceProofUrl = await uploadPaymentProof({
           studioId: studioSlug,
@@ -666,77 +663,86 @@ export default function OmsPage({
           paymentId,
           file: advanceProofFile,
         });
-      } catch (error) {
-        setFormError(
-          error instanceof Error
-            ? error.message
-            : "Failed to upload advance payment proof."
-        );
-        setIsSubmitting(false);
-        return;
       }
-    }
 
-    const res = await createOrderAction({
-      idToken: token,
-      studioId: studioSlug,
-      customerName: newOrderForm.customerName,
-      customerPhone: resolvedPhone,
-      customerEmail: newOrderForm.customerEmail || undefined,
-      passkeyPin: newOrderForm.passkeyPin,
-      notifyWhatsApp: Boolean(
-        hasWhatsAppOperations && newOrderForm.notifyWhatsApp && resolvedPhone
-      ),
-      notifyEmail: Boolean(
-        newOrderForm.notifyEmail && newOrderForm.customerEmail.trim()
-      ),
-      eventType: resolvedEventType,
-      eventDate: newOrderForm.eventDate,
-      eventDates:
-        newOrderForm.eventDates && newOrderForm.eventDates.length > 0
-          ? newOrderForm.eventDates
-          : [newOrderForm.eventDate],
-      eventLocation: newOrderForm.eventLocation.trim() || undefined,
-      services: newOrderForm.services,
-      estimatedPrice: parsedFinalPrice,
-      finalConfirmedPrice: parsedFinalPrice,
-      advanceAmount: parsedAdvance,
-      ...(parsedAdvance > 0
-        ? {
-            advanceMethod: newOrderForm.advanceMethod,
-            ...(newOrderForm.advanceMethod === "UPI" &&
-            newOrderForm.advanceReference.trim()
-              ? { advanceReference: newOrderForm.advanceReference.trim() }
-              : {}),
-            ...(advanceProofUrl ? { advanceProofUrl } : {}),
-            ...(newOrderForm.advanceNotes.trim()
-              ? { advanceNotes: newOrderForm.advanceNotes.trim() }
-              : {}),
-          }
-        : {}),
-    });
+      const selectedPkg = activeStudioPackages.find(
+        (p) => p.id === selectedPackageId
+      );
 
-    setIsSubmitting(false);
-
-    if (res.success && res.order) {
-      setShowCreateModal(false);
-      setAdvanceProofFile(null);
-      setNewOrderForm({
-        ...DEFAULT_ORDER_FORM,
-        notifyWhatsApp: hasWhatsAppOperations,
-        passkeyPin: Math.floor(100000 + Math.random() * 900000).toString(),
+      const res = await createOrderAction({
+        idToken: token,
+        studioId: studioSlug,
+        customerName: trimmedCustomerName,
+        customerPhone: resolvedPhone,
+        customerEmail: trimmedCustomerEmail || undefined,
+        passkeyPin: newOrderForm.passkeyPin.trim(),
+        notifyWhatsApp: Boolean(
+          hasWhatsAppOperations && newOrderForm.notifyWhatsApp && resolvedPhone
+        ),
+        notifyEmail: Boolean(
+          newOrderForm.notifyEmail && trimmedCustomerEmail
+        ),
+        eventType: resolvedEventType,
+        eventDate: newOrderForm.eventDate,
+        eventDates:
+          newOrderForm.eventDates && newOrderForm.eventDates.length > 0
+            ? newOrderForm.eventDates
+            : [newOrderForm.eventDate],
+        eventLocation: newOrderForm.eventLocation.trim() || undefined,
+        services: newOrderForm.services,
+        packages: selectedPkg ? [selectedPkg.name] : [],
+        estimatedPrice: parsedFinalPrice,
+        finalConfirmedPrice: parsedFinalPrice,
+        advanceAmount: parsedAdvance,
+        ...(parsedAdvance > 0
+          ? {
+              advanceMethod: newOrderForm.advanceMethod,
+              ...(newOrderForm.advanceMethod === "UPI" &&
+              newOrderForm.advanceReference.trim()
+                ? { advanceReference: newOrderForm.advanceReference.trim() }
+                : {}),
+              ...(advanceProofUrl ? { advanceProofUrl } : {}),
+              ...(newOrderForm.advanceNotes.trim()
+                ? { advanceNotes: newOrderForm.advanceNotes.trim() }
+                : {}),
+            }
+          : {}),
       });
-      setOrdersRefreshError(null);
-      setIsOrdersRefreshing(true);
-      const refreshed = await loadOrders();
-      setIsOrdersRefreshing(false);
-      if (!refreshed) {
-        setOrdersRefreshError("Order was registered, but the order list could not be refreshed. Please refresh the page to confirm it.");
+
+      if (res.success && res.order) {
+        setShowCreateModal(false);
+        setSelectedPackageId("");
+        setAdvanceProofFile(null);
+        setNewOrderForm({
+          ...DEFAULT_ORDER_FORM,
+          notifyWhatsApp: hasWhatsAppOperations,
+          passkeyPin: Math.floor(100000 + Math.random() * 900000).toString(),
+        });
+        setOrdersRefreshError(null);
+        setIsOrdersRefreshing(true);
+        try {
+          const refreshed = await loadOrders(token);
+          if (!refreshed) {
+            setOrdersRefreshError(
+              "Order was registered, but the order list could not be refreshed. Please refresh the page to confirm it."
+            );
+          }
+        } finally {
+          setIsOrdersRefreshing(false);
+        }
+        setSelectedId(res.order.id);
+        if (res.tasks) setSelectedTasks(res.tasks);
+      } else {
+        setFormError(res.error || "Failed to create order");
       }
-      setSelectedId(res.order.id);
-      if (res.tasks) setSelectedTasks(res.tasks);
-    } else {
-      setFormError(res.error || "Failed to create order");
+    } catch (error) {
+      setFormError(
+        error instanceof Error
+          ? error.message
+          : "Unable to register order. Please try again."
+      );
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -1153,33 +1159,6 @@ export default function OmsPage({
       editAdvanceDate
     );
     if (saved) setIsEditingPricing(false);
-  };
-
-  const handleConfirmSuggestion = async (sug: ResourceSuggestion) => {
-    if (!selected) return;
-    const token = (await getIdToken(false)) ?? workspaceToken;
-    if (!token) return;
-
-    const res = await assignResourceAction({
-      orderId: selected.id,
-      memberId: sug.memberId,
-      memberName: sug.memberName,
-      skill: sug.skill,
-      studioId: studioSlug,
-      idToken: token,
-    });
-
-    if (res.success && res.order) {
-      setOrders((prev) =>
-        prev.map((o) => (o.id === res.order!.id ? res.order! : o))
-      );
-    } else {
-      setNoticeDialog({
-        title: "Unable to Assign Resource",
-        message: res.error || "Failed to assign resource.",
-        tone: "error",
-      });
-    }
   };
 
   const openErpWizardForService = (
@@ -1603,6 +1582,69 @@ export default function OmsPage({
     [selected, getIdToken, workspaceToken, studioSlug]
   );
 
+  const handleSendTaskForReviewWithDriveLink = useCallback(
+    async (input: {
+      taskId: string;
+      title: string;
+      driveUrl: string;
+      notes?: string;
+    }) => {
+      if (!selected) throw new Error("Select an order first.");
+      const token = (await getIdToken(false)) ?? workspaceToken;
+      if (!token) throw new Error("Authentication required. Please sign in again.");
+
+      const cleanUrl = input.driveUrl.trim();
+      if (cleanUrl) {
+        const parsed = parseGoogleDriveUrl(cleanUrl);
+        if (!parsed.isValidDriveUrl) {
+          throw new Error(
+            "Please enter a valid Google Drive link (https://drive.google.com/... or https://docs.google.com/...)."
+          );
+        }
+        const newItem: OrderDriveDeliverable = {
+          id: `drv_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+          title: input.title.trim() || "Deliverable Link",
+          category: parsed.kind === "FILE" ? "IMAGE" : "FOLDER",
+          driveUrl: parsed.openUrl || cleanUrl,
+          ...(parsed.id ? { driveId: parsed.id } : {}),
+          ...(input.notes?.trim() ? { notes: input.notes.trim() } : {}),
+          linkedTaskId: input.taskId,
+          addedAt: new Date().toISOString(),
+        };
+        const saveRes = await handleSaveDriveDeliverables([
+          ...(selected.driveDeliverables || []),
+          newItem,
+        ]);
+        if (!saveRes.success) {
+          throw new Error(saveRes.error || "Failed to save Google Drive link.");
+        }
+      }
+
+      const res = await updateTaskStatusAction({
+        idToken: token,
+        studioId: studioSlug,
+        taskId: input.taskId,
+        orderId: selected.id,
+        status: "REVIEW",
+      });
+      if (!res.success || !res.task) {
+        throw new Error(res.error || "Failed to send task for customer review.");
+      }
+      setSelectedTasks((prev) =>
+        prev.map((t) => (t.id === input.taskId ? res.task! : t))
+      );
+      await loadOrders();
+    },
+    [
+      selected,
+      getIdToken,
+      workspaceToken,
+      studioSlug,
+      handleSaveDriveDeliverables,
+      loadOrders,
+    ]
+  );
+
   const handleSaveStudioBillingProfile = useCallback(
     async (profile: StudioBillingProfile) => {
       const token = (await getIdToken(false)) ?? workspaceToken;
@@ -1736,6 +1778,12 @@ export default function OmsPage({
               })
               .filter(Boolean)}
             hasErp={hasErp}
+            canManageDriveLinks={Boolean(
+              hasDriveReview ||
+                selected.hasDriveReviewEntitlement ||
+                (selected.driveDeliverables && selected.driveDeliverables.length > 0)
+            )}
+            onSendTaskForReviewWithDriveLink={handleSendTaskForReviewWithDriveLink}
           />
 
           {/* Production Aging and Turnaround SLA Banner */}
@@ -1817,14 +1865,6 @@ export default function OmsPage({
             onSavePricing={() => void handleSavePricing()}
           />
 
-          {/* 4. Automated Resource Suggestions (ERP only) */}
-          {hasErp && (
-            <OmsResourceSuggestionsSection
-              order={selected}
-              onConfirmSuggestion={handleConfirmSuggestion}
-            />
-          )}
-
           {/* 5B. Google Drive Deliverables & Client Preview (Starter/Pro or Orders Registered During Entitlement Period) */}
           {(hasDriveReview ||
             Boolean(selected.hasDriveReviewEntitlement) ||
@@ -1832,7 +1872,6 @@ export default function OmsPage({
             <GoogleDriveDeliverablesSection
               orderId={selected.id}
               deliverables={selected.driveDeliverables || []}
-              reviewTasks={selectedTasks.map((task) => ({ id: task.id, title: task.title }))}
               canManageLinks={true}
               canSubmitClientReview={false}
               onSaveDeliverables={handleSaveDriveDeliverables}
@@ -1902,7 +1941,11 @@ export default function OmsPage({
       {/* New Order Modal */}
       <OmsCreateOrderModal
         isOpen={showCreateModal}
-        onClose={() => setShowCreateModal(false)}
+        onClose={() => {
+          setShowCreateModal(false);
+          setFormError(null);
+          setIsSubmitting(false);
+        }}
         newOrderForm={newOrderForm}
         setNewOrderForm={setNewOrderForm}
         formError={formError}

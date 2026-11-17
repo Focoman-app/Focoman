@@ -8,7 +8,7 @@ import { StudioPlan, Studio } from '@focoman/types';
  */
 export async function getStudioPlan(studioId: string): Promise<StudioPlan | null> {
   const firestore = getFirestoreServerInstance();
-  const docRef = firestore.collection('studios').doc(studioId);
+  const docRef = firestore.collection('studios').doc(studioId.toLowerCase());
   const snap = await docRef.get();
   if (!snap.exists) return null;
   const data = snap.data() as Studio;
@@ -20,6 +20,6 @@ export async function getStudioPlan(studioId: string): Promise<StudioPlan | null
  */
 export async function upsertStudioPlan(studioId: string, plan: Partial<StudioPlan>): Promise<void> {
   const firestore = getFirestoreServerInstance();
-  const docRef = firestore.collection('studios').doc(studioId);
+  const docRef = firestore.collection('studios').doc(studioId.toLowerCase());
   await docRef.set({ planInfo: plan, updatedAt: new Date().toISOString() }, { merge: true });
 }

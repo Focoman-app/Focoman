@@ -267,7 +267,11 @@ export async function createOrderCore(rawInput: unknown): Promise<{
       memberId: studio?.ownerId || decoded.uid,
       memberName: studio?.ownerName || decoded.name || decoded.email || "Studio Owner",
     });
-    const workflowTasks = generateWorkflowTasks(orderId, validated.studioId, validated.services).map(
+    const workflowTasks = generateWorkflowTasks(
+      orderId,
+      validated.studioId.toLowerCase(),
+      validated.services
+    ).map(
       (t, idx) => {
         const { dateStamp, timeStamp } = generateTimestampDigits(now);
         const seqSuffix = String(idx + 1).padStart(2, "0");

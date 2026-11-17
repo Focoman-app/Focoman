@@ -75,7 +75,8 @@ export function generateResourceSuggestions(
   const activeMembers = studioMembers.filter(m => !m.isDeleted && (m.status === 'ACTIVE' || !m.status));
 
   return activeMembers.map(member => {
-    const matchingSkills = requiredSkills.filter(skill => member.skills.includes(skill));
+    const memberSkills = Array.isArray(member.skills) ? member.skills : [];
+    const matchingSkills = requiredSkills.filter(skill => memberSkills.includes(skill));
     const memberTasks = activeTasks.filter(t => !t.isDeleted && t.assignedMemberId === member.id && t.status !== 'COMPLETED');
     const matchScore = matchingSkills.length > 0 ? Math.min(100, matchingSkills.length * 40 - memberTasks.length * 10) : 10;
 
@@ -87,7 +88,7 @@ export function generateResourceSuggestions(
     return {
       memberId: member.id,
       memberName: member.name,
-      skill: matchingSkills[0] || member.skills[0] || 'GENERAL',
+      skill: matchingSkills[0] || memberSkills[0] || 'GENERAL',
       matchScore: Math.max(0, matchScore),
       matchReason: reason,
       availableOnDate: true,
