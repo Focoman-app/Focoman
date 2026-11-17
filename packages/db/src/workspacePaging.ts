@@ -30,7 +30,7 @@ export async function readStudioPage<C extends keyof RecordMap>(input: StudioPag
   if (cursor) query = query.startAfter(cursor);
   // Scan a bounded number even if this section contains many archived records.
   // An empty page with nextCursor means more documents can still match.
-  const snap = await query.limit(100).get();
+  const snap = await query.limit(size).get();
   const items: RecordMap[C][] = [];
   let lastId: string | null = null;
   let consumed = 0;
@@ -41,7 +41,7 @@ export async function readStudioPage<C extends keyof RecordMap>(input: StudioPag
     if (Boolean(record.isDeleted) === Boolean(input.deleted)) items.push(record);
     if (items.length === size) break;
   }
-  const hasMore = consumed < snap.size || snap.size === 100;
+  const hasMore = consumed < snap.size || snap.size === size;
   return { items, nextCursor: hasMore && lastId ? encodeCursor(lastId, scope) : null };
 }
 
@@ -71,7 +71,10 @@ export async function readOrderListPage(input: StudioPageInput & OrderListFilter
     if (!doc.exists) return [];
     const order = doc.data() as Order;
     if (order.studioId !== studioId || order.isDeleted) return [];
-    return [{ ...order, id: doc.id, orderStatus: page[index].orderStatus }];
+    const dates = [...(order.eventDates ?? []), order.eventDate, ...Object.values(order.serviceSchedules ?? {}).flat()].filter(Boolean).sort();
+    const orderStatus = order.orderStatus === 'AWAITING_EVENT' && dates.length && dates[dates.length - 1] < today ? 'POST_EVENT_IN_PROGRESS' : order.orderStatus;
+    if (filter.status !== 'ALL' && filter.status !== orderStatus) return [];
+    return [{ ...order, id: doc.id, orderStatus }];
   });
   return { items, total: sorted.length, remainingIds: sorted.slice(cursorIndex + 1 + size).map(order => order.id), nextCursor: cursorIndex + 1 + size < sorted.length && page.length ? encodeCursor(page[page.length - 1].id, scope) : null };
 }
