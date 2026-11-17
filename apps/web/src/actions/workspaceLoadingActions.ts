@@ -1,6 +1,6 @@
 "use server";
 
-import { readOrderListPage, readOrderPageByIds, readStudioPage } from '@focoman/db';
+import { readOrderListPage, readOrderPageByIds, readStudioPage, getOrderScheduleProjection } from '@focoman/db';
 import type { OrderStatus } from '@focoman/types';
 import { requireVerifiedUser, requireStudioOwner } from '@/lib/serverAuth';
 import { getStudioCustomersAction } from './customerActions';
@@ -35,11 +35,12 @@ export async function getOmsOptionsAction(studioId: string, idToken: string) {
   const user = await requireVerifiedUser(idToken);
   await requireStudioOwner(user.uid, studioId);
   const hasErp = await hasStudioCapability(studioId, 'STUDIO_ERP');
-  const [customers, members, services] = await Promise.all([
+  const [customers, members, services, schedules] = await Promise.all([
     getStudioCustomersAction(studioId, idToken),
     hasErp ? getStudioMembersAction(studioId, idToken) : Promise.resolve([]),
     getStudioServicesAction(studioId, idToken),
+    getOrderScheduleProjection(studioId),
   ]);
   if (!services.success) throw new Error(services.error || 'Unable to load order options.');
-  return { customers, members, services: services.services, packages: services.packages };
+  return { customers, members, schedules, services: services.services, packages: services.packages };
 }

@@ -116,20 +116,16 @@ export async function createOrderCore(rawInput: unknown): Promise<{
     const initialOrderStatus: OrderStatus =
       finalInitialDate < todayStr ? "POST_EVENT_IN_PROGRESS" : "AWAITING_EVENT";
 
-    const [
-      existingCustomers,
-      studioMembers,
-      studio,
-      existingOrders,
-      hasErp,
-      hasDriveReviewEntitlement,
-    ] = await Promise.all([
-      getCustomersByStudio(validated.studioId),
-      getMembersByStudio(validated.studioId),
+    const [studio, hasErp, hasDriveReviewEntitlement] = await Promise.all([
       getStudioBySlug(validated.studioId),
-      getOrdersByStudio(validated.studioId),
       hasStudioCapability(validated.studioId, "STUDIO_ERP"),
       hasStudioCapability(validated.studioId, "DRIVE_CLIENT_REVIEW"),
+    ]);
+    const autoAssignEnabled = hasErp && studio?.features?.autoAssignCrew !== false;
+    const [existingCustomers, studioMembers, existingOrders] = await Promise.all([
+      getCustomersByStudio(validated.studioId),
+      hasErp ? getMembersByStudio(validated.studioId) : Promise.resolve([]),
+      autoAssignEnabled ? getOrdersByStudio(validated.studioId) : Promise.resolve([]),
     ]);
     const matchedCustomer = existingCustomers.find((c) =>
       isContactMatch(
@@ -148,7 +144,6 @@ export async function createOrderCore(rawInput: unknown): Promise<{
         )
       : [];
 
-    const autoAssignEnabled = hasErp && studio?.features?.autoAssignCrew !== false;
     const assignedResources: ResourceAssignment[] = autoAssignEnabled
       ? computeAutoAssignedResources({
           studio,

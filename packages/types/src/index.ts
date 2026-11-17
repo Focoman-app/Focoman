@@ -631,3 +631,11 @@ export interface Task extends SoftDeletable {
   updatedAt: string;
 }
 
+
+/** Complete dashboard series; deliberately excludes operational details and access secrets. */
+export type DashboardOrder = Pick<Order, 'id' | 'orderNumber' | 'eventType' | 'eventLocation' | 'eventDate' | 'createdAt' | 'orderStatus'> & {
+  customer: Pick<Order['customer'], 'name'>;
+  pricing: Pick<Order['pricing'], 'finalConfirmedPrice' | 'remainingAmount'>;
+};
+
+export type OrderScheduleSummary = Pick<Order, 'id' | 'eventDate' | 'eventDates' | 'serviceSchedules' | 'assignedResources' | 'orderStatus' | 'isDeleted'>;

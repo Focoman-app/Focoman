@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
-import { Order } from "@focoman/types";
+import { Suspense } from "react";
 import { toMemberWorkView } from "@focoman/domain";
-import { getMembersByStudio, getOrdersByStudio, getTasksByMember, getStudioBySlug } from "@focoman/db";
+import { getMembersByStudio, getOrdersByStudio, getTasksByMember, getStudioBySlug, getDashboardOrderProjection } from "@focoman/db";
 import { DashboardHomeView } from "@/features/dashboard/DashboardHomeView";
 import { MemberWorkDashboardView } from "@/features/dashboard/MemberWorkDashboardView";
 import { requireDashboardStudioAccess } from "@/lib/dashboardAccess";
@@ -38,10 +38,7 @@ export default async function DashboardPage({ params }: { params: Promise<{ stud
   }
 
   // Studio owner / admin — fetch orders and studio features
-  const [orders, studio] = await Promise.all([
-    getOrdersByStudio(studioSlug) as Promise<Order[]>,
-    getStudioBySlug(studioSlug),
-  ]);
+  const studio = await getStudioBySlug(studioSlug);
 
   const effectiveTier = getEffectiveStudioTier(studio?.ownerEmail || access.decoded.email, studio?.planInfo);
   const effectiveFeatures = getEffectiveStudioFeatures(studio?.ownerEmail || access.decoded.email, studio?.features, studio?.planInfo);
@@ -52,10 +49,13 @@ export default async function DashboardPage({ params }: { params: Promise<{ stud
   }
 
   return (
-    <DashboardHomeView
-      studioSlug={studioSlug}
-      initialOrders={orders}
-      planTier={effectiveTier}
-    />
+    <Suspense fallback={<div role="status" className="p-6 text-sm">Loading dashboard summaries…</div>}>
+      <OwnerDashboard studioSlug={studioSlug} planTier={effectiveTier} />
+    </Suspense>
   );
+}
+
+async function OwnerDashboard({ studioSlug, planTier }: { studioSlug: string; planTier: 'FREE' | 'PROFESSIONAL' | 'COMPLETE' }) {
+  const orders = await getDashboardOrderProjection(studioSlug);
+  return <DashboardHomeView studioSlug={studioSlug} initialOrders={orders} planTier={planTier} />;
 }

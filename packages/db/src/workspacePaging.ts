@@ -1,6 +1,6 @@
 import 'server-only';
 import { FieldPath } from 'firebase-admin/firestore';
-import type { Customer, Order, StudioMember } from '@focoman/types';
+import type { Customer, Order, StudioMember, DashboardOrder, OrderScheduleSummary } from '@focoman/types';
 import { getFirestoreServerInstance } from './index';
 import { filterAndSortOrders, normalizeOrderListFilter, validatePageSize, type OrderListFilter, type OrderListMetadata } from './listPaging';
 
@@ -80,10 +80,11 @@ export async function readOrderListPage(input: StudioPageInput & OrderListFilter
 }
 
 /** Complete dashboard series without history, deliverables, crew or access secrets. */
-export async function getDashboardOrderProjection(studioId: string): Promise<Order[]> {
+export async function getDashboardOrderProjection(studioId: string): Promise<DashboardOrder[]> {
   const snap = await getFirestoreServerInstance().collection('orders').where('studioId', '==', studioId.toLowerCase())
-    .select('id', 'customer.name', 'orderNumber', 'eventType', 'eventLocation', 'eventDate', 'createdAt', 'orderStatus', 'pricing', 'isDeleted').get();
-  return snap.docs.map(doc => ({ ...doc.data(), id: doc.id } as Order)).filter(order => !order.isDeleted);
+    .select('id', 'customer.name', 'orderNumber', 'eventType', 'eventLocation', 'eventDate', 'createdAt', 'orderStatus', 'pricing.finalConfirmedPrice', 'pricing.remainingAmount', 'isDeleted').get();
+  return snap.docs.filter(doc => !doc.data().isDeleted).map(doc => ({ ...doc.data(), id: doc.id } as DashboardOrder))
+    .sort((a, b) => (Date.parse(b.createdAt || '') || 0) - (Date.parse(a.createdAt || '') || 0) || a.id.localeCompare(b.id));
 }
 
 /** Hydrate a known ordered snapshot without rescanning metadata on every scroll. */
@@ -102,4 +103,11 @@ export async function readOrderPageByIds(studioId: string, ids: string[]): Promi
     const orderStatus = order.orderStatus === 'AWAITING_EVENT' && dates.length && dates[dates.length - 1] < today ? 'POST_EVENT_IN_PROGRESS' : order.orderStatus;
     return [{ ...order, id: doc.id, orderStatus }];
   });
+}
+
+/** Full availability inputs are deferred until an order form/detail opens. */
+export async function getOrderScheduleProjection(studioId: string): Promise<OrderScheduleSummary[]> {
+  const snap = await getFirestoreServerInstance().collection('orders').where('studioId', '==', studioId.toLowerCase())
+    .select('eventDate', 'eventDates', 'serviceSchedules', 'assignedResources', 'orderStatus', 'isDeleted').get();
+  return snap.docs.filter(doc => !doc.data().isDeleted).map(doc => ({ ...doc.data(), id: doc.id } as OrderScheduleSummary));
 }

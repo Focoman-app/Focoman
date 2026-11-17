@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useState, useEffect, useCallback, use } from "react";
+import { useMemo, useState, useEffect, useCallback, use, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   OrderStatus,
+  OrderScheduleSummary,
   TaskStatus,
   Order,
   Task,
@@ -20,6 +21,7 @@ import {
 } from "@focoman/types";
 import {
   getStudioOrdersAction,
+  getOrderAction,
   getOrderTasksAction,
   createOrderAction,
   updateTaskStatusAction,
@@ -33,6 +35,7 @@ import {
   updateOrderAction,
   updateOrderDriveDeliverablesAction,
 } from "@/actions/orderActions";
+import { getOmsPageAction, getOmsNextPageAction, getOmsOptionsAction } from "@/actions/workspaceLoadingActions";
 import { getStudioMembersAction } from "@/actions/memberActions";
 import { getStudioCustomersAction } from "@/actions/customerActions";
 import { getStudioServicesAction, updateStudioAction } from "@/actions/studioActions";
@@ -95,11 +98,26 @@ export default function OmsPage({
     dismiss: dismissPlanWarning,
   } = usePlanGatedToast();
   const [orders, setOrders] = useState<Order[]>([]);
+  const [scheduleHistory, setScheduleHistory] = useState<OrderScheduleSummary[]>([]);
+  const schedulingOrders = useMemo(() => Array.from(new Map([...scheduleHistory, ...orders].map(order => [order.id, order])).values()), [scheduleHistory, orders]);
+  const [remainingOrderIds, setRemainingOrderIds] = useState<string[]>([]);
+  const [orderTotal, setOrderTotal] = useState(0);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [moreError, setMoreError] = useState<string | null>(null);
+  const listGeneration = useRef(0);
+  const moreInFlight = useRef(false);
+  const [optionsAttempt, setOptionsAttempt] = useState(0);
+  const [optionsReady, setOptionsReady] = useState(false);
+  const [optionsError, setOptionsError] = useState<string | null>(null);
+  const [leadsLoading, setLeadsLoading] = useState(false);
+  const [leadsError, setLeadsError] = useState<string | null>(null);
   const [omsSection, setOmsSection] = useState<"ORDERS" | "LEADS">("ORDERS");
   const [leads, setLeads] = useState<StudioLead[]>([]);
   const [webhookConfig, setWebhookConfig] =
     useState<StudioLeadWebhookConfig | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selectedIdRef = useRef(selectedId);
+  selectedIdRef.current = selectedId;
   const selected = useMemo(
     () => orders.find((o) => o.id === selectedId) || null,
     [orders, selectedId]
@@ -382,7 +400,7 @@ export default function OmsPage({
       }
     });
 
-    orders.forEach((o) => {
+    schedulingOrders.forEach((o) => {
       (o.assignedResources || []).forEach((r) => {
         if (isOwnerCrew(r.memberId, r.memberName)) return;
         const isRegistered = allSelectableCrew.some(
@@ -410,7 +428,7 @@ export default function OmsPage({
     });
 
     return Array.from(map.values());
-  }, [studio, orders, allSelectableCrew, workspaceUser]);
+  }, [studio, schedulingOrders, allSelectableCrew, workspaceUser]);
 
   const handleOpenCreateModal = useCallback(() => {
     setNewOrderForm({
@@ -501,66 +519,120 @@ export default function OmsPage({
     });
   };
 
-  const loadOrders = useCallback(
-    async (tokenOverride?: string | null) => {
-      try {
-        const token =
-          tokenOverride ?? (await getIdToken(false)) ?? workspaceToken;
-        if (!token) {
-          setLoading(false);
-          return false;
-        }
-        const [data, customersData, membersData, servicesRes, leadsRes] =
-          await Promise.all([
-            getStudioOrdersAction(studioSlug, token),
-            getStudioCustomersAction(studioSlug, token),
-            getStudioMembersAction(studioSlug, token).catch(() => []),
-            getStudioServicesAction(studioSlug, token).catch(() => null),
-            hasCrm ? getStudioLeadsAction(studioSlug, token).catch(() => null) : Promise.resolve(null),
-          ]);
-        setOrders(data);
-        setStudioCustomers(customersData);
-        setStudioMembers(membersData || []);
-        if (leadsRes) {
-          setLeads(leadsRes.leads || []);
-          setWebhookConfig(leadsRes.webhookConfig || null);
-        }
-        if (servicesRes && servicesRes.success) {
-          if (Array.isArray(servicesRes.services)) {
-            setStudioServicesList(servicesRes.services);
-          }
-          if (Array.isArray(servicesRes.packages)) {
-            setStudioPackagesList(servicesRes.packages);
-          }
-        }
-        return true;
-      } catch (err) {
-        console.error("[OmsPage] Failed to load orders:", err);
-        return false;
-      } finally {
-        setLoading(false);
-      }
-    },
-    [studioSlug, workspaceToken, getIdToken, hasCrm]
-  );
+  const loadOrders = useCallback(async (tokenOverride?: string | null) => {
+    const generation = ++listGeneration.current;
+    moreInFlight.current = false;
+    setLoadingMore(false);
+    setLoading(true);
+    setOrdersRefreshError(null);
+    setMoreError(null);
+    try {
+      const token = tokenOverride ?? workspaceToken ?? await getIdToken(false);
+      if (!token) throw new Error('Please sign in again to load orders.');
+      const page = await getOmsPageAction(studioSlug, token, { query, status: statusFilter, sort: sortBy });
+      if (generation !== listGeneration.current) return false;
+      setOrders(previous => {
+        const selectedOrder = previous.find(order => order.id === selectedIdRef.current);
+        return selectedOrder && !page.items.some(order => order.id === selectedOrder.id) ? [...page.items, selectedOrder] : page.items;
+      });
+      setRemainingOrderIds(page.remainingIds);
+      setOrderTotal(page.total);
+      return true;
+    } catch (error) {
+      if (generation === listGeneration.current) setOrdersRefreshError(error instanceof Error ? error.message : 'Unable to load orders.');
+      return false;
+    } finally {
+      if (generation === listGeneration.current) setLoading(false);
+    }
+  }, [studioSlug, workspaceToken, getIdToken, query, statusFilter, sortBy]);
 
   useEffect(() => {
-    if (!authLoading) {
-      void loadOrders(workspaceToken);
+    // Invalidate immediately: a prior response must not win during debounce.
+    ++listGeneration.current;
+    setRemainingOrderIds([]);
+    setOrders(previous => previous.filter(order => order.id === selectedIdRef.current));
+    setLoading(true);
+    const timer = setTimeout(() => { if (!authLoading) void loadOrders(workspaceToken); }, query ? 250 : 0);
+    return () => { clearTimeout(timer); ++listGeneration.current; };
+  }, [authLoading, loadOrders, workspaceToken, query]);
+
+  const loadMoreOrders = useCallback(async () => {
+    if (moreInFlight.current || !remainingOrderIds.length || loading) return;
+    moreInFlight.current = true;
+    const generation = listGeneration.current;
+    const ids = remainingOrderIds.slice(0, 20);
+    setLoadingMore(true);
+    setMoreError(null);
+    try {
+      const token = workspaceToken ?? await getIdToken(false);
+      if (!token) throw new Error('Please sign in again.');
+      const page = await getOmsNextPageAction(studioSlug, token, ids);
+      if (generation !== listGeneration.current) return;
+      setOrders(previous => Array.from(new Map([...previous, ...page].map(order => [order.id, order])).values()));
+      setRemainingOrderIds(previous => previous.slice(ids.length));
+    } catch (error) {
+      if (generation === listGeneration.current) setMoreError(error instanceof Error ? error.message : 'Unable to load more orders.');
+    } finally {
+      if (generation === listGeneration.current) { moreInFlight.current = false; setLoadingMore(false); }
     }
-  }, [studioSlug, authLoading, workspaceToken, loadOrders]);
+  }, [remainingOrderIds, loading, studioSlug, workspaceToken, getIdToken]);
+
+  const refreshSelectedOrder = useCallback(async () => {
+    if (!selectedId) return;
+    const token = workspaceToken ?? await getIdToken(false);
+    if (!token) throw new Error('Please sign in again.');
+    const result = await getOrderAction(selectedId, studioSlug, token);
+    if (!result.order) throw new Error('This order is no longer available.');
+    if (selectedIdRef.current !== selectedId) return;
+    setOrders(previous => Array.from(new Map([...previous, result.order!].map(order => [order.id, order])).values()));
+    setSelectedTasks(result.tasks);
+  }, [selectedId, studioSlug, workspaceToken, getIdToken]);
 
   useEffect(() => {
-    if (selectedId) {
-      if (workspaceToken) {
-        void getOrderTasksAction(selectedId, studioSlug, workspaceToken).then(
-          setSelectedTasks
-        );
-      }
-    } else {
-      setSelectedTasks([]);
-    }
+    let active = true;
+    if (!selectedId || !workspaceToken) { setSelectedTasks([]); return; }
+    // Load a deep-linked order even if it is not in the first page.
+    void getOrderAction(selectedId, studioSlug, workspaceToken).then(result => {
+      if (!active) return;
+      if (!result.order) throw new Error('This order is no longer available.');
+      setOrders(previous => Array.from(new Map([...previous, result.order!].map(order => [order.id, order])).values()));
+      setSelectedTasks(result.tasks);
+    }).catch(error => { if (active) setOrdersRefreshError(error instanceof Error ? error.message : 'Unable to load order.'); });
+    return () => { active = false; };
   }, [selectedId, studioSlug, workspaceToken]);
+
+  useEffect(() => {
+    setOptionsReady(false);
+  }, [studioSlug]);
+
+  useEffect(() => {
+    if ((!showCreateModal && !selectedId) || optionsReady || !workspaceToken) return;
+    let active = true;
+    setOptionsError(null);
+    void getOmsOptionsAction(studioSlug, workspaceToken).then(options => {
+      if (!active) return;
+      setStudioCustomers(options.customers);
+      setScheduleHistory(options.schedules);
+      setStudioMembers(options.members);
+      setStudioServicesList(options.services);
+      setStudioPackagesList(options.packages);
+      setOptionsReady(true);
+    }).catch(error => { if (active) setOptionsError(error instanceof Error ? error.message : 'Unable to load order options.'); });
+    return () => { active = false; };
+  }, [showCreateModal, selectedId, optionsReady, workspaceToken, studioSlug, optionsAttempt]);
+
+  const loadLeads = useCallback(async () => {
+    if (!hasCrm || !workspaceToken) return;
+    setLeadsLoading(true);
+    setLeadsError(null);
+    try {
+      const result = await getStudioLeadsAction(studioSlug, workspaceToken);
+      setLeads(result.leads);
+      setWebhookConfig(result.webhookConfig);
+    } catch (error) { setLeadsError(error instanceof Error ? error.message : 'Unable to load leads.'); }
+    finally { setLeadsLoading(false); }
+  }, [hasCrm, workspaceToken, studioSlug]);
+  useEffect(() => { if (omsSection === 'LEADS') void loadLeads(); }, [omsSection, loadLeads]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -642,7 +714,6 @@ export default function OmsPage({
         : undefined;
 
       const token =
-        (await getIdToken(true).catch(() => null)) ??
         (await getIdToken(false).catch(() => null)) ??
         workspaceToken;
       if (!token) {
@@ -719,17 +790,12 @@ export default function OmsPage({
           passkeyPin: Math.floor(100000 + Math.random() * 900000).toString(),
         });
         setOrdersRefreshError(null);
-        setIsOrdersRefreshing(true);
-        try {
-          const refreshed = await loadOrders(token);
-          if (!refreshed) {
-            setOrdersRefreshError(
-              "Order was registered, but the order list could not be refreshed. Please refresh the page to confirm it."
-            );
-          }
-        } finally {
-          setIsOrdersRefreshing(false);
-        }
+        ++listGeneration.current;
+        setLoadingMore(false);
+        moreInFlight.current = false;
+        setOrders(previous => [res.order!, ...previous.filter(order => order.id !== res.order!.id)]);
+        if ((statusFilter === 'ALL' || res.order.orderStatus === statusFilter) && (!query || `${res.order.customer.name} ${res.order.orderNumber} ${res.order.eventType}`.toLowerCase().includes(query.toLowerCase()))) setOrderTotal(total => total + 1);
+        setOptionsReady(false);
         setSelectedId(res.order.id);
         if (res.tasks) setSelectedTasks(res.tasks);
       } else {
@@ -765,7 +831,7 @@ export default function OmsPage({
       setSelectedTasks((prev) =>
         prev.map((t) => (t.id === taskId ? res.task! : t))
       );
-      await loadOrders();
+      await refreshSelectedOrder();
     } else if (!res.success) {
       setNoticeDialog({
         title: "Unable to Update Task",
@@ -937,7 +1003,7 @@ export default function OmsPage({
 
     try {
       const token =
-        (await getIdToken(true)) ?? (await getIdToken(false)) ?? workspaceToken;
+        (await getIdToken(false)) ?? workspaceToken;
       if (!token) {
         setIsUpdatingPayment(false);
         setOrders(previousOrders);
@@ -958,7 +1024,7 @@ export default function OmsPage({
         setOrders((prev) =>
           prev.map((o) => (o.id === res.order!.id ? res.order! : o))
         );
-        await loadOrders();
+        await refreshSelectedOrder();
         return true;
       } else {
         setOrders(previousOrders);
@@ -1016,7 +1082,7 @@ export default function OmsPage({
           message: res.message || "Payment reminder email sent successfully!",
           tone: "success",
         });
-        await loadOrders();
+        await refreshSelectedOrder();
       } else {
         setNoticeDialog({
           title: "Unable to Send Reminder",
@@ -1367,7 +1433,7 @@ export default function OmsPage({
   }) => {
     const token = (await getIdToken(false)) ?? workspaceToken;
     if (!token || !selected) {
-      await loadOrders();
+      await refreshSelectedOrder();
       setShowAddMemberModal(false);
       setTargetAssignContext(null);
       setAddMemberInitialName("");
@@ -1406,7 +1472,7 @@ export default function OmsPage({
       }
     }
 
-    await loadOrders();
+    await refreshSelectedOrder();
     setShowAddMemberModal(false);
     setTargetAssignContext(null);
     setAddMemberInitialName("");
@@ -1465,6 +1531,9 @@ export default function OmsPage({
     setIsDeleting(false);
     if (res.success) {
       setOrders((prev) => prev.filter((o) => o.id !== deleteTargetOrder.id));
+      setOrderTotal(total => Math.max(0, total - 1));
+      setRemainingOrderIds(ids => ids.filter(id => id !== deleteTargetOrder.id));
+      setScheduleHistory(history => history.filter(order => order.id !== deleteTargetOrder.id));
       if (selectedId === deleteTargetOrder.id) {
         setSelectedId(null);
       }
@@ -1535,13 +1604,17 @@ export default function OmsPage({
     });
   }, [orders, statusFilter, query, sortBy]);
 
-  const handleExportOmsExcel = useCallback(() => {
+  const handleExportOmsExcel = useCallback(async () => {
     if (!canExportOrders) {
       showPlanWarning("Excel export is available only in the Professional (₹1,999/mo) plan.");
       return;
     }
     try {
-      exportOmsOrdersToExcel(studioSlug, filtered);
+      const token = workspaceToken ?? await getIdToken(false);
+      if (!token) throw new Error('Please sign in again.');
+      const allOrders = await getStudioOrdersAction(studioSlug, token);
+      const matching = allOrders.filter(order => (statusFilter === 'ALL' || order.orderStatus === statusFilter) && (!query || `${order.customer.name} ${order.orderNumber} ${order.eventType}`.toLowerCase().includes(query.toLowerCase())));
+      exportOmsOrdersToExcel(studioSlug, matching);
     } catch (error) {
       setNoticeDialog({
         title: "Export Failed",
@@ -1549,7 +1622,7 @@ export default function OmsPage({
         tone: "error",
       });
     }
-  }, [canExportOrders, filtered, studioSlug, showPlanWarning]);
+  }, [canExportOrders, statusFilter, query, studioSlug, showPlanWarning, workspaceToken, getIdToken]);
 
   const handleSaveDriveDeliverables = useCallback(
     async (updatedDeliverables: OrderDriveDeliverable[]) => {
@@ -1633,7 +1706,7 @@ export default function OmsPage({
       setSelectedTasks((prev) =>
         prev.map((t) => (t.id === input.taskId ? res.task! : t))
       );
-      await loadOrders();
+      await refreshSelectedOrder();
     },
     [
       selected,
@@ -1641,7 +1714,7 @@ export default function OmsPage({
       workspaceToken,
       studioSlug,
       handleSaveDriveDeliverables,
-      loadOrders,
+      refreshSelectedOrder,
     ]
   );
 
@@ -1660,10 +1733,11 @@ export default function OmsPage({
 
   return (
     <div className="flex h-full bg-surface-app">
+      {hasCrm && omsSection === "LEADS" && (leadsLoading || leadsError) && <div className="p-4 text-sm" role="status">{leadsError || 'Loading leads…'}{leadsError && <button onClick={() => void loadLeads()} className="ml-2 underline">Retry</button>}</div>}
       {hasCrm && omsSection === "LEADS" ? (
         <OmsLeadsPanel
           studioSlug={studioSlug}
-          ordersCount={orders.length}
+          ordersCount={orderTotal}
           leads={leads}
           webhookConfig={webhookConfig}
           hasWhatsAppLeads={hasWhatsAppOperations || canExportOrders}
@@ -1677,15 +1751,19 @@ export default function OmsPage({
             }
           }}
           getIdToken={getIdToken}
-          onRefreshAll={async () => {
-            await loadOrders(workspaceToken);
-          }}
+          onRefreshAll={loadLeads}
         />
       ) : (
         <>
           <OmsOrdersListPanel
             studioSlug={studioSlug}
             orders={orders}
+            totalCount={orderTotal}
+            hasMore={remainingOrderIds.length > 0}
+            loadingMore={loadingMore}
+            moreError={moreError}
+            onLoadMore={loadMoreOrders}
+            onRetry={() => { void loadOrders(); }}
             filtered={filtered}
             selected={selected}
             selectedId={selectedId}
@@ -1707,6 +1785,7 @@ export default function OmsPage({
             onSwitchToLeads={() => setOmsSection("LEADS")}
           />
 
+          {optionsError && <div role="alert" className="p-3 text-sm text-red-700">{optionsError}<button className="ml-2 underline" onClick={() => setOptionsAttempt(attempt => attempt + 1)}>Retry options</button></div>}
           {/* Selected Order Detail Drawer */}
           {selected && (
         <aside className="h-full w-full lg:w-1/2 overflow-y-auto bg-white p-6 border-l border-border-default space-y-6">
@@ -1757,7 +1836,7 @@ export default function OmsPage({
             onOpenErpWizard={hasErp ? openErpWizardForService : undefined}
             onAssignTaskCrew={handleAssignTaskCrew}
             onSaveSchedule={handleSaveOrderSchedule}
-            busyEventDates={orders
+            busyEventDates={schedulingOrders
               .filter(
                 (order) =>
                   order.id !== selected.id &&
@@ -1948,8 +2027,8 @@ export default function OmsPage({
         }}
         newOrderForm={newOrderForm}
         setNewOrderForm={setNewOrderForm}
-        formError={formError}
-        isSubmitting={isSubmitting}
+        formError={formError || optionsError || (!optionsReady ? "Loading order options…" : null)}
+        isSubmitting={isSubmitting || !optionsReady}
         onSubmit={handleCreateOrder}
         studioCustomers={studioCustomers}
         matchingCustomers={matchingCustomers}
@@ -1966,7 +2045,7 @@ export default function OmsPage({
         setShowServicesDropdown={setShowServicesDropdown}
         onToggleService={toggleService}
         calculateOrderPrice={calculateOrderPrice}
-        busyEventDates={orders
+        busyEventDates={schedulingOrders
           .filter((order) => !order.isDeleted && order.orderStatus !== "CANCELLED")
           .flatMap((order) => {
             const main =

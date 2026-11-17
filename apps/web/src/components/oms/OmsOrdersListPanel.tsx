@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { LoadMoreRows } from "@/components/LoadMoreRows";
 import type { Order, OrderStatus } from "@focoman/types";
 import { FileSpreadsheet, Lock, SlidersHorizontal } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -14,6 +15,12 @@ import { STATUS_COLORS, STATUS_LABELS } from "./omsConstants";
 
 interface OmsOrdersListPanelProps {
   studioSlug: string;
+  totalCount?: number;
+  hasMore?: boolean;
+  loadingMore?: boolean;
+  moreError?: string | null;
+  onLoadMore?: () => void;
+  onRetry?: () => void;
   orders: Order[];
   filtered: Order[];
   selected: Order | null;
@@ -38,6 +45,7 @@ interface OmsOrdersListPanelProps {
 
 export function OmsOrdersListPanel({
   studioSlug,
+  totalCount, hasMore = false, loadingMore = false, moreError, onLoadMore, onRetry,
   orders,
   filtered,
   selected,
@@ -124,7 +132,7 @@ export function OmsOrdersListPanel({
                   type="button"
                   className="rounded-lg bg-brand-blue-primary px-3.5 py-1.5 text-xs font-extrabold text-white shadow-2xs transition cursor-pointer"
                 >
-                  Orders ({orders.length})
+                  Orders ({totalCount ?? orders.length})
                 </button>
                 <button
                   type="button"
@@ -137,7 +145,7 @@ export function OmsOrdersListPanel({
             ) : (
               <div className="inline-flex rounded-xl border border-border-default bg-surface-app p-1">
                 <span className="rounded-lg bg-brand-blue-primary px-3.5 py-1.5 text-xs font-extrabold text-white shadow-2xs">
-                  Orders ({orders.length})
+                  Orders ({totalCount ?? orders.length})
                 </span>
               </div>
             )}
@@ -307,9 +315,11 @@ export function OmsOrdersListPanel({
             </button>
           ))
         )}
+        {onLoadMore && <LoadMoreRows hasMore={hasMore} loading={loadingMore} error={moreError} onLoad={onLoadMore} />}
         {refreshError && !isRefreshing && (
           <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-medium text-amber-900" role="alert">
             {refreshError}
+            {onRetry && <button className="ml-2 underline" onClick={onRetry}>Retry</button>}
           </div>
         )}
       </div>

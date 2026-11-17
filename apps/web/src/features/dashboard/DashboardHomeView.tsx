@@ -2,7 +2,9 @@
 
 import { useState, useEffect, useMemo, useCallback } from "react";
 import Link from "next/link";
-import { Order, OrderStatus } from "@focoman/types";
+import { useRouter } from "next/navigation";
+import { LoadMoreRows } from "@/components/LoadMoreRows";
+import { DashboardOrder, OrderStatus } from "@focoman/types";
 import { getStudioCalendarDate } from "@focoman/domain";
 import { FocomanSpinner } from "@/components/FocomanSpinner";
 
@@ -22,7 +24,7 @@ interface PanelCollapseState {
 
 interface DashboardHomeViewProps {
   studioSlug: string;
-  initialOrders: Order[];
+  initialOrders: DashboardOrder[];
   userId?: string;
   planTier?: "FREE" | "PROFESSIONAL" | "COMPLETE";
 }
@@ -101,7 +103,7 @@ function formatChangePercent(
   return { pct: Math.abs(pct), positive: pct >= 0 };
 }
 
-function getOrderDate(order: Order): Date {
+function getOrderDate(order: DashboardOrder): Date {
   const raw = order.createdAt || order.eventDate;
   const d = new Date(raw);
   return isNaN(d.getTime()) ? new Date(0) : d;
@@ -262,8 +264,10 @@ export function DashboardHomeView({
   userId,
   planTier = "COMPLETE",
 }: DashboardHomeViewProps) {
+  const router = useRouter();
+  const [visibleOrderCount, setVisibleOrderCount] = useState(20);
   // ── Orders state ──
-  const [orders, setOrders] = useState<Order[]>(initialOrders);
+  const [orders, setOrders] = useState<DashboardOrder[]>(initialOrders);
 
   // ── Revenue Period filter ──
   const [revPeriod, setRevPeriod] = useState<Period>("last30d");
@@ -429,7 +433,7 @@ export function DashboardHomeView({
   const generateChartData = (
     period: Period,
     customRange: CustomRange,
-    filteredOrders: Order[],
+    filteredOrders: DashboardOrder[],
     isRevenue: boolean,
   ): ChartBucket[] => {
     const buckets: ChartBucket[] = [];
@@ -1129,12 +1133,12 @@ export function DashboardHomeView({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border-divider">
-                    {displayedOrders.slice(0, 20).map((order) => (
+                    {displayedOrders.slice(0, visibleOrderCount).map((order) => (
                       <tr
                         key={order.id}
                         className="hover:bg-surface-app/50 transition cursor-pointer"
                         onClick={() => {
-                          window.location.href = `/${studioSlug}/dashboard/oms?orderId=${order.id}`;
+                          router.push(`/${studioSlug}/dashboard/oms?orderId=${order.id}`);
                         }}
                       >
                         <td className="py-3 px-4 font-mono text-[11px] text-brand-blue-primary font-bold">
@@ -1181,7 +1185,8 @@ export function DashboardHomeView({
                     ))}
                   </tbody>
                 </table>
-                {displayedOrders.length > 20 && (
+                <LoadMoreRows hasMore={displayedOrders.length > visibleOrderCount} loading={false} onLoad={() => setVisibleOrderCount(count => count + 20)} />
+                {displayedOrders.length > visibleOrderCount && (
                   <div className="px-4 py-3 border-t border-border-divider text-center">
                     <Link
                       href={`/${studioSlug}/dashboard/oms`}
