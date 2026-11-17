@@ -32,8 +32,8 @@ const MODULES: ModuleData[] = [
         desc: "Capture leads from Instagram, Google Maps / Search, and your website (or Focoman's hosted enquiry link), plus WhatsApp Business on Professional plans, and convert qualified leads into confirmed orders.",
       },
       {
-        title: "Google Drive Integration & Client Review",
-        desc: "Integrate Google Drive to preview and select photos, add customer comments, review deliverables, and manage approvals directly within FocoMan.",
+        title: "Photos Links, Cloud Storage & Client Review",
+        desc: "Upload compressed proofing galleries directly to Cloud Storage or attach external links (Google Drive, Dropbox, OneDrive). Clients can shortlist favorite photos, leave review comments, and approve selections inside their private tracking link.",
       },
     ],
   },

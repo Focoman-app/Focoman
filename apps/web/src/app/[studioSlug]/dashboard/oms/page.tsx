@@ -46,6 +46,7 @@ import { useStudioWorkspace } from "@/components/StudioWorkspaceProvider";
 import { AddCrewMemberModal } from "@/components/AddCrewMemberModal";
 import { OrderVerticalWorkflow } from "@/components/workflow/OrderVerticalWorkflow";
 import { GoogleDriveDeliverablesSection } from "@/components/deliverables/GoogleDriveDeliverablesSection";
+import { CloudProofingGallerySection } from "@/components/deliverables/CloudProofingGallerySection";
 import {
   DEFAULT_ORDER_FORM,
   exportOmsOrdersToExcel,
@@ -56,7 +57,7 @@ import {
   OmsCustomerAccessCard,
   OmsTurnaroundSlaBanner,
 } from "@/components/oms/OmsOrderSubsections";
-import { parseGoogleDriveUrl } from "@/utils/googleDriveUtils";
+import { parseDeliverableStorageUrl } from "@/utils/googleDriveUtils";
 import { OmsAuditHistorySection } from "@/components/oms/OmsAuditHistorySection";
 import { OmsPaymentSummarySection } from "@/components/oms/OmsPaymentSummarySection";
 import { OmsCreateOrderModal } from "@/components/oms/OmsCreateOrderModal";
@@ -1695,28 +1696,48 @@ export default function OmsPage({
 
       const cleanUrl = input.driveUrl.trim();
       if (cleanUrl) {
-        const parsed = parseGoogleDriveUrl(cleanUrl);
-        if (!parsed.isValidDriveUrl) {
+        const parsed = parseDeliverableStorageUrl(cleanUrl);
+        if (!parsed.isValidUrl) {
           throw new Error(
-            "Please enter a valid Google Drive link (https://drive.google.com/... or https://docs.google.com/...)."
+            "Please enter a valid HTTPS photos or storage link (Google Drive, Dropbox, OneDrive, etc.)."
           );
         }
-        const newItem: OrderDriveDeliverable = {
-          id: `drv_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-          title: input.title.trim() || "Deliverable Link",
-          category: parsed.kind === "FILE" ? "IMAGE" : "FOLDER",
-          driveUrl: parsed.openUrl || cleanUrl,
-          ...(parsed.id ? { driveId: parsed.id } : {}),
-          ...(input.notes?.trim() ? { notes: input.notes.trim() } : {}),
-          linkedTaskId: input.taskId,
-          addedAt: new Date().toISOString(),
-        };
-        const saveRes = await handleSaveDriveDeliverables([
-          ...(selected.driveDeliverables || []),
-          newItem,
-        ]);
+        const existingDeliverables = selected.driveDeliverables || [];
+        const normalizedUrl = (parsed.openUrl || cleanUrl).trim();
+        const existingMatchIdx = existingDeliverables.findIndex(
+          (d) => d.driveUrl.trim() === normalizedUrl && d.linkedTaskId === input.taskId
+        );
+        const updatedList =
+          existingMatchIdx >= 0
+            ? existingDeliverables.map((d, idx) =>
+                idx === existingMatchIdx
+                  ? {
+                      ...d,
+                      title: input.title.trim() || d.title,
+                      ...(input.notes?.trim() ? { notes: input.notes.trim() } : {}),
+                    }
+                  : d
+              )
+            : [
+                ...existingDeliverables,
+                {
+                  id: `drv_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+                  title: input.title.trim() || "Photos Link",
+                  category:
+                    parsed.kind === "FILE"
+                      ? ("IMAGE" as const)
+                      : parsed.kind === "FOLDER"
+                      ? ("FOLDER" as const)
+                      : ("OTHER" as const),
+                  driveUrl: normalizedUrl,
+                  ...(input.notes?.trim() ? { notes: input.notes.trim() } : {}),
+                  linkedTaskId: input.taskId,
+                  addedAt: new Date().toISOString(),
+                },
+              ];
+        const saveRes = await handleSaveDriveDeliverables(updatedList);
         if (!saveRes.success) {
-          throw new Error(saveRes.error || "Failed to save Google Drive link.");
+          throw new Error(saveRes.error || "Failed to save photos link.");
         }
       }
 
@@ -1971,7 +1992,27 @@ export default function OmsPage({
             onSavePricing={() => void handleSavePricing()}
           />
 
-          {/* 5B. Google Drive Deliverables & Client Preview (Starter/Pro or Orders Registered During Entitlement Period) */}
+          {/* 5A. Cloud Proofing Storage & Photo Selection */}
+          <CloudProofingGallerySection
+            studioId={studioSlug}
+            order={selected}
+            getIdToken={getIdToken}
+            onPhotosChanged={(summary) => {
+              setOrders((prev) =>
+                prev.map((o) =>
+                  o.id === selected.id
+                    ? {
+                        ...o,
+                        cloudPhotoCount: summary.cloudPhotoCount,
+                        cloudStorageBytes: summary.cloudStorageBytes,
+                      }
+                    : o
+                )
+              );
+            }}
+          />
+
+          {/* 5B. External Photos & Deliverable Links */}
           {(hasDriveReview ||
             Boolean(selected.hasDriveReviewEntitlement) ||
             Boolean(selected.driveDeliverables && selected.driveDeliverables.length > 0)) && (

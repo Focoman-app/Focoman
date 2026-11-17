@@ -36,6 +36,26 @@ import {
 } from "@/lib/serverAuth";
 import { requireCapability } from "@/lib/entitlementAuth";
 import { DEFAULT_STUDIO_SERVICES, getDefaultStudioPackages } from "@/lib/studioServices";
+import { deleteR2Objects } from "@/services/r2StorageService";
+
+async function purgeStudioR2Objects(studioId: string): Promise<void> {
+  try {
+    const firestore = getFirestoreServerInstance();
+    const snap = await firestore
+      .collection("cloud_photos")
+      .where("studioId", "==", studioId.toLowerCase())
+      .get();
+    if (snap.empty) return;
+    const keys = snap.docs
+      .map((d) => String((d.data() as { objectKey?: string }).objectKey || ""))
+      .filter(Boolean);
+    if (keys.length > 0) {
+      await deleteR2Objects(keys);
+    }
+  } catch (err) {
+    console.warn(`[purgeStudioR2Objects] Warning for studio ${studioId}:`, err);
+  }
+}
 
 /**
  * Server Actions for Studio Registration, Workspaces & Settings
@@ -479,6 +499,7 @@ export async function startNewProfileAfterDeletionAction(
     const deletedStudios = await getDeletedStudiosByOwner(decoded.uid, decoded.email);
 
     for (const ds of deletedStudios) {
+      await purgeStudioR2Objects(ds.id);
       await permanentlyDeleteStudioData(ds.id);
     }
 
@@ -535,6 +556,7 @@ export async function deleteStudioAction(
     }
 
     if (options?.permanent) {
+      await purgeStudioR2Objects(cleanSlug);
       await permanentlyDeleteStudioData(cleanSlug);
     } else {
       await softDeleteStudio(cleanSlug, decoded.uid);
@@ -713,6 +735,7 @@ export async function deleteUserAccountAction(
 
           if (otherActiveOwners.length === 0) {
             if (isPermanent) {
+              await purgeStudioR2Objects(sid);
               await permanentlyDeleteStudioData(sid);
             } else {
               await softDeleteStudio(sid, uid);
@@ -741,6 +764,7 @@ export async function deleteUserAccountAction(
           const sid = ds.id.toLowerCase();
           if (!processedStudios.has(sid)) {
             processedStudios.add(sid);
+            await purgeStudioR2Objects(sid);
             await permanentlyDeleteStudioData(sid);
           }
         }

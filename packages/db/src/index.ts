@@ -14,6 +14,7 @@ import type {
   StudioLead,
   UserLegalConsent,
   DeletedStudioRecoveryInfo,
+  OrderCloudPhoto,
 } from '@focoman/types';
 import { RECOVERY_WINDOW_DAYS } from '@focoman/config';
 
@@ -360,6 +361,7 @@ export async function permanentlyDeleteStudioData(studioId: string): Promise<boo
     'invitations',
     'studio_packages',
     'leads',
+    'cloud_photos',
     'billingDocuments',
     'billingDocumentKeys',
     'billingCounters',
@@ -1694,6 +1696,115 @@ export async function updateStudioLead(
 
 
 export * from './billing';
+
+// ============================================================================
+// 15. CLOUD PROOFING PHOTOS & STORAGE QUOTA LEDGER
+// ============================================================================
+
+export async function getCloudPhotosByOrder(orderId: string): Promise<OrderCloudPhoto[]> {
+  const db = getFirestoreServerInstance();
+  const snap = await db
+    .collection('cloud_photos')
+    .where('orderId', '==', orderId)
+    .get();
+  return snap.docs
+    .map((d) => d.data() as OrderCloudPhoto)
+    .sort((a, b) => a.fileName.localeCompare(b.fileName, undefined, { numeric: true }));
+}
+
+export async function saveCloudPhotosBatch(photos: OrderCloudPhoto[]): Promise<void> {
+  if (photos.length === 0) return;
+  const db = getFirestoreServerInstance();
+  for (let i = 0; i < photos.length; i += 400) {
+    const batch = db.batch();
+    const chunk = photos.slice(i, i + 400);
+    chunk.forEach((photo) => {
+      batch.set(db.collection('cloud_photos').doc(photo.id), photo);
+    });
+    await batch.commit();
+  }
+}
+
+export async function updateCloudPhoto(
+  photoId: string,
+  updates: Partial<Pick<OrderCloudPhoto, 'selected' | 'selectedBy' | 'selectedAt' | 'comment'>>
+): Promise<OrderCloudPhoto | null> {
+  const db = getFirestoreServerInstance();
+  const ref = db.collection('cloud_photos').doc(photoId);
+  const snap = await ref.get();
+  if (!snap.exists) return null;
+  const existing = snap.data() as OrderCloudPhoto;
+  const next: OrderCloudPhoto = {
+    ...existing,
+    ...updates,
+  };
+  await ref.set(next, { merge: true });
+  return next;
+}
+
+export async function deleteCloudPhotosByIds(photoIds: string[]): Promise<void> {
+  if (photoIds.length === 0) return;
+  const db = getFirestoreServerInstance();
+  for (let i = 0; i < photoIds.length; i += 400) {
+    const batch = db.batch();
+    const chunk = photoIds.slice(i, i + 400);
+    chunk.forEach((id) => {
+      batch.delete(db.collection('cloud_photos').doc(id));
+    });
+    await batch.commit();
+  }
+}
+
+export async function adjustStudioStorageUsage(
+  studioId: string,
+  deltaBytes: number,
+  deltaCount: number
+): Promise<{ storageUsedBytes: number; storageFileCount: number }> {
+  const db = getFirestoreServerInstance();
+  const sid = studioId.toLowerCase();
+  const studioRef = db.collection('studios').doc(sid);
+
+  return await db.runTransaction(async (tx) => {
+    const snap = await tx.get(studioRef);
+    const data = snap.exists ? (snap.data() as Studio) : null;
+    const currentBytes = Math.max(0, Number(data?.storageUsedBytes || 0));
+    const currentCount = Math.max(0, Number(data?.storageFileCount || 0));
+    const nextBytes = Math.max(0, currentBytes + deltaBytes);
+    const nextCount = Math.max(0, currentCount + deltaCount);
+
+    if (snap.exists) {
+      tx.update(studioRef, {
+        storageUsedBytes: nextBytes,
+        storageFileCount: nextCount,
+        updatedAt: new Date().toISOString(),
+      });
+    }
+
+    return {
+      storageUsedBytes: nextBytes,
+      storageFileCount: nextCount,
+    };
+  });
+}
+
+export async function syncOrderCloudPhotoSummary(orderId: string): Promise<{
+  cloudPhotoCount: number;
+  cloudStorageBytes: number;
+}> {
+  const db = getFirestoreServerInstance();
+  const photos = await getCloudPhotosByOrder(orderId);
+  const cloudPhotoCount = photos.length;
+  const cloudStorageBytes = photos.reduce((sum, p) => sum + Math.max(0, Number(p.sizeBytes || 0)), 0);
+  await db.collection('orders').doc(orderId).set(
+    {
+      cloudPhotoCount,
+      cloudStorageBytes,
+      updatedAt: new Date().toISOString(),
+    },
+    { merge: true }
+  );
+  return { cloudPhotoCount, cloudStorageBytes };
+}
 
 export { readStudioPage, readOrderListPage, readOrderPageByIds, getDashboardOrderProjection, getOrderScheduleProjection } from './workspacePaging';
 export type { StudioPage, StudioPageInput } from './workspacePaging';

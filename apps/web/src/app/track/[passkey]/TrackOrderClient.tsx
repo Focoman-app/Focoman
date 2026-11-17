@@ -796,7 +796,7 @@ export function TrackOrderClient({ view, rawIdentifier }: TrackOrderClientProps)
                       Family &amp; Friends Access Permissions
                     </h2>
                     <p className="text-xs text-text-secondary">
-                      Grant Google Drive-style access: &quot;Can View&quot; (gallery only) or &quot;Can Edit&quot; (photo selections, comments &amp; reviews).
+                      Grant view or edit access: &quot;Can View&quot; (deliverables &amp; status only) or &quot;Can Edit&quot; (photo shortlists, comments &amp; reviews).
                     </p>
                   </div>
                 </div>
@@ -1000,7 +1000,41 @@ export function TrackOrderClient({ view, rawIdentifier }: TrackOrderClientProps)
             </div>
           </div>
 
-          {/* Google Drive Deliverables & In-App Preview (Starter/Pro or Orders Registered During Entitlement Period) */}
+          {/* Cloud Photo Selection Gallery Card */}
+          {(order.cloudPhotoCount ?? 0) > 0 && (
+            <div className="rounded-3xl border border-brand-orange-soft bg-gradient-to-br from-white via-orange-50/25 to-white p-6 shadow-sm sm:p-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div className="space-y-1.5">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="inline-block rounded-full bg-brand-orange-background border border-brand-orange-soft px-2.5 py-0.5 font-mono text-[10px] font-extrabold uppercase tracking-wider text-brand-orange-primary">
+                    Cloud Proofing Gallery
+                  </span>
+                  <span className="rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 text-[10px] font-bold text-emerald-800">
+                    {order.cloudPhotoCount} Photo{order.cloudPhotoCount === 1 ? "" : "s"} Ready
+                  </span>
+                  {order.cloudReviewSubmittedAt && (
+                    <span className="rounded-full bg-blue-50 border border-blue-200 px-2.5 py-0.5 text-[10px] font-bold text-brand-blue-primary">
+                      Selection Submitted
+                    </span>
+                  )}
+                </div>
+                <h2 className="text-lg font-extrabold text-text-primary">
+                  Select Favorite Photos &amp; Leave Comments
+                </h2>
+                <p className="text-xs text-text-secondary max-w-xl leading-relaxed">
+                  Browse full-screen previews, shortlist your favorite frames for album design or retouching, add notes on specific photos, and submit your final selection directly to {order.studioName}.
+                </p>
+              </div>
+              <Link
+                href={`/track/${encodeURIComponent(rawIdentifier)}/gallery`}
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-brand-orange-primary px-5 py-3 text-xs font-bold text-white shadow-sm hover:bg-orange-600 transition shrink-0"
+              >
+                <span>Open Photo Selection Gallery ({order.cloudPhotoCount})</span>
+                <span>→</span>
+              </Link>
+            </div>
+          )}
+
+          {/* External Photos & Deliverable Links */}
           {(order.hasDriveReview || driveDeliverables.length > 0) && (
             <GoogleDriveDeliverablesSection
               orderId={order.id}

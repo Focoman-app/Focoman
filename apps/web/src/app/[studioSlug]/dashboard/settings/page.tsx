@@ -852,26 +852,53 @@ function SettingsPageContent() {
             </div>
 
             {(() => {
+              const isActiveTrial = Boolean(
+                studio.planInfo?.isTrial &&
+                  studio.planInfo?.trialExpiresAt &&
+                  new Date() <= new Date(studio.planInfo.trialExpiresAt)
+              );
               const planTitle =
                 effectiveTier === "COMPLETE"
-                  ? "Professional Plan (₹1,999/month)"
+                  ? isActiveTrial
+                    ? "30-Day Free Trial (Professional Features + 10 GB Storage)"
+                    : "Professional Plan (₹1,999/month)"
                   : effectiveTier === "PROFESSIONAL"
                   ? "Starter Plan (₹999/month)"
                   : "Free Plan (₹0/forever)";
 
               const planItems: Array<{ title: string; description: string }> = [
                 {
-                  title: "OMS Basic — Order Management & Lifecycle Pipeline",
+                  title: "OMS Basic: Order Management & Lifecycle Pipeline",
                   description:
                     "Create and track confirmed orders end-to-end with a visual order lifecycle pipeline from booking to final delivery.",
                 },
               ];
 
+              if (effectiveTier === "COMPLETE" || effectiveTier === "PROFESSIONAL") {
+                const storageTitle =
+                  effectiveTier === "COMPLETE"
+                    ? isActiveTrial
+                      ? "10 GB Cloud Proofing Storage (30-Day Trial)"
+                      : "50 GB Cloud Proofing Storage"
+                    : "20 GB Cloud Proofing Storage";
+                const storageDesc =
+                  effectiveTier === "COMPLETE"
+                    ? isActiveTrial
+                      ? "Built-in Cloud Proofing Storage (10 GB) included during your 30-day free trial for compressed client selection galleries and review comments."
+                      : "Built-in Cloud Proofing Storage (50 GB) for compressed client photo selection galleries, shareable links, and review comments."
+                    : "Built-in Cloud Proofing Storage (20 GB) for compressed client photo selection galleries, shareable links, and review comments.";
+
+                planItems.push({
+                  title: storageTitle,
+                  description: storageDesc,
+                });
+              }
+
               if (effectiveFeatures.driveReview) {
                 planItems.push({
-                  title: "Google Drive Client Review",
+                  title: "Photos & Deliverable Links Review",
                   description:
-                    "Link Google Drive folders for in-app photo previews, client photo selections, and proofing comments.",
+                    "Share links from Google Drive, Dropbox, OneDrive, or any client gallery with photo shortlist numbers and proofing comments.",
                 });
               }
 

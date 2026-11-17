@@ -40,7 +40,7 @@ export function PricingTwoPanels({ hasMultiStudios = false }: PricingTwoPanelsPr
                 Basic Order Management
               </h2>
               <p className="mt-1.5 text-xs sm:text-sm text-[#57534E] leading-relaxed">
-                Essential Order Management System for photography and videography studios.
+                Essential Order Management System for photography and videography studios to create, track, and manage confirmed orders.
               </p>
             </div>
 
@@ -100,7 +100,7 @@ export function PricingTwoPanels({ hasMultiStudios = false }: PricingTwoPanelsPr
                 Advanced OMS, CRM and Studio Operations
               </h2>
               <p className="mt-1.5 text-xs sm:text-sm text-[#57534E] leading-relaxed">
-                Includes everything in the Free plan, plus Google Drive preview and selection, Instagram &amp; Website / Google Maps lead capture, customer management, studio operations, and Basic Business Dashboard.
+                Includes everything in the Free plan, plus 20 GB Cloud Proofing Storage, Shareable Links &amp; Client Photo Selection, Instagram &amp; Website / Google Maps lead capture, CRM, ERP, and Basic Business Dashboard.
               </p>
             </div>
 
@@ -113,6 +113,9 @@ export function PricingTwoPanels({ hasMultiStudios = false }: PricingTwoPanelsPr
                   <span className="font-mono text-xs text-[#57534E] font-medium">/month</span>
                 </div>
               </div>
+              <span className="rounded-md border border-brand-orange-soft bg-white px-2 py-0.5 font-mono text-[10px] font-bold text-brand-orange-primary">
+                20 GB Cloud
+              </span>
             </div>
 
             {/* Feature Overview */}
@@ -126,7 +129,7 @@ export function PricingTwoPanels({ hasMultiStudios = false }: PricingTwoPanelsPr
                     ✓
                   </span>
                   <span className="text-[#1C1917] font-medium leading-tight">
-                    Google Drive Photo In-App Preview and Selection
+                    20 GB Cloud Proofing Storage, Shareable Links &amp; Client Photo Selection
                   </span>
                 </div>
 
@@ -193,10 +196,10 @@ export function PricingTwoPanels({ hasMultiStudios = false }: PricingTwoPanelsPr
 
             <div>
               <h2 className="retro-serif-heading text-2xl sm:text-3xl font-black text-[#1C1917]">
-                WhatsApp Operations and Business Reports
+                Cloud Proofing, WhatsApp &amp; Business Reports
               </h2>
               <p className="mt-1.5 text-xs sm:text-sm text-[#57534E] leading-relaxed">
-                Includes everything in the ₹999 plan, plus WhatsApp operations, interactive studio bot, pre-anniversary memory reminders for repeat leads, and exportable business reports.
+                Includes everything in the ₹999 plan, plus 50 GB Cloud Proofing Storage &amp; Client Photo Selection Gallery, WhatsApp operations, interactive studio bot, pre-anniversary reminders, and exportable business reports.
               </p>
             </div>
 
@@ -209,6 +212,9 @@ export function PricingTwoPanels({ hasMultiStudios = false }: PricingTwoPanelsPr
                   <span className="font-mono text-xs text-[#57534E] font-medium">/month</span>
                 </div>
               </div>
+              <span className="rounded-md border border-brand-blue-soft bg-brand-blue-background px-2 py-0.5 font-mono text-[10px] font-bold text-brand-blue-primary">
+                50 GB Cloud
+              </span>
             </div>
 
             {/* Feature Overview */}
@@ -217,6 +223,15 @@ export function PricingTwoPanels({ hasMultiStudios = false }: PricingTwoPanelsPr
                 Everything in ₹999 Plan, plus:
               </span>
               <div className="space-y-2.5 text-xs text-[#57534E]">
+                <div className="flex items-start gap-2.5">
+                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-[11px] font-extrabold text-emerald-700 mt-0.5 border border-emerald-300">
+                    ✓
+                  </span>
+                  <span className="text-[#1C1917] font-medium leading-tight">
+                    50 GB Cloud Proofing Storage &amp; Client Photo Selection Gallery
+                  </span>
+                </div>
+
                 <div className="flex items-start gap-2.5">
                   <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-[11px] font-extrabold text-emerald-700 mt-0.5 border border-emerald-300">
                     ✓

@@ -34,7 +34,7 @@ export function StructuredData() {
             "name": "Free",
             "price": "0",
             "priceCurrency": "INR",
-            "description": "Essential Order Management System for photography studios with unlimited orders and events.",
+            "description": "Essential Order Management System (OMS) with unlimited confirmed orders.",
           },
           {
             "@type": "Offer",
@@ -42,7 +42,7 @@ export function StructuredData() {
             "price": "999",
             "priceCurrency": "INR",
             "billingDuration": "P1M",
-            "description": "Google Drive photo preview and selection, Instagram & Website / Google Maps lead capture, CRM, ERP, and a basic business dashboard.",
+            "description": "20 GB Cloud Proofing Storage, Shareable Links and Client Photo Selection, Instagram & Website / Google Maps lead capture, CRM, ERP, and basic business dashboard.",
           },
           {
             "@type": "Offer",
@@ -50,7 +50,7 @@ export function StructuredData() {
             "price": "1999",
             "priceCurrency": "INR",
             "billingDuration": "P1M",
-            "description": "WhatsApp Business lead capture, WhatsApp Operations and Bot, pre-anniversary memory reminders for repeat leads, invoices and receipts, and advanced reports with exports.",
+            "description": "50 GB Cloud Proofing Storage & photo selection gallery, WhatsApp Business lead capture, WhatsApp Operations and Bot, pre-anniversary reminders, invoices and receipts, and advanced reports.",
           },
         ],
       },

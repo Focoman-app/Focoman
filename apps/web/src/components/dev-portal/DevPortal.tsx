@@ -98,9 +98,54 @@ type EmailProviders = {
   resend: ResendStatus | null;
 };
 
+type StorageMetrics = {
+  r2Configured: boolean;
+  bucketName: string | null;
+  hasPublicBaseUrl: boolean;
+  totalUsedBytes: number;
+  totalUsedGb: number;
+  totalAllocatedBytes: number;
+  totalAllocatedGb: number;
+  totalStoredPhotos: number;
+  studiosUsingStorage: number;
+  studiosNearCap: number;
+  studiosAtCap: number;
+  planBreakdown: {
+    free: number;
+    trial: number;
+    starter: number;
+    professional: number;
+  };
+  costs: {
+    usdPerGbMonth: number;
+    freeTierGb: number;
+    usdToInrRate: number;
+    billableUsedGb: number;
+    estimatedMonthlyUsd: number;
+    estimatedMonthlyInr: number;
+    maxAllocatedLiabilityUsd: number;
+    maxAllocatedLiabilityInr: number;
+    egressCostUsd: number;
+  };
+  caps: {
+    platformCapGb: number;
+    platformCapUsedPercent: number;
+    capStatus: "HEALTHY" | "WARNING" | "CRITICAL";
+    maxPhotoMb: number;
+    maxPhotosPerOrder: number;
+    tierCapsGb: {
+      free: number;
+      trial: number;
+      starter: number;
+      professional: number;
+    };
+  };
+};
+
 type MetricsResponse = {
   generatedAt: string;
   metrics: Metrics;
+  storage?: StorageMetrics;
   vasInquiryLogs?: VasInquiryLog[];
   emailProviders?: EmailProviders;
   domainExpiration?: DomainExpirationInfo;
@@ -229,6 +274,10 @@ function SignIn() {
 
 function MetricCard({ label, value, note }: { label: string; value: number | null | undefined; note: string }) {
   return <article className={styles.metric}><p>{label}</p><strong>{value == null ? "Unavailable" : value.toLocaleString("en-IN")}</strong><small>{note}</small></article>;
+}
+
+function TextMetricCard({ label, value, note }: { label: string; value: string; note: string }) {
+  return <article className={styles.metric}><p>{label}</p><strong>{value}</strong><small>{note}</small></article>;
 }
 
 function Placeholder({ title, text }: { title: string; text: string }) {
@@ -416,8 +465,160 @@ export function DevPortal({ authenticated, preview }: { authenticated: boolean; 
           <VasInquiryLogsPanel logs={data?.vasInquiryLogs} />
           <div className={styles.callout}><Activity size={18}/><div><b><span aria-hidden="true">🔒 </span>Thoughtful by design.</b><p>These are record counts, not active users or studio earnings. No customer identities are shown.</p></div></div>
         </>}
-        {tab === "usage" && <><Placeholder title="Requests & activity" text="Usage metrics are not connected. Request volume, active studios, memory and per-studio usage need a reliable monitoring source."/><Placeholder title="Storage" text="Storage usage and limits are unavailable until a verified source is connected."/></>}
-        {tab === "cloud" && <><Placeholder title="Google Cloud" text="Cloud usage, billing, budgets and limits are not connected. Configure a read-only monitoring and billing integration to view actual values."/><Placeholder title="AWS" text="No AWS cost integration is connected."/></>}
+        {tab === "usage" && <>
+          <Placeholder title="Requests & activity" text="Request volume and active session telemetry are not connected yet." />
+
+          <div className={styles.sectionLabel} style={{ marginTop: "24px" }}>
+            <span>CLOUD PROOFING STORAGE USAGE &amp; STUDIO QUOTA CAPS</span>
+            <span>{data?.storage?.r2Configured ? "R2 CONNECTED" : "LEDGER ACTIVE (PENDING R2 ENV)"}</span>
+          </div>
+
+          <div className={styles.grid}>
+            <TextMetricCard
+              label="Total Cloud Storage Used"
+              value={
+                data?.storage
+                  ? data.storage.totalUsedBytes < 1024 * 1024 * 1024
+                    ? `${(data.storage.totalUsedBytes / (1024 * 1024)).toFixed(1)} MB`
+                    : `${data.storage.totalUsedGb.toFixed(2)} GB`
+                  : "0 MB"
+              }
+              note={`Allocated across studios: ${data?.storage?.totalAllocatedGb ?? 0} GB`}
+            />
+            <MetricCard
+              label="Total Proofing Photos"
+              value={data?.storage?.totalStoredPhotos ?? 0}
+              note={`${data?.storage?.studiosUsingStorage ?? 0} studio(s) with uploaded photos`}
+            />
+            <MetricCard
+              label="Studios Near Cap (>=80%)"
+              value={data?.storage?.studiosNearCap ?? 0}
+              note={`${data?.storage?.studiosAtCap ?? 0} studio(s) currently at 100% cap`}
+            />
+            <TextMetricCard
+              label="Platform Safety Cap"
+              value={`${data?.storage?.caps.platformCapUsedPercent ?? 0}%`}
+              note={`${data?.storage?.totalUsedGb ?? 0} GB / ${data?.storage?.caps.platformCapGb ?? 500} GB global cap`}
+            />
+          </div>
+
+          <section className={styles.panel} style={{ marginTop: "16px" }}>
+            <div className={styles.panelTitle}>
+              <span>Active Studio Storage Quota Tiers &amp; Enforcement Caps</span>
+              <span
+                className={styles.badge}
+                style={{
+                  color: data?.storage?.caps.capStatus === "CRITICAL" ? "#991b1b" : data?.storage?.caps.capStatus === "WARNING" ? "#92400e" : "#166534",
+                  borderColor: data?.storage?.caps.capStatus === "CRITICAL" ? "#fecaca" : data?.storage?.caps.capStatus === "WARNING" ? "#fde68a" : "#bbf7d0",
+                  background: data?.storage?.caps.capStatus === "CRITICAL" ? "#fef2f2" : data?.storage?.caps.capStatus === "WARNING" ? "#fffbeb" : "#f0fdf4",
+                }}
+              >
+                {data?.storage?.caps.capStatus ?? "HEALTHY"}
+              </span>
+            </div>
+            <div style={{ padding: "20px", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "16px" }}>
+              <div>
+                <p style={{ margin: "0 0 4px", fontSize: "11px", color: "#78716c", fontWeight: 700 }}>30-DAY FREE TRIAL (10 GB CAP)</p>
+                <strong style={{ fontSize: "14px", color: "#1c1917" }}>{data?.storage?.planBreakdown.trial ?? 0} studios</strong>
+                <p style={{ margin: "2px 0 0", fontSize: "11px", color: "#78716c" }}>Max R2 cost ~₹13/mo per full studio</p>
+              </div>
+              <div>
+                <p style={{ margin: "0 0 4px", fontSize: "11px", color: "#78716c", fontWeight: 700 }}>STARTER ₹999 (20 GB CAP)</p>
+                <strong style={{ fontSize: "14px", color: "#1c1917" }}>{data?.storage?.planBreakdown.starter ?? 0} studios</strong>
+                <p style={{ margin: "2px 0 0", fontSize: "11px", color: "#78716c" }}>Max R2 cost ~₹26/mo (~2.6% of fee)</p>
+              </div>
+              <div>
+                <p style={{ margin: "0 0 4px", fontSize: "11px", color: "#78716c", fontWeight: 700 }}>PROFESSIONAL ₹1,999 (50 GB CAP)</p>
+                <strong style={{ fontSize: "14px", color: "#1c1917" }}>{data?.storage?.planBreakdown.professional ?? 0} studios</strong>
+                <p style={{ margin: "2px 0 0", fontSize: "11px", color: "#78716c" }}>Max R2 cost ~₹65/mo (~3.2% of fee)</p>
+              </div>
+              <div>
+                <p style={{ margin: "0 0 4px", fontSize: "11px", color: "#78716c", fontWeight: 700 }}>FREE PLAN (0 GB CLOUD)</p>
+                <strong style={{ fontSize: "14px", color: "#1c1917" }}>{data?.storage?.planBreakdown.free ?? 0} studios</strong>
+                <p style={{ margin: "2px 0 0", fontSize: "11px", color: "#78716c" }}>External links optional; ₹0 storage cost</p>
+              </div>
+            </div>
+          </section>
+        </>}
+        {tab === "cloud" && <>
+          <div className={styles.sectionLabel}>
+            <span>CLOUDFLARE R2 OBJECT STORAGE &amp; MONTHLY COST CAP</span>
+            <span>{data?.storage?.r2Configured ? "CONFIGURED (S3 PRESIGNED)" : "PENDING R2 CREDENTIALS"}</span>
+          </div>
+
+          <div className={styles.grid}>
+            <TextMetricCard
+              label="Estimated Monthly R2 Cost"
+              value={`₹${(data?.storage?.costs.estimatedMonthlyInr ?? 0).toFixed(2)}`}
+              note={`$${(data?.storage?.costs.estimatedMonthlyUsd ?? 0).toFixed(2)}/mo · first ${data?.storage?.costs.freeTierGb ?? 10} GB free`}
+            />
+            <TextMetricCard
+              label="Egress Bandwidth Cost"
+              value="₹0.00"
+              note="$0/GB Cloudflare R2 zero-egress galleries"
+            />
+            <TextMetricCard
+              label="Max Quota Liability (100%)"
+              value={`₹${(data?.storage?.costs.maxAllocatedLiabilityInr ?? 0).toFixed(2)}`}
+              note={`If all ${data?.storage?.totalAllocatedGb ?? 0} GB allocated quotas fill`}
+            />
+            <TextMetricCard
+              label="Global R2 Cap Utilization"
+              value={`${data?.storage?.totalUsedGb ?? 0} / ${data?.storage?.caps.platformCapGb ?? 500} GB`}
+              note={`Safety cap status: ${data?.storage?.caps.capStatus ?? "HEALTHY"}`}
+            />
+          </div>
+
+          <section className={styles.panel} style={{ marginTop: "16px", marginBottom: "20px" }}>
+            <div className={styles.panelTitle}>
+              <span>Cloudflare R2 Configuration, Unit Economics &amp; Hard Caps</span>
+              <span
+                className={styles.badge}
+                style={{
+                  color: data?.storage?.r2Configured ? "#166534" : "#92400e",
+                  borderColor: data?.storage?.r2Configured ? "#bbf7d0" : "#fde68a",
+                  background: data?.storage?.r2Configured ? "#f0fdf4" : "#fffbeb",
+                }}
+              >
+                {data?.storage?.r2Configured ? "BUCKET CONNECTED" : "AWAITING R2 ENV"}
+              </span>
+            </div>
+            <div style={{ padding: "20px", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "16px", borderBottom: "1px solid #e6e0d4" }}>
+              <div>
+                <p style={{ margin: "0 0 4px", fontSize: "11px", color: "#78716c", fontWeight: 700 }}>BUCKET &amp; DELIVERY</p>
+                <strong style={{ fontSize: "13px", color: "#1c1917" }}>
+                  {data?.storage?.bucketName || "Not configured (R2_BUCKET_NAME)"}
+                </strong>
+                <p style={{ margin: "2px 0 0", fontSize: "11px", color: "#78716c" }}>
+                  {data?.storage?.hasPublicBaseUrl ? "Custom CDN public base URL active" : "Signed private GET/PUT URLs (S3 v4)"}
+                </p>
+              </div>
+              <div>
+                <p style={{ margin: "0 0 4px", fontSize: "11px", color: "#78716c", fontWeight: 700 }}>R2 PRICING MODEL</p>
+                <strong style={{ fontSize: "13px", color: "#1c1917" }}>
+                  $0.015 / GB / mo (~₹1.29/GB)
+                </strong>
+                <p style={{ margin: "2px 0 0", fontSize: "11px", color: "#16a34a" }}>
+                  10 GB/mo free tier · 10M Class B reads/mo free
+                </p>
+              </div>
+              <div>
+                <p style={{ margin: "0 0 4px", fontSize: "11px", color: "#78716c", fontWeight: 700 }}>UPLOAD SAFETY CAPS</p>
+                <strong style={{ fontSize: "13px", color: "#1c1917" }}>
+                  {data?.storage?.caps.maxPhotoMb ?? 10} MB / photo · {data?.storage?.caps.maxPhotosPerOrder ?? 2000} / order
+                </strong>
+                <p style={{ margin: "2px 0 0", fontSize: "11px", color: "#78716c" }}>
+                  Browser resizes to 2048px WebP (~300 KB avg)
+                </p>
+              </div>
+            </div>
+            <div style={{ padding: "16px 20px", background: "#faf7f2", fontSize: "12px", color: "#57534e" }}>
+              Hard quota enforcement blocks uploads once a studio reaches its plan limit (10 GB Trial / 20 GB Starter / 50 GB Professional). Global alert threshold configurable via <code style={{ fontFamily: "monospace" }}>R2_PLATFORM_CAP_GB</code> (currently {data?.storage?.caps.platformCapGb ?? 500} GB).
+            </div>
+          </section>
+
+          <Placeholder title="Google Cloud" text="GCP billing budgets and limits are not connected. Configure a read-only billing export to view actual GCP spend." />
+        </>}
         {tab === "email" && <>
           {/* Brevo Provider Section */}
           <div className={styles.sectionLabel}>

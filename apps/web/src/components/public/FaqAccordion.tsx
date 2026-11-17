@@ -15,9 +15,9 @@ const FAQS: FaqItem[] = [
     a: "Yes. Basic Order Management is ₹0 forever with no order limits or time limits. You can create confirmed shoots, track production workflow from shoot to final delivery, assign basic customer details, and record advance payments and balance due without any subscription fee.",
   },
   {
-    category: "Google Drive and Review",
+    category: "Photos, Cloud Storage and Review",
     q: "Does Focoman store my raw photos and videos?",
-    a: "No. Your files remain safely stored in your own Google Drive. With Advanced OMS in the ₹999/month plan, Focoman connects to your Google Drive folders so your clients can view in-app previews, mark photos as selected or rejected, and leave review comments directly inside their private tracking link.",
+    a: "Your original full-size RAW camera files always stay safely on your studio hard drives or your own external links (Google Drive, Dropbox, OneDrive, or iCloud). Focoman includes built-in Cloud Proofing Storage (10 GB during the 30-day Free Trial, 20 GB on Starter, and 50 GB on Professional) so clients can browse compressed preview galleries, select favorite photos, and leave review comments directly inside their private tracking link.",
   },
   {
     category: "Team and Scheduling",

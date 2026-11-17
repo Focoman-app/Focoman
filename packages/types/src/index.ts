@@ -237,6 +237,25 @@ export interface OrderDriveDeliverable {
   addedBy?: string;
 }
 
+export interface OrderCloudPhoto {
+  id: string;
+  orderId: string;
+  studioId: string;
+  fileName: string;
+  displayName: string;
+  objectKey: string;
+  mimeType: string;
+  sizeBytes: number;
+  width?: number;
+  height?: number;
+  selected?: boolean;
+  selectedBy?: string;
+  selectedAt?: string;
+  comment?: string;
+  uploadedAt: string;
+  uploadedBy?: string;
+}
+
 export interface CustomerTrackingView {
   order: {
     id: string;
@@ -279,6 +298,11 @@ export interface CustomerTrackingView {
     remainingAmount: number;
     installments?: OrderInstallment[];
     driveDeliverables?: OrderDriveDeliverable[];
+    cloudPhotoCount?: number;
+    cloudStorageBytes?: number;
+    cloudReviewApproved?: boolean;
+    cloudReviewNotes?: string;
+    cloudReviewSubmittedAt?: string;
     paymentStatus: PaymentStatus;
     orderStatus: OrderStatus;
     staffEmails?: string[];
@@ -412,6 +436,8 @@ export interface Studio extends SoftDeletable {
   };
   serviceCrewMapping?: Record<string, string[]>;
   billingProfile?: StudioBillingProfile;
+  storageUsedBytes?: number;
+  storageFileCount?: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -607,6 +633,11 @@ export interface Order extends SoftDeletable {
   collaborators?: OrderCollaborator[];
   hasDriveReviewEntitlement?: boolean;
   driveDeliverables?: OrderDriveDeliverable[];
+  cloudPhotoCount?: number;
+  cloudStorageBytes?: number;
+  cloudReviewApproved?: boolean;
+  cloudReviewNotes?: string;
+  cloudReviewSubmittedAt?: string;
   createdBy?: string;
   createdByRole?: string;
   updatedBy?: string;

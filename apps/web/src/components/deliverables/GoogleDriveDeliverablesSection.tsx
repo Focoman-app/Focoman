@@ -7,22 +7,19 @@ import {
   Film,
   FileText,
   ExternalLink,
-  Eye,
-  EyeOff,
   Plus,
   Trash2,
   CheckCircle2,
   RotateCcw,
-  Info,
   Link2,
 } from "lucide-react";
 import type { OrderDriveDeliverable } from "@focoman/types";
-import { parseGoogleDriveUrl } from "@/utils/googleDriveUtils";
+import { parseDeliverableStorageUrl } from "@/utils/googleDriveUtils";
 
 export interface GoogleDriveDeliverablesSectionProps {
   orderId: string;
   deliverables: OrderDriveDeliverable[];
-  /** True for Studio Owner/Staff in OMS so they can add/remove Drive deliverable links */
+  /** True for Studio Owner/Staff in OMS so they can add/remove storage deliverable links */
   canManageLinks?: boolean;
   /** True for Primary Customer or Editor collaborator on /track/[passkey] to approve or request changes */
   canSubmitClientReview?: boolean;
@@ -38,7 +35,7 @@ export interface GoogleDriveDeliverablesSectionProps {
 }
 
 const CATEGORY_LABELS: Record<OrderDriveDeliverable["category"], string> = {
-  FOLDER: "Google Drive Folder",
+  FOLDER: "Photos Folder Link",
   IMAGE: "Photo / Image Set",
   VIDEO: "Video / Film",
   PDF: "Album Proof / PDF",
@@ -73,7 +70,6 @@ export function GoogleDriveDeliverablesSection({
   onSaveDeliverables,
   onSubmitClientReview,
 }: GoogleDriveDeliverablesSectionProps) {
-  const [activePreviewId, setActivePreviewId] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [newUrl, setNewUrl] = useState("");
@@ -97,20 +93,28 @@ export function GoogleDriveDeliverablesSection({
     const cleanTitle = newTitle.trim();
     const cleanUrl = newUrl.trim();
     if (!cleanTitle || !cleanUrl) {
-      setErrorMsg("Please provide both a Deliverable Title and a Google Drive link.");
+      setErrorMsg("Please provide both a Deliverable Title and a Photos / Storage link.");
       return;
     }
 
-    const parsed = parseGoogleDriveUrl(cleanUrl);
+    const parsed = parseDeliverableStorageUrl(cleanUrl);
+    if (!parsed.isValidUrl) {
+      setErrorMsg("Please enter a valid HTTPS link (e.g. Google Drive, Dropbox, OneDrive, etc.).");
+      return;
+    }
+
     const detectedCategory: OrderDriveDeliverable["category"] =
-      parsed.kind === "FILE" ? "IMAGE" : "FOLDER";
+      parsed.kind === "FILE"
+        ? "IMAGE"
+        : parsed.kind === "FOLDER"
+        ? "FOLDER"
+        : "OTHER";
 
     const item: OrderDriveDeliverable = {
       id: `drv_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
       title: cleanTitle,
       category: detectedCategory,
       driveUrl: parsed.openUrl || cleanUrl,
-      ...(parsed.id ? { driveId: parsed.id } : {}),
       ...(newNotes.trim() ? { notes: newNotes.trim() } : {}),
       addedAt: new Date().toISOString(),
     };
@@ -119,7 +123,7 @@ export function GoogleDriveDeliverablesSection({
     try {
       const res = await onSaveDeliverables([...deliverables, item]);
       if (!res.success) {
-        setErrorMsg(res.error || "Failed to add Google Drive link.");
+        setErrorMsg(res.error || "Failed to add photos link.");
       } else {
         setNewTitle("");
         setNewUrl("");
@@ -140,8 +144,6 @@ export function GoogleDriveDeliverablesSection({
       const res = await onSaveDeliverables(next);
       if (!res.success) {
         setErrorMsg(res.error || "Failed to remove link.");
-      } else if (activePreviewId === id) {
-        setActivePreviewId(null);
       }
     } finally {
       setSaving(false);
@@ -188,10 +190,10 @@ export function GoogleDriveDeliverablesSection({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h4 className="text-xs font-bold uppercase tracking-wider text-text-primary">
-            Google Drive Deliverables &amp; In-App Preview
+            Photos &amp; Deliverables Links
           </h4>
           <p className="mt-0.5 text-xs text-text-secondary">
-            Preview photos, videos, album PDFs, or folders directly via Google Drive viewer, shortlist photo filenames, and submit client review approvals.
+            Share links from Google Drive, Dropbox, OneDrive, or any cloud gallery, shortlist photo filenames, and submit client review approvals.
           </p>
         </div>
 
@@ -202,19 +204,9 @@ export function GoogleDriveDeliverablesSection({
             className="inline-flex items-center gap-1.5 rounded-xl bg-brand-blue-primary px-3 py-1.5 text-xs font-bold text-white hover:bg-brand-blue-hover transition shadow-2xs"
           >
             <Plus className="h-3.5 w-3.5" />
-            <span>{showAddForm ? "Cancel" : "Add Drive Link"}</span>
+            <span>{showAddForm ? "Cancel" : "Add Photos Link"}</span>
           </button>
         )}
-      </div>
-
-      {/* Zero-Server-Bandwidth & Access Notice */}
-      <div className="flex items-start gap-2.5 rounded-xl border border-border-default bg-surface-app/70 px-3.5 py-2.5 text-[11px] text-text-secondary">
-        <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-brand-blue-primary" />
-        <div>
-          Media streams directly from Google Drive using your browser internet connection when you click{" "}
-          <span className="font-semibold text-text-primary">Preview in App</span>. If a file or folder is private, sign into the authorized Google account or use{" "}
-          <span className="font-semibold text-text-primary">Open in Google Drive</span>.
-        </div>
       </div>
 
       {errorMsg && (
@@ -247,14 +239,14 @@ export function GoogleDriveDeliverablesSection({
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div>
                 <label className="mb-1 block text-[11px] font-semibold text-text-secondary">
-                  Google Drive Link *
+                  Photos / Storage Link *
                 </label>
                 <input
                   type="url"
                   required
                   value={newUrl}
                   onChange={(e) => setNewUrl(e.target.value)}
-                  placeholder="https://drive.google.com/drive/folders/..."
+                  placeholder="https://drive.google.com/... or https://dropbox.com/..."
                   className="w-full rounded-xl border border-border-default bg-white px-3 py-1.5 text-xs text-text-primary placeholder:text-text-tertiary focus:border-brand-blue-primary focus:outline-none focus:ring-1 focus:ring-brand-blue-primary"
                 />
               </div>
@@ -287,7 +279,7 @@ export function GoogleDriveDeliverablesSection({
               disabled={saving}
               className="rounded-xl bg-brand-blue-primary px-3.5 py-1.5 text-xs font-bold text-white hover:bg-brand-blue-hover disabled:opacity-50 transition shadow-2xs"
             >
-              {saving ? "Saving..." : "Save Deliverable Link"}
+              {saving ? "Saving..." : "Save Photos Link"}
             </button>
           </div>
         </form>
@@ -297,14 +289,13 @@ export function GoogleDriveDeliverablesSection({
       {deliverables.length === 0 ? (
         <div className="rounded-xl border border-dashed border-border-default bg-surface-app/60 px-4 py-8 text-center text-xs text-text-tertiary">
           {canManageLinks
-            ? "No Google Drive deliverable links added yet. Click 'Add Drive Link' to share photos, videos, or album proofs with the client."
-            : "The studio has not shared any Google Drive deliverables for preview yet."}
+            ? "No photos or deliverable links added yet. Click 'Add Photos Link' to share Google Drive, Dropbox, OneDrive, or gallery links with the client."
+            : "The studio has not shared any photos or deliverable links yet."}
         </div>
       ) : (
         <div className="space-y-3">
           {deliverables.map((item) => {
-            const parsed = parseGoogleDriveUrl(item.driveUrl);
-            const isPreviewOpen = activePreviewId === item.id;
+            const parsed = parseDeliverableStorageUrl(item.driveUrl);
             const feedbackVal =
               feedbackDrafts[item.id] !== undefined
                 ? feedbackDrafts[item.id]
@@ -330,7 +321,9 @@ export function GoogleDriveDeliverablesSection({
                           {item.title}
                         </span>
                         <span className="rounded-md border border-border-default bg-surface-app px-2 py-0.5 text-[10px] font-semibold text-text-secondary">
-                          {CATEGORY_LABELS[item.category]}
+                          {parsed.isValidUrl && parsed.providerLabel !== "Storage Link"
+                            ? parsed.providerLabel
+                            : CATEGORY_LABELS[item.category]}
                         </span>
                         {item.clientApproved === true && (
                           <span className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-800">
@@ -379,40 +372,14 @@ export function GoogleDriveDeliverablesSection({
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2">
-                    {parsed.canEmbedPreview && parsed.previewEmbedUrl && (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setActivePreviewId(isPreviewOpen ? null : item.id)
-                        }
-                        className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold transition shadow-2xs ${
-                          isPreviewOpen
-                            ? "border-brand-blue-primary bg-brand-blue-soft text-brand-blue-primary font-bold"
-                            : "border-border-default bg-white text-text-primary hover:bg-surface-app"
-                        }`}
-                      >
-                        {isPreviewOpen ? (
-                          <>
-                            <EyeOff className="h-3.5 w-3.5" />
-                            <span>Close Preview</span>
-                          </>
-                        ) : (
-                          <>
-                            <Eye className="h-3.5 w-3.5" />
-                            <span>Preview in App</span>
-                          </>
-                        )}
-                      </button>
-                    )}
-
                     <a
                       href={parsed.openUrl || item.driveUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 rounded-xl border border-border-default bg-white px-3 py-1.5 text-xs font-semibold text-text-primary hover:bg-surface-app transition shadow-2xs"
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-brand-blue-primary bg-blue-50/50 px-3 py-1.5 text-xs font-bold text-brand-blue-primary hover:bg-blue-100 transition shadow-2xs"
                     >
                       <ExternalLink className="h-3.5 w-3.5" />
-                      <span>Open in Google Drive</span>
+                      <span>Open Photos Link</span>
                     </a>
 
                     {canManageLinks && onSaveDeliverables && (
@@ -429,41 +396,10 @@ export function GoogleDriveDeliverablesSection({
                   </div>
                 </div>
 
-                {/* Lazy On-Demand Google Drive Native Embed Viewer */}
-                {isPreviewOpen && parsed.previewEmbedUrl && (
-                  <div className="space-y-2 pt-2">
-                    <div className="overflow-hidden rounded-xl border border-border-default bg-surface-app shadow-inner">
-                      <iframe
-                        src={parsed.previewEmbedUrl}
-                        title={`Google Drive Preview - ${item.title}`}
-                        className="h-[420px] w-full border-0 bg-white"
-                        loading="lazy"
-                        allow="autoplay; fullscreen"
-                        referrerPolicy="no-referrer-when-downgrade"
-                      />
-                    </div>
-                    <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-text-tertiary">
-                      <span>
-                        If Google Drive prompts for access or blocks embedding for restricted files, click{" "}
-                        <strong className="text-text-primary font-semibold">Open in Google Drive</strong>.
-                      </span>
-                      <a
-                        href={parsed.openUrl || item.driveUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 font-semibold text-brand-blue-primary hover:underline"
-                      >
-                        <span>Open in new tab</span>
-                        <ExternalLink className="h-3 w-3" />
-                      </a>
-                    </div>
-                  </div>
-                )}
-
                 {/* Client Photo Selection, Approval & Feedback Controls (on /track/[passkey]) */}
                 {canSubmitClientReview && onSubmitClientReview && (
                   <div className="border-t border-border-divider pt-3 space-y-2.5">
-                    {(item.category === "FOLDER" || item.category === "IMAGE") && (
+                    {(item.category === "FOLDER" || item.category === "IMAGE" || item.category === "OTHER") && (
                       <div>
                         <label className="mb-1 block text-[11px] font-semibold text-text-secondary">
                           Selected Photo Numbers / Filenames (comma-separated)

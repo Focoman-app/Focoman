@@ -2,9 +2,9 @@
  * Focoman Pro Entitlements & Three-Tier Subscription Resolution
  *
  * Tiers:
- * 1. FREE (₹0): Basic OMS (No Business Dashboard; redirects to OMS).
- * 2. STARTER (₹999/month): Free + Advanced OMS (Drive Preview & Selection + Client Review) + CRM + ERP + Basic Business Dashboard (Order counts, Revenue overview, Pending payment overview).
- * 3. PROFESSIONAL (₹1,999/month): Everything in Starter + WhatsApp Operations & Interactive Bot + Advanced Business Reports & Analytics + Excel Report Exports.
+ * 1. FREE (₹0): Basic OMS (optional shareable photo links under the hood; 0 GB Cloud Storage).
+ * 2. STARTER (₹999/month): Free + 20 GB Cloud Proofing Storage, Shareable Links & Client Photo Selection + CRM + ERP + Basic Business Dashboard.
+ * 3. PROFESSIONAL (₹1,999/month): Everything in Starter + 50 GB Cloud Proofing Storage (10 GB during 30-day Free Trial) + WhatsApp Operations & Interactive Bot + Advanced Business Reports & Analytics + Excel Report Exports.
  * COMPLETE remains an internal legacy value for older records.
  */
 
@@ -130,10 +130,9 @@ export function getEffectiveStudioFeatures(
     };
   }
 
-  // FREE Plan (₹0) or modular capability add-ons:
+  // FREE Plan (₹0) includes Shareable Photos & Storage Links; modular capability add-ons apply on top:
   const hasCrm = caps.some((c) => ["CUSTOMER_CRM", "CUSTOMER_BASIC", "CUSTOMER_ADVANCED"].includes(c));
   const hasErp = caps.some((c) => ["STUDIO_ERP", "CREW_BASIC", "CREW_ADVANCED"].includes(c));
-  const hasDrive = caps.some((c) => ["DRIVE_CLIENT_REVIEW", "OMS_ADVANCED", "GOOGLE_DRIVE"].includes(c));
   const hasDashboard = caps.some((c) => ["ANALYTICS_BASIC", "BUSINESS_REPORTS"].includes(c));
   const hasReports = caps.some((c) => ["BUSINESS_REPORTS", "ANALYTICS_ADVANCED"].includes(c));
 
@@ -143,7 +142,7 @@ export function getEffectiveStudioFeatures(
     erp: hasErp,
     whatsapp: false,
     reports: hasReports,
-    driveReview: hasDrive,
+    driveReview: true,
     basicDashboard: hasDashboard,
     autoAssignCrew: hasErp ? (configuredFeatures?.autoAssignCrew ?? true) : false,
     autoAssignCrewConfigured: Boolean(configuredFeatures?.autoAssignCrewConfigured),

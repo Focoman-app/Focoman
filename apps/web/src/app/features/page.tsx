@@ -51,8 +51,8 @@ export default function FeaturesPage() {
                 desc: "Get a centralized overview of all orders, track their current statuses, monitor pending payments and SLA status, and stay informed about ongoing, pending, and completed orders to keep every order on schedule.",
               },
               {
-                title: "Google Drive Integration & Client Review",
-                desc: "Integrate Google Drive to preview and select photos, add customer comments, review deliverables, and manage approvals directly within FocoMan.",
+                title: "Photos Links, Cloud Storage & Client Review",
+                desc: "Upload compressed proofing galleries directly to Cloud Storage or attach external links (Google Drive, Dropbox, OneDrive). Clients can shortlist favorite photos, leave review comments, and approve selections inside their private tracking link.",
               },
             ].map((f, i) => {
               const colors = [

@@ -4,6 +4,63 @@
  * (/file/d/{id}/preview for files and /embeddedfolderview?id={id}#grid for folders).
  */
 
+export interface ParsedStorageLink {
+  isValidUrl: boolean;
+  providerLabel: string;
+  openUrl: string;
+  kind: 'FILE' | 'FOLDER' | 'EXTERNAL';
+}
+
+export function detectStorageProviderLabel(hostname: string): string {
+  const host = (hostname || '').toLowerCase();
+  if (host === 'drive.google.com' || host === 'docs.google.com') return 'Google Drive';
+  if (host === 'dropbox.com' || host.endsWith('.dropbox.com') || host === 'db.tt') return 'Dropbox';
+  if (host === 'onedrive.live.com' || host === '1drv.ms' || host.endsWith('.sharepoint.com')) return 'OneDrive';
+  if (host === 'photos.google.com' || host === 'photos.app.goo.gl') return 'Google Photos';
+  if (host === 'icloud.com' || host.endsWith('.icloud.com')) return 'iCloud';
+  if (host.includes('pixieset.com') || host.includes('pic-time.com')) return 'Client Gallery';
+  return 'Storage Link';
+}
+
+export function parseDeliverableStorageUrl(rawUrl: string): ParsedStorageLink {
+  const trimmed = (rawUrl || '').trim();
+  if (!trimmed) {
+    return {
+      isValidUrl: false,
+      providerLabel: 'Storage Link',
+      openUrl: '',
+      kind: 'EXTERNAL',
+    };
+  }
+
+  try {
+    const urlObj = new URL(trimmed);
+    if (urlObj.protocol !== 'https:' || urlObj.username || urlObj.password || !urlObj.hostname) {
+      return {
+        isValidUrl: false,
+        providerLabel: 'Storage Link',
+        openUrl: '',
+        kind: 'EXTERNAL',
+      };
+    }
+
+    const driveInfo = parseGoogleDriveUrl(trimmed);
+    return {
+      isValidUrl: true,
+      providerLabel: detectStorageProviderLabel(urlObj.hostname),
+      openUrl: urlObj.toString(),
+      kind: driveInfo.isValidDriveUrl ? driveInfo.kind : 'EXTERNAL',
+    };
+  } catch {
+    return {
+      isValidUrl: false,
+      providerLabel: 'Storage Link',
+      openUrl: '',
+      kind: 'EXTERNAL',
+    };
+  }
+}
+
 export interface ParsedGoogleDriveLink {
   isValidDriveUrl: boolean;
   id: string | null;

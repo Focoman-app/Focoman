@@ -304,7 +304,7 @@ export async function updateOrderDriveDeliverablesCore(input: {
     ) {
       return {
         success: false,
-        error: "Google Drive Photo Preview & Selection is included in the ₹999/month and ₹1,999/month plans. Please upgrade your studio plan to add Drive deliverables.",
+        error: "Photos & Deliverable Links Review is included in the ₹999/month and ₹1,999/month plans. Please upgrade your studio plan to add deliverable links.",
       };
     }
 
@@ -314,8 +314,8 @@ export async function updateOrderDriveDeliverablesCore(input: {
       timestamp: getStudioTimestampIST(new Date()),
       actorName,
       actorRole: membership.role === "STUDIO_OWNER" ? "Owner" : "Member",
-      action: "Google Drive Deliverables Updated",
-      details: `Updated Google Drive deliverable links (${
+      action: "Photos & Deliverable Links Updated",
+      details: `Updated photos & deliverable links (${
         input.deliverables.length
       } item${input.deliverables.length === 1 ? "" : "s"})`,
     };
@@ -337,7 +337,7 @@ export async function updateOrderDriveDeliverablesCore(input: {
       error:
         err instanceof Error
           ? err.message
-          : "Failed to update Google Drive deliverables.",
+          : "Failed to update deliverable links.",
     };
   }
 }

@@ -188,7 +188,7 @@ export function HomePage() {
             Build Your Plan Around Your Studio Needs
           </h2>
           <p className="mx-auto mt-3 text-sm leading-relaxed text-text-secondary sm:text-base">
-            Basic Order Management is free for everyone. Selectively add CRM, Crew, Drive Review, or WhatsApp capabilities as you grow.
+            Basic Order Management (OMS) is free forever. Upgrade to Starter or Professional for Cloud Proofing Storage, CRM, ERP, Business Reports, and WhatsApp Operations.
           </p>
         </div>
 

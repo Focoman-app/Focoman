@@ -267,8 +267,8 @@ export default function HomePage() {
                 </Link>
               </div>
 
-              <p className="mt-3 text-[10px] sm:text-[11px] text-white/80">
-                No credit card required
+              <p className="mt-3 text-[10px] sm:text-[11px] text-white/85">
+                For a free trial: no credit card required + includes 10 GB Cloud Storage
               </p>
             </div>
           </div>

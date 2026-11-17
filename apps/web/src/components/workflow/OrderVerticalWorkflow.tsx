@@ -628,9 +628,11 @@ export function OrderVerticalWorkflow({
     }
   };
 
-  // Task-level crew assignment state for Phase 3
+  // Task-level crew assignment state for Phase 3 and Phase 4
   const [editingTaskCrewId, setEditingTaskCrewId] = useState<string | null>(null);
+  const [activeTaskCrewDropdown, setActiveTaskCrewDropdown] = useState<string | null>(null);
   const [taskCrewDraft, setTaskCrewDraft] = useState<Record<string, string>>({});
+  const [savingTaskCrewId, setSavingTaskCrewId] = useState<string | null>(null);
 
   const getDefaultCrewForTask = (task: Task): { name: string; isAuto: boolean } | null => {
     if (task.assignedMemberName) {
@@ -869,11 +871,6 @@ export function OrderVerticalWorkflow({
             <span className="rounded-md border border-blue-200 bg-blue-100/80 px-2 py-0.5 text-[10px] font-bold text-brand-blue-primary">
               {isProductionCompleted ? "Final Delivery and Order Completion" : "Post-Event Workflow"}
             </span>
-            {activeStreamTasks.some((item) => item.task.status === "REVIEW") && (
-              <span className="rounded-md border border-purple-300 bg-purple-100 px-2 py-0.5 text-[10px] font-bold text-purple-900">
-                Pending Customer Review
-              </span>
-            )}
           </div>
 
           {actionFeedbackError && (
@@ -1007,7 +1004,7 @@ export function OrderVerticalWorkflow({
                                   rel="noopener noreferrer"
                                   className="rounded-lg border border-brand-blue-primary bg-blue-50/60 px-2.5 py-1 text-[11px] font-bold text-brand-blue-primary hover:bg-blue-100 transition shrink-0"
                                 >
-                                  Open Drive Link
+                                  Open Photos Link
                                 </a>
                               </div>
                             ))}
@@ -1018,12 +1015,12 @@ export function OrderVerticalWorkflow({
                           {isReview
                             ? isOms
                               ? "Studio has submitted this step for customer review. Customer can mark it Completed or Rework on their tracking page, or Studio Owner can update below on behalf of customer."
-                              : "Studio has shared this step for your review. Open the Drive link above, then mark it Completed or request Rework below."
+                              : "Studio has shared this step for your review. Open the photos link above, then mark it Completed or request Rework below."
                             : isOms
                             ? isMember
                               ? `Assigned to ${memberName}. Studio Owner can also update this step on behalf of ${memberName}.`
                               : showInlineDriveForm
-                              ? "Add the Google Drive link below and send this step to the customer for review."
+                              ? "Add the photos or storage link below and send this step to the customer for review."
                               : "Update the current studio step below to move the workflow forward."
                             : "Studio is currently working on this step. Once updated by the studio, you will be able to review and mark Completed or Rework here."}
                         </p>
@@ -1178,7 +1175,7 @@ export function OrderVerticalWorkflow({
                       </div>
                     </div>
 
-                    {/* Inline 3-Field Google Drive Deliverable & Send for Customer Review (OMS Active Step) */}
+                    {/* Inline 3-Field Photos / Storage Deliverable & Send for Customer Review (OMS Active Step) */}
                     {showInlineDriveForm && onSendTaskForReviewWithDriveLink && onUpdateTaskStatus && (
                       <div className="pt-2.5 border-t border-border-divider space-y-2.5">
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
@@ -1201,7 +1198,7 @@ export function OrderVerticalWorkflow({
                           </div>
                           <div>
                             <label className="block text-[10px] font-bold text-text-secondary mb-1">
-                              Google Drive Link *
+                              Photos / Storage Link *
                             </label>
                             <input
                               type="url"
@@ -1212,7 +1209,7 @@ export function OrderVerticalWorkflow({
                                   [task.id]: { ...prev[task.id], driveUrl: e.target.value },
                                 }))
                               }
-                              placeholder="https://drive.google.com/drive/folders/..."
+                              placeholder="https://drive.google.com/... or https://dropbox.com/..."
                               className="w-full rounded-lg border border-border-default bg-white px-2.5 py-1.5 text-xs text-text-primary outline-none focus:border-brand-blue-primary"
                             />
                           </div>
@@ -1246,14 +1243,17 @@ export function OrderVerticalWorkflow({
                                   const cleanUrl = draftUrl.trim();
                                   const cleanTitle = draftTitle.trim() || displayTitle;
                                   if (!cleanUrl && linkedDeliverables.length === 0) {
-                                    setActionFeedbackError("Please enter a Google Drive link to share with the customer for review.");
+                                    setActionFeedbackError("Please enter a photos or storage link to share with the customer for review.");
                                     return;
                                   }
                                   if (cleanUrl) {
                                     try {
-                                      new URL(cleanUrl);
+                                      const u = new URL(cleanUrl);
+                                      if (u.protocol !== "https:") {
+                                        throw new Error("HTTPS required");
+                                      }
                                     } catch {
-                                      setActionFeedbackError("Please enter a valid Google Drive URL (starting with https://).");
+                                      setActionFeedbackError("Please enter a valid storage URL (starting with https://).");
                                       return;
                                     }
                                   }
@@ -1272,7 +1272,7 @@ export function OrderVerticalWorkflow({
                                     });
                                   } catch (err) {
                                     setActionFeedbackError(
-                                      err instanceof Error ? err.message : "Failed to submit Drive link for review."
+                                      err instanceof Error ? err.message : "Failed to submit photos link for review."
                                     );
                                   } finally {
                                     setSubmittingTaskId(null);
@@ -1305,7 +1305,7 @@ export function OrderVerticalWorkflow({
                                 }
                                 className="rounded-lg border border-border-default bg-white px-2.5 py-1.5 text-[11px] font-semibold text-text-secondary hover:bg-slate-50 transition cursor-pointer disabled:opacity-50"
                               >
-                                Send without Drive link
+                                Send without link
                               </button>
                             )}
                           </div>
@@ -2634,7 +2634,7 @@ export function OrderVerticalWorkflow({
         key={task.id || task.title}
         className={`rounded-xl border p-2.5 transition flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 ${
           isLockedPhase && !isDone
-            ? "bg-slate-50/70 border-border-default/60 opacity-75"
+            ? "bg-slate-50/70 border-border-default/70"
             : isDone
             ? "bg-white border-emerald-200/80 shadow-2xs"
             : isInProgress
@@ -2647,7 +2647,7 @@ export function OrderVerticalWorkflow({
         }`}
       >
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className={`flex items-center gap-2 flex-wrap ${isLockedPhase && !isDone ? "opacity-80" : ""}`}>
             <span className="font-bold text-text-primary text-xs">{displayTitle}</span>
             {statusLabel && (
               <span className={`rounded px-1.5 py-0.2 text-[9px] font-bold border ${statusBadgeStyle}`}>
@@ -2672,41 +2672,196 @@ export function OrderVerticalWorkflow({
             )}
           </div>
           {isOms && hasErp && (
-            <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+            <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
               <span className="text-[10px] text-text-tertiary">Crew:</span>
               {editingTaskCrewId === task.id ? (
-                <div className="relative inline-flex items-center gap-1">
-                  <input
-                    autoFocus
-                    list={`task-crew-${task.id}`}
-                    value={taskCrewDraft[task.id] ?? task.assignedMemberName ?? getDefaultCrewForTask(task)?.name ?? ""}
-                    onChange={(event) => setTaskCrewDraft((previous) => ({ ...previous, [task.id]: event.target.value }))}
-                    placeholder="Search or type crew name"
-                    className="rounded-md border border-border-default bg-white px-2 py-0.5 text-[10px] font-semibold text-text-primary outline-none focus:border-brand-blue-primary shadow-2xs"
-                  />
-                  <datalist id={`task-crew-${task.id}`}>
-                    {hasErp && allSelectableCrew.map((crew) => <option key={crew.id} value={crew.name} />)}
-                    {temporaryCrewList.map((crew) => <option key={crew.id} value={crew.name} />)}
-                  </datalist>
-                  <button type="button" onClick={() => { const value = (taskCrewDraft[task.id] ?? task.assignedMemberName ?? getDefaultCrewForTask(task)?.name ?? "").trim(); if (value && onAssignTaskCrew) { void onAssignTaskCrew(task.id, value); setEditingTaskCrewId(null); } }} className="rounded bg-brand-blue-primary px-1.5 py-0.5 text-[10px] font-bold text-white">Save</button>
-                  <button
-                    type="button"
-                    onClick={() => setEditingTaskCrewId(null)}
-                    className="text-[10px] text-text-tertiary hover:text-text-primary cursor-pointer"
-                  >
-                    ✕
-                  </button>
-                </div>
+                (() => {
+                  const rawQuery = taskCrewDraft[task.id] ?? "";
+                  const trimmedQuery = rawQuery.trim();
+                  const q = trimmedQuery.toLowerCase();
+
+                  const matchingErpCrew = allSelectableCrew.filter((m) => {
+                    if (!trimmedQuery) return true;
+                    return (
+                      (m.name || "").toLowerCase().includes(q) ||
+                      (m.role || "").toLowerCase().includes(q) ||
+                      (m.skills || []).some((s) => (s || "").toLowerCase().includes(q))
+                    );
+                  });
+
+                  const matchingTempCrew = temporaryCrewList.filter((t) => {
+                    if (!trimmedQuery) return true;
+                    return t.name.toLowerCase().includes(q);
+                  });
+
+                  const hasExactMatch =
+                    matchingErpCrew.some((c) => c.name.toLowerCase() === q) ||
+                    matchingTempCrew.some((t) => t.name.toLowerCase() === q);
+
+                  const isDropdownOpen = activeTaskCrewDropdown === task.id;
+                  const isSavingThisTaskCrew = savingTaskCrewId === task.id;
+
+                  const commitTaskCrew = async (memberName: string) => {
+                    const cleaned = memberName.trim();
+                    if (!cleaned || !onAssignTaskCrew) return;
+                    setSavingTaskCrewId(task.id);
+                    try {
+                      await onAssignTaskCrew(task.id, cleaned);
+                      setEditingTaskCrewId(null);
+                      setActiveTaskCrewDropdown(null);
+                    } finally {
+                      setSavingTaskCrewId(null);
+                    }
+                  };
+
+                  return (
+                    <div className="relative flex flex-wrap items-center gap-1.5">
+                      <div className="relative min-w-[210px]">
+                        <input
+                          type="text"
+                          autoFocus
+                          placeholder="Search or add crew member…"
+                          value={rawQuery}
+                          onFocus={() => setActiveTaskCrewDropdown(task.id)}
+                          onChange={(event) => {
+                            setTaskCrewDraft((previous) => ({
+                              ...previous,
+                              [task.id]: event.target.value,
+                            }));
+                            setActiveTaskCrewDropdown(task.id);
+                          }}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") {
+                              event.preventDefault();
+                              if (trimmedQuery) {
+                                void commitTaskCrew(trimmedQuery);
+                              }
+                            } else if (event.key === "Escape") {
+                              setEditingTaskCrewId(null);
+                              setActiveTaskCrewDropdown(null);
+                            }
+                          }}
+                          className="w-full rounded-lg border border-border-default bg-white px-2.5 py-1 text-xs font-medium text-text-primary outline-none focus:border-brand-blue-primary shadow-2xs"
+                        />
+                        {isDropdownOpen && (
+                          <>
+                            <div
+                              className="fixed inset-0 z-30"
+                              onClick={() => setActiveTaskCrewDropdown(null)}
+                            />
+                            <div className="absolute top-full left-0 right-0 z-40 mt-1 rounded-xl border border-border-default bg-white p-1.5 shadow-xl max-h-56 overflow-y-auto min-w-[240px]">
+                              {/* 1. Quick Free Text Option */}
+                              {trimmedQuery && !hasExactMatch && (
+                                <div
+                                  onClick={() => void commitTaskCrew(trimmedQuery)}
+                                  className="flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs hover:bg-amber-50 cursor-pointer bg-amber-50/50 border border-amber-200/70 mb-1 transition"
+                                >
+                                  <span className="font-semibold text-text-primary truncate">
+                                    {trimmedQuery}
+                                  </span>
+                                  <span className="text-[10px] font-bold text-amber-800 bg-amber-100 px-1.5 py-0.2 rounded shrink-0">
+                                    Add
+                                  </span>
+                                </div>
+                              )}
+
+                              {/* 2. Registered ERP Studio Crew */}
+                              {matchingErpCrew.length > 0 && (
+                                <div className="space-y-0.5 mb-1">
+                                  <div className="text-[9px] font-bold uppercase tracking-wider text-text-tertiary px-1 py-0.5">
+                                    Studio Crew
+                                  </div>
+                                  {matchingErpCrew.map((c) => (
+                                    <div
+                                      key={c.id}
+                                      onClick={() => void commitTaskCrew(c.name)}
+                                      className="flex items-center justify-between px-2 py-1 rounded-lg text-xs hover:bg-blue-50 cursor-pointer"
+                                    >
+                                      <span className="font-semibold text-text-primary truncate">
+                                        {c.name}
+                                      </span>
+                                      <span className="text-[9px] font-bold text-brand-blue-primary bg-blue-100/60 px-1.5 py-0.2 rounded shrink-0">
+                                        Assign
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+
+                              {/* 3. Known Freelancers / Temporary Crew */}
+                              {matchingTempCrew.length > 0 && (
+                                <div className="space-y-0.5 mb-1">
+                                  <div className="text-[9px] font-bold uppercase tracking-wider text-amber-800/70 px-1 py-0.5">
+                                    Temporary Crew
+                                  </div>
+                                  {matchingTempCrew.map((t) => (
+                                    <div
+                                      key={t.id}
+                                      onClick={() => void commitTaskCrew(t.name)}
+                                      className="flex items-center justify-between px-2 py-1 rounded-lg text-xs hover:bg-amber-100/60 cursor-pointer bg-amber-50/40"
+                                    >
+                                      <span className="font-semibold text-text-primary truncate">
+                                        {t.name} (Temp)
+                                      </span>
+                                      <span className="text-[9px] font-bold text-amber-800 bg-amber-100 px-1.5 py-0.2 rounded shrink-0">
+                                        Assign
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+
+                              {/* 4. ERP Full Member Registration */}
+                              {onOpenErpWizard && (
+                                <div
+                                  onClick={() => {
+                                    setActiveTaskCrewDropdown(null);
+                                    onOpenErpWizard(displayTitle, trimmedQuery || undefined);
+                                  }}
+                                  className="px-2 py-1.5 rounded-lg text-xs font-bold text-brand-purple-primary hover:bg-purple-50 cursor-pointer border-t border-border-default/60 mt-1 flex items-center justify-between"
+                                >
+                                  <span>+ Add as Permanent ERP Member</span>
+                                  <span className="text-[9px] bg-purple-100 text-purple-800 px-1 py-0.2 rounded shrink-0">
+                                    Full Profile
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          </>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        disabled={isSavingThisTaskCrew || !trimmedQuery}
+                        onClick={() => void commitTaskCrew(trimmedQuery)}
+                        className="rounded bg-brand-blue-primary px-2 py-1 text-[10px] font-bold text-white disabled:opacity-50"
+                      >
+                        {isSavingThisTaskCrew ? "Saving…" : "Save"}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={isSavingThisTaskCrew}
+                        onClick={() => {
+                          setEditingTaskCrewId(null);
+                          setActiveTaskCrewDropdown(null);
+                        }}
+                        className="rounded border border-border-default bg-white px-2 py-1 text-[10px] font-semibold text-text-secondary hover:text-text-primary"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  );
+                })()
               ) : (
                 (() => {
                   const crewInfo = getDefaultCrewForTask(task);
                   return (
-                    <div className="inline-flex items-center gap-1 text-[10px]">
+                    <div className="inline-flex items-center gap-1.5 text-[10px]">
                       {crewInfo?.name ? (
-                        <span className="font-semibold text-text-secondary bg-slate-100 rounded px-1.5 py-0.5">
+                        <span className="inline-flex items-center rounded-md border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 font-bold text-emerald-800">
                           {crewInfo.name}
                           {crewInfo.isAuto && (
-                            <span className="text-[9px] text-text-tertiary font-normal ml-1">
+                            <span className="text-[9px] text-emerald-700/80 font-normal ml-1">
                               (auto from Phase 1)
                             </span>
                           )}
@@ -2717,10 +2872,18 @@ export function OrderVerticalWorkflow({
                       {onAssignTaskCrew && (
                         <button
                           type="button"
-                          onClick={() => { setTaskCrewDraft((previous) => ({ ...previous, [task.id]: task.assignedMemberName || getDefaultCrewForTask(task)?.name || "" })); setEditingTaskCrewId(task.id); }}
-                          className="text-[10px] text-brand-blue-primary hover:underline font-medium cursor-pointer ml-0.5"
+                          onClick={() => {
+                            setTaskCrewDraft((previous) => ({
+                              ...previous,
+                              [task.id]:
+                                task.assignedMemberName || getDefaultCrewForTask(task)?.name || "",
+                            }));
+                            setEditingTaskCrewId(task.id);
+                            setActiveTaskCrewDropdown(task.id);
+                          }}
+                          className="rounded border border-border-default bg-white px-1.5 py-0.5 text-[10px] font-semibold text-brand-blue-primary hover:border-brand-blue-primary cursor-pointer"
                         >
-                          {crewInfo?.name ? "Change" : "Assign"}
+                          {crewInfo?.name ? "Change" : "Assign crew"}
                         </button>
                       )}
                     </div>
