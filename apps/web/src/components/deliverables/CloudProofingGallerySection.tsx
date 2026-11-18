@@ -19,6 +19,9 @@ import {
   deleteOrderCloudPhotosAction,
   getOrderCloudPhotosAction,
   getStudioStorageStatusAction,
+  getOrderCloudStorageSettingsAction,
+  updateOrderCloudStorageSettingsAction,
+  getOriginalPhotoDownloadUrlAction,
   type HydratedCloudPhoto,
 } from "@/actions/storageActions";
 import {
@@ -65,15 +68,22 @@ export function CloudProofingGallerySection({
   const [copiedLightroom, setCopiedLightroom] = useState(false);
   const [lightboxPhotoId, setLightboxPhotoId] = useState<string | null>(null);
 
+  const [settings, setSettings] = useState<{ compressionEnabled: boolean; proofingEnabled: boolean }>({
+    compressionEnabled: order.cloudStorageSettings?.compressionEnabled ?? true,
+    proofingEnabled: order.cloudStorageSettings?.proofingEnabled ?? false,
+  });
+  const [updatingSettings, setUpdatingSettings] = useState(false);
+
   const loadGallery = useCallback(async () => {
     setLoading(true);
     setErrorMsg(null);
     try {
       const token = await getIdToken(false);
       if (!token) return;
-      const [statusRes, photosRes] = await Promise.all([
+      const [statusRes, photosRes, settingsRes] = await Promise.all([
         getStudioStorageStatusAction({ studioId, idToken: token }),
         getOrderCloudPhotosAction({ orderId: order.id, idToken: token }),
+        getOrderCloudStorageSettingsAction({ studioId, orderId: order.id, idToken: token }),
       ]);
       if (statusRes.success && statusRes.quota) {
         setQuota(statusRes.quota);
@@ -84,12 +94,43 @@ export function CloudProofingGallerySection({
       } else if (photosRes.error) {
         setErrorMsg(photosRes.error);
       }
+      if (settingsRes.success && settingsRes.settings) {
+        setSettings({
+          compressionEnabled: settingsRes.settings.compressionEnabled,
+          proofingEnabled: settingsRes.settings.proofingEnabled,
+        });
+      }
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : "Failed to load Cloud Proofing Gallery.");
     } finally {
       setLoading(false);
     }
   }, [studioId, order.id, getIdToken]);
+
+  const handleToggleSetting = async (key: "compressionEnabled" | "proofingEnabled", value: boolean) => {
+    const next = { ...settings, [key]: value };
+    setSettings(next);
+    setUpdatingSettings(true);
+    try {
+      const token = await getIdToken(false);
+      if (!token) return;
+      const res = await updateOrderCloudStorageSettingsAction({
+        studioId,
+        orderId: order.id,
+        settings: next,
+        idToken: token,
+      });
+      if (!res.success) {
+        setErrorMsg(res.error || "Failed to update gallery settings.");
+        setSettings(settings);
+      }
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : "Failed to update settings.");
+      setSettings(settings);
+    } finally {
+      setUpdatingSettings(false);
+    }
+  };
 
   useEffect(() => {
     void loadGallery();
@@ -157,12 +198,32 @@ export function CloudProofingGallerySection({
       const token = await getIdToken(true);
       if (!token) throw new Error("Authentication expired. Please sign in again.");
 
-      // 1. Compress in browser (~2048px WebP/JPEG preserving original filename)
-      const compressed: Awaited<ReturnType<typeof compressProofingPhoto>>[] = [];
-      for (let i = 0; i < batchFiles.length; i++) {
-        setUploadProgress({ phase: "COMPRESSING", done: i, total: batchFiles.length });
-        const result = await compressProofingPhoto(batchFiles[i]);
-        compressed.push(result);
+      // 1. Prepare files: compress if compression is enabled, or send original file bytes
+      const filePayloads: Array<{
+        blob: Blob | File;
+        fileName: string;
+        mimeType: string;
+        sizeBytes: number;
+        width?: number;
+        height?: number;
+      }> = [];
+
+      if (settings.compressionEnabled) {
+        for (let i = 0; i < batchFiles.length; i++) {
+          setUploadProgress({ phase: "COMPRESSING", done: i, total: batchFiles.length });
+          const result = await compressProofingPhoto(batchFiles[i]);
+          filePayloads.push(result);
+        }
+      } else {
+        for (let i = 0; i < batchFiles.length; i++) {
+          const f = batchFiles[i];
+          filePayloads.push({
+            blob: f,
+            fileName: f.name,
+            mimeType: f.type || "application/octet-stream",
+            sizeBytes: f.size,
+          });
+        }
       }
       setUploadProgress({ phase: "COMPRESSING", done: batchFiles.length, total: batchFiles.length });
 
@@ -176,7 +237,7 @@ export function CloudProofingGallerySection({
         body: JSON.stringify({
           studioId,
           orderId: order.id,
-          files: compressed.map((c) => ({
+          files: filePayloads.map((c) => ({
             fileName: c.fileName,
             mimeType: c.mimeType,
             sizeBytes: c.sizeBytes,
@@ -214,7 +275,7 @@ export function CloudProofingGallerySection({
         while (cursor < uploads.length) {
           const idx = cursor++;
           const target = uploads[idx];
-          const blob = compressed[idx].blob;
+          const blob = filePayloads[idx].blob;
           const putRes = await fetch(target.uploadUrl, {
             method: "PUT",
             headers: {
@@ -468,6 +529,53 @@ export function CloudProofingGallerySection({
           </div>
         </div>
       )}
+
+      {/* Cloud Storage & Proofing Settings Toggles */}
+      <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-border-default bg-white p-3.5 text-xs shadow-2xs">
+        <div className="flex flex-wrap items-center gap-6">
+          <label className="flex items-center gap-2.5 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={settings.compressionEnabled}
+              disabled={updatingSettings}
+              onChange={(e) => handleToggleSetting("compressionEnabled", e.target.checked)}
+              className="h-4 w-4 rounded border-border-default text-brand-orange-primary focus:ring-brand-orange-primary cursor-pointer"
+            />
+            <div>
+              <span className="font-bold text-text-primary">Image Compression</span>
+              <span className="block text-[11px] text-text-tertiary">
+                {settings.compressionEnabled
+                  ? "ON · Compress uploads to ~2048px WebP to conserve plan quota"
+                  : "OFF · Store full original file bytes directly"}
+              </span>
+            </div>
+          </label>
+
+          <label className="flex items-center gap-2.5 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={settings.proofingEnabled}
+              disabled={updatingSettings}
+              onChange={(e) => handleToggleSetting("proofingEnabled", e.target.checked)}
+              className="h-4 w-4 rounded border-border-default text-brand-orange-primary focus:ring-brand-orange-primary cursor-pointer"
+            />
+            <div>
+              <span className="font-bold text-text-primary">Client Proofing Access</span>
+              <span className="block text-[11px] text-text-tertiary">
+                {settings.proofingEnabled
+                  ? "ENABLED · Customers can open the gallery and submit selections"
+                  : "DISABLED · Gallery hidden from customer tracking view"}
+              </span>
+            </div>
+          </label>
+        </div>
+
+        {updatingSettings && (
+          <span className="text-[11px] text-text-tertiary animate-pulse font-medium">
+            Saving settings...
+          </span>
+        )}
+      </div>
 
       {!r2Configured && quota?.isCloudStorageEnabled && (
         <div className="rounded-xl border border-amber-200 bg-amber-50/80 px-3 py-2 text-xs text-amber-900">

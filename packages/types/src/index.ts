@@ -237,7 +237,23 @@ export interface OrderDriveDeliverable {
   addedBy?: string;
 }
 
+export type { CloudStorageSettings, CloudProcessingStatus, CloudPhotoPreview, CloudUploadSession, CloudStorageJob, CloudStoragePlatform } from './cloudStorage';
+import type { CloudStorageSettings, CloudProcessingStatus, CloudPhotoPreview } from './cloudStorage';
+
 export interface OrderCloudPhoto {
+  schemaVersion?: 1;
+  galleryId?: string;
+  storageKind?: 'ORIGINAL' | 'OPTIMIZED';
+  sourceFileName?: string;
+  sourceSizeBytes?: number;
+  sourceMimeType?: string;
+  sha256?: string;
+  compressionEnabled?: boolean;
+  preview?: CloudPhotoPreview;
+  processingStatus?: CloudProcessingStatus;
+  processingError?: string;
+  deletionStatus?: 'PENDING';
+  deletedObjectKeys?: string[];
   id: string;
   orderId: string;
   studioId: string;
@@ -298,6 +314,7 @@ export interface CustomerTrackingView {
     remainingAmount: number;
     installments?: OrderInstallment[];
     driveDeliverables?: OrderDriveDeliverable[];
+    cloudStorageSettings?: CloudStorageSettings;
     cloudPhotoCount?: number;
     cloudStorageBytes?: number;
     cloudReviewApproved?: boolean;
@@ -437,6 +454,9 @@ export interface Studio extends SoftDeletable {
   serviceCrewMapping?: Record<string, string[]>;
   billingProfile?: StudioBillingProfile;
   storageUsedBytes?: number;
+  storageReservedBytes?: number;
+  storageReservedFileCount?: number;
+  storageClosing?: boolean;
   storageFileCount?: number;
   createdAt: string;
   updatedAt: string;
@@ -633,6 +653,7 @@ export interface Order extends SoftDeletable {
   collaborators?: OrderCollaborator[];
   hasDriveReviewEntitlement?: boolean;
   driveDeliverables?: OrderDriveDeliverable[];
+  cloudStorageSettings?: CloudStorageSettings;
   cloudPhotoCount?: number;
   cloudStorageBytes?: number;
   cloudReviewApproved?: boolean;

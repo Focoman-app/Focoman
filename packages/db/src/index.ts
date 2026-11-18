@@ -1696,6 +1696,7 @@ export async function updateStudioLead(
 
 
 export * from './billing';
+export * from './cloudStorage';
 
 // ============================================================================
 // 15. CLOUD PROOFING PHOTOS & STORAGE QUOTA LEDGER

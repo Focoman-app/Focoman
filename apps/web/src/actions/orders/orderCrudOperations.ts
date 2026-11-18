@@ -209,6 +209,11 @@ export async function createOrderCore(rawInput: unknown): Promise<{
       ...(validated.notifySms !== undefined ? { notifySms: validated.notifySms } : {}),
       ...(validated.notifyEmail !== undefined ? { notifyEmail: validated.notifyEmail } : {}),
       hasDriveReviewEntitlement: Boolean(hasDriveReviewEntitlement),
+      cloudStorageSettings: {
+        version: 1,
+        compressionEnabled: true,
+        proofingEnabled: false,
+      },
       isDeleted: false,
       createdBy: decoded.name || decoded.email || "Studio Owner",
       createdByRole: "Owner",

@@ -8,20 +8,28 @@ import {
   getOrderById,
   getOrderByPasskey,
   getStudioBySlug,
+  getTasksByMember,
   getTasksByOrder,
   syncOrderCloudPhotoSummary,
   updateCloudPhoto,
   updateOrder,
   updateTask,
+  updateOrderCloudStorageSettings,
+  getCloudUploadSession,
+  updateCloudUploadSession,
+  releaseStudioStorageReservation,
+  cancelJobsForOrder,
 } from "@focoman/db";
-import { getStudioTimestampIST } from "@focoman/domain";
-import type { Order, OrderAuditEntry, OrderCloudPhoto } from "@focoman/types";
+import { getStudioTimestampIST, resolveCloudStorageSettings } from "@focoman/domain";
+import type { Order, OrderAuditEntry, OrderCloudPhoto, CloudStorageSettings } from "@focoman/types";
 import { requireStudioMember, requireVerifiedUser } from "@/lib/serverAuth";
+import { findActiveMemberRecord } from "@/actions/orders/orderAccessHelpers";
 import { resolveStudioStorageQuota, formatStorageBytes, type StudioStorageQuota } from "@/lib/storageQuota";
 import {
   createPresignedPhotoReadUrl,
   deleteR2Objects,
   isR2Configured,
+  abortMultipartUpload,
 } from "@/services/r2StorageService";
 import { dispatchOrderStageWhatsAppNotification } from "@/services/whatsappService";
 
@@ -71,6 +79,18 @@ async function authorizePhotoGalleryAccess(input: {
       try {
         const m = await getMembershipByUidAndStudio(decoded.uid, order.studioId);
         if (m && m.status === "ACTIVE") {
+          if (m.role !== "STUDIO_OWNER") {
+            const memberRecord = await findActiveMemberRecord(order.studioId, decoded.email);
+            if (memberRecord) {
+              const tasks = await getTasksByMember(order.studioId, memberRecord.id);
+              const isAssigned =
+                order.assignedResources?.some((r) => r.memberId === memberRecord.id) ||
+                tasks.some((t) => t.orderId === order.id);
+              if (!isAssigned) {
+                throw new Error("Access denied: You are not assigned to this order.");
+              }
+            }
+          }
           return {
             order,
             actorName: decoded.name || decoded.email || "Studio Staff",
@@ -78,7 +98,10 @@ async function authorizePhotoGalleryAccess(input: {
             canEdit: true,
           };
         }
-      } catch {
+      } catch (err) {
+        if (err instanceof Error && err.message.includes("Access denied")) {
+          throw err;
+        }
         // continue checking customer/collaborator
       }
 
@@ -177,6 +200,92 @@ export async function getStudioStorageStatusAction(input: {
   }
 }
 
+export async function getOrderCloudStorageSettingsAction(input: {
+  studioId: string;
+  orderId: string;
+  idToken: string;
+}): Promise<{
+  success: boolean;
+  settings?: CloudStorageSettings;
+  error?: string;
+}> {
+  try {
+    const decoded = await requireVerifiedUser(input.idToken);
+    const cleanStudioId = input.studioId.toLowerCase();
+    await requireStudioMember(decoded.uid, cleanStudioId);
+
+    const order = await getOrderById(input.orderId);
+    if (!order || order.studioId.toLowerCase() !== cleanStudioId) {
+      return { success: false, error: "Order not found." };
+    }
+
+    const rawPhotos = await getCloudPhotosByOrder(order.id);
+    const settings = resolveCloudStorageSettings(order, rawPhotos.length > 0);
+    return { success: true, settings };
+  } catch (err: unknown) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Failed to load cloud storage settings.",
+    };
+  }
+}
+
+export async function updateOrderCloudStorageSettingsAction(input: {
+  studioId: string;
+  orderId: string;
+  settings: {
+    compressionEnabled: boolean;
+    proofingEnabled: boolean;
+  };
+  idToken: string;
+}): Promise<{
+  success: boolean;
+  settings?: CloudStorageSettings;
+  error?: string;
+}> {
+  try {
+    const decoded = await requireVerifiedUser(input.idToken);
+    const cleanStudioId = input.studioId.toLowerCase();
+    await requireStudioMember(decoded.uid, cleanStudioId, "STUDIO_OWNER");
+
+    const order = await getOrderById(input.orderId);
+    if (!order || order.studioId.toLowerCase() !== cleanStudioId) {
+      return { success: false, error: "Order not found." };
+    }
+
+    const nextSettings: CloudStorageSettings = {
+      version: 1,
+      compressionEnabled: Boolean(input.settings.compressionEnabled),
+      proofingEnabled: Boolean(input.settings.proofingEnabled),
+    };
+
+    const actorName = decoded.name || decoded.email || "Studio Owner";
+    const auditEntry: OrderAuditEntry = {
+      id: `audit_${Date.now()}_storage_settings`,
+      timestamp: getStudioTimestampIST(new Date()),
+      actorName,
+      actorRole: "Owner",
+      action: "Cloud Storage Settings Updated",
+      details: `Compression: ${nextSettings.compressionEnabled ? "Enabled" : "Disabled"} · Proofing: ${nextSettings.proofingEnabled ? "Enabled" : "Disabled"}`,
+    };
+
+    await Promise.all([
+      updateOrderCloudStorageSettings(order.id, nextSettings),
+      updateOrder(order.id, {
+        auditLog: [...(order.auditLog || []), auditEntry],
+      }),
+      !nextSettings.proofingEnabled ? cancelJobsForOrder(order.id) : Promise.resolve(),
+    ]);
+
+    return { success: true, settings: nextSettings };
+  } catch (err: unknown) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Failed to update cloud storage settings.",
+    };
+  }
+}
+
 export async function getOrderCloudPhotosAction(input: {
   orderId: string;
   passkey?: string;
@@ -199,21 +308,55 @@ export async function getOrderCloudPhotosAction(input: {
 
     const configured = isR2Configured();
     const rawPhotos = await getCloudPhotosByOrder(auth.order.id);
+    const settings = resolveCloudStorageSettings(auth.order, rawPhotos.length > 0);
+
+    // If caller is a customer or family member, enforce proofing toggle
+    if (!auth.isStaff && !settings.proofingEnabled) {
+      return {
+        success: false,
+        photos: [],
+        canEdit: false,
+        isStaff: false,
+        r2Configured: configured,
+        error: "Client photo proofing is currently not enabled for this gallery.",
+      };
+    }
+
     const photos: HydratedCloudPhoto[] = await Promise.all(
       rawPhotos.map(async (p) => {
         let previewUrl = "";
-        if (configured && p.objectKey) {
+        const previewKey = p.preview?.objectKey || p.objectKey;
+        if (configured && previewKey) {
           try {
             previewUrl = await createPresignedPhotoReadUrl({
-              objectKey: p.objectKey,
+              objectKey: previewKey,
               expiresInSeconds: 3600,
             });
           } catch {
             previewUrl = "";
           }
         }
+        if (!auth.isStaff) {
+          return {
+            id: p.id,
+            orderId: p.orderId,
+            studioId: p.studioId,
+            fileName: p.sourceFileName || p.fileName,
+            displayName: p.displayName || p.sourceFileName || p.fileName,
+            sizeBytes: p.preview?.sizeBytes || p.sizeBytes,
+            mimeType: p.preview?.mimeType || p.mimeType,
+            objectKey: "",
+            uploadedAt: p.uploadedAt,
+            selected: p.selected,
+            selectedBy: p.selectedBy,
+            selectedAt: p.selectedAt,
+            comment: p.comment,
+            previewUrl,
+          };
+        }
         return {
           ...p,
+          displayName: p.displayName || p.sourceFileName || p.fileName,
           previewUrl,
         };
       })
@@ -342,6 +485,11 @@ export async function updateCloudPhotoSelectionAction(input: {
     });
 
     const orderPhotos = await getCloudPhotosByOrder(auth.order.id);
+    const settings = resolveCloudStorageSettings(auth.order, orderPhotos.length > 0);
+    if (!auth.isStaff && !settings.proofingEnabled) {
+      return { success: false, error: "Photo selection is not currently open for this gallery." };
+    }
+
     const target = orderPhotos.find((p) => p.id === input.photoId);
     if (!target) {
       return { success: false, error: "Photo not found in this order gallery." };
@@ -389,6 +537,11 @@ export async function submitCloudGalleryReviewAction(input: {
     });
 
     const photos = await getCloudPhotosByOrder(auth.order.id);
+    const settings = resolveCloudStorageSettings(auth.order, photos.length > 0);
+    if (!auth.isStaff && !settings.proofingEnabled) {
+      return { success: false, error: "Photo selection is not currently open for this gallery." };
+    }
+
     const selectedPhotos = photos.filter((p) => p.selected);
     const nowIso = new Date().toISOString();
     const cleanNotes = input.notes?.trim().slice(0, 1000) || undefined;
@@ -489,7 +642,7 @@ export async function deleteOrderCloudPhotosAction(input: {
       };
     }
 
-    const keys = toDelete.map((p) => p.objectKey).filter(Boolean);
+    const keys = toDelete.flatMap((p) => [p.objectKey, p.preview?.objectKey].filter(Boolean) as string[]);
     await deleteR2Objects(keys);
     await deleteCloudPhotosByIds(toDelete.map((p) => p.id));
 
@@ -533,6 +686,121 @@ export async function deleteOrderCloudPhotosAction(input: {
     return {
       success: false,
       error: err instanceof Error ? err.message : "Failed to delete proofing photos.",
+    };
+  }
+}
+
+export async function getOriginalPhotoDownloadUrlAction(input: {
+  studioId: string;
+  orderId: string;
+  photoId: string;
+  idToken: string;
+}): Promise<{
+  success: boolean;
+  downloadUrl?: string;
+  fileName?: string;
+  error?: string;
+}> {
+  try {
+    const decoded = await requireVerifiedUser(input.idToken);
+    const cleanStudioId = input.studioId.toLowerCase();
+    const membership = await requireStudioMember(decoded.uid, cleanStudioId);
+
+    const [order, rawPhotos] = await Promise.all([
+      getOrderById(input.orderId),
+      getCloudPhotosByOrder(input.orderId),
+    ]);
+
+    if (!order || order.studioId.toLowerCase() !== cleanStudioId) {
+      return { success: false, error: "Order not found in authorized studio." };
+    }
+
+    if (membership.role !== "STUDIO_OWNER") {
+      const memberRecord = await findActiveMemberRecord(cleanStudioId, decoded.email);
+      if (!memberRecord) {
+        return { success: false, error: "Active crew profile not found." };
+      }
+      const tasks = await getTasksByMember(cleanStudioId, memberRecord.id);
+      const isAssigned =
+        order.assignedResources?.some((r) => r.memberId === memberRecord.id) ||
+        tasks.some((t) => t.orderId === order.id);
+      if (!isAssigned) {
+        return { success: false, error: "Access denied: This order is not assigned to your crew profile." };
+      }
+    }
+
+    const targetPhoto = rawPhotos.find((p) => p.id === input.photoId);
+    if (!targetPhoto || !targetPhoto.objectKey) {
+      return { success: false, error: "Photo not found." };
+    }
+
+    const downloadFileName = targetPhoto.sourceFileName || targetPhoto.fileName;
+    const downloadUrl = await createPresignedPhotoReadUrl({
+      objectKey: targetPhoto.objectKey,
+      expiresInSeconds: 900,
+      responseContentDisposition: `attachment; filename="${downloadFileName}"`,
+    });
+
+    const actorName = decoded.name || decoded.email || "Studio Staff";
+    const auditEntry: OrderAuditEntry = {
+      id: `audit_${Date.now()}_original_download`,
+      timestamp: getStudioTimestampIST(new Date()),
+      actorName,
+      actorRole: membership.role === "STUDIO_OWNER" ? "Owner" : "Member",
+      action: "Original Photo Downloaded",
+      details: `Downloaded original file "${downloadFileName}"`,
+    };
+
+    await updateOrder(order.id, {
+      auditLog: [...(order.auditLog || []), auditEntry],
+    });
+
+    return {
+      success: true,
+      downloadUrl,
+      fileName: downloadFileName,
+    };
+  } catch (err: unknown) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Failed to generate original download URL.",
+    };
+  }
+}
+
+export async function abortCloudUploadSessionAction(input: {
+  sessionId: string;
+  idToken: string;
+}): Promise<{ success: boolean; error?: string }> {
+  try {
+    const decoded = await requireVerifiedUser(input.idToken);
+    const session = await getCloudUploadSession(input.sessionId);
+    if (!session) {
+      return { success: true };
+    }
+    if (session.actorUid !== decoded.uid) {
+      await requireStudioMember(decoded.uid, session.studioId, "STUDIO_OWNER");
+    }
+
+    const uploadId = session.uploadId || session.multipartUploadId;
+    if (uploadId) {
+      await abortMultipartUpload({
+        objectKey: session.objectKey,
+        uploadId,
+      });
+    }
+
+    const bytesToRelease = session.sizeBytes || session.uploadSizeBytes || session.reservedBytes || 0;
+    await Promise.all([
+      updateCloudUploadSession(session.id, { state: "ABORTED" }),
+      releaseStudioStorageReservation(session.studioId, bytesToRelease, 1),
+    ]);
+
+    return { success: true };
+  } catch (err: unknown) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Failed to abort upload session.",
     };
   }
 }

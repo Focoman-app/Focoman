@@ -1,5 +1,7 @@
 import { getOrderFinancials, getReceiptSources } from './billing.ts';
+import { resolveCloudStorageSettings } from './cloudStorage.ts';
 export * from './billing.ts';
+export * from './cloudStorage.ts';
 import type {
   OrderStatus,
   Task,
@@ -264,7 +266,6 @@ export function toCustomerTrackingView(
       eventLocation: order.eventLocation || order.locationInfo?.address,
       services: order.services,
       packages: order.packages,
-      assignedResources: order.assignedResources || [],
       totalAmount: breakdown.confirmedPrice,
       advanceAmount: breakdown.advanceAmount,
       advanceDate: breakdown.advanceDate,
@@ -276,6 +277,10 @@ export function toCustomerTrackingView(
       remainingAmount: breakdown.remainingAmount,
       installments: breakdown.installments,
       driveDeliverables: order.driveDeliverables || [],
+      cloudStorageSettings: resolveCloudStorageSettings(
+        order,
+        Boolean((order.cloudPhotoCount && order.cloudPhotoCount > 0) || order.cloudReviewSubmittedAt)
+      ),
       ...(order.cloudPhotoCount !== undefined ? { cloudPhotoCount: order.cloudPhotoCount } : {}),
       ...(order.cloudStorageBytes !== undefined ? { cloudStorageBytes: order.cloudStorageBytes } : {}),
       ...(order.cloudReviewApproved !== undefined ? { cloudReviewApproved: order.cloudReviewApproved } : {}),

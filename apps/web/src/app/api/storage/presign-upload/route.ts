@@ -4,7 +4,14 @@ import {
   getCloudPhotosByOrder,
   getOrderById,
   getStudioBySlug,
+  reserveStudioStorage,
+  createCloudUploadSessions,
 } from "@focoman/db";
+import {
+  validateCloudFileName,
+  CLOUD_PART_BYTES,
+} from "@focoman/domain";
+import type { CloudUploadSession } from "@focoman/types";
 import { requireStudioMember, requireVerifiedUser } from "@/lib/serverAuth";
 import {
   ALLOWED_PROOFING_MIME_TYPES,
@@ -106,6 +113,14 @@ export async function POST(req: Request) {
 
     let totalBatchBytes = 0;
     for (const f of files) {
+      try {
+        validateCloudFileName(f.fileName);
+      } catch (err) {
+        return NextResponse.json(
+          { error: err instanceof Error ? err.message : `Invalid file "${f.fileName}".` },
+          { status: 400 }
+        );
+      }
       if (!ALLOWED_PROOFING_MIME_TYPES.has(f.mimeType.toLowerCase())) {
         return NextResponse.json(
           {
@@ -131,11 +146,29 @@ export async function POST(req: Request) {
       );
     }
 
+    const reservationRes = await reserveStudioStorage(
+      cleanStudioId,
+      totalBatchBytes,
+      files.length,
+      quotaCheck.quota.limitBytes
+    );
+    if (!reservationRes.success) {
+      return NextResponse.json(
+        { error: reservationRes.error || "Storage quota reservation failed." },
+        { status: 413 }
+      );
+    }
+
+    const sessions: CloudUploadSession[] = [];
+    const nowIso = new Date().toISOString();
+    const expiryIso = new Date(Date.now() + 2 * 3600 * 1000).toISOString();
+
     const uploads = await Promise.all(
       files.map(async (f, index) => {
         const photoId = `pho_${Date.now()}_${index}_${Math.random()
           .toString(36)
           .slice(2, 7)}`;
+        const sessionId = `ses_${photoId}`;
         const objectKey = buildPhotoObjectKey(
           cleanStudioId,
           orderId,
@@ -148,8 +181,31 @@ export async function POST(req: Request) {
           contentLength: f.sizeBytes,
           expiresInSeconds: 600,
         });
+
+        const partCount = Math.max(1, Math.ceil(f.sizeBytes / CLOUD_PART_BYTES));
+        sessions.push({
+          id: sessionId,
+          photoId,
+          orderId,
+          studioId: cleanStudioId,
+          actorUid: decoded.uid,
+          fileName: f.fileName,
+          sourceFileName: f.fileName,
+          sizeBytes: f.sizeBytes,
+          mimeType: f.mimeType,
+          storageKind: "OPTIMIZED",
+          objectKey,
+          partCount,
+          partBytes: CLOUD_PART_BYTES,
+          state: "RESERVED",
+          status: "RESERVED",
+          expiresAt: expiryIso,
+          createdAt: nowIso,
+        });
+
         return {
           photoId,
+          sessionId,
           fileName: f.fileName,
           displayName: extractLightroomBaseName(f.fileName) || f.fileName,
           objectKey,
@@ -161,6 +217,8 @@ export async function POST(req: Request) {
         };
       })
     );
+
+    await createCloudUploadSessions(sessions);
 
     return NextResponse.json({
       uploads,

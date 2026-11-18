@@ -63,6 +63,10 @@ When evaluating specifications and implementation guidelines:
 
 ## 7. Setup & Operational Guides
 
+- **[Cloud Storage and Proofing Blueprint](technical/cloud-storage-proofing.md)** — Implementation contracts for independent settings, upload sessions, quota accounting, private access, worker processing and migration.
+
+- **[Cloud Storage and Independent Proofing Plan](plan/analysis/cloud-storage-independent-proofing.md)** — Approved extension of existing R2 storage; implementation underway. Includes source review, migration policy, task checklist and verification matrix.
+
 - **[Quick Setup Guide](QUICK_SETUP_GUIDE.md)** — Local environment initialization and startup instructions.
 - **[Issue Analysis Document](ISSUE_ANALYSIS.md)** — Diagnostic records for past platform issues.
 

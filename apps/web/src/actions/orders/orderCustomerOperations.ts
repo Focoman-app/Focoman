@@ -1,5 +1,5 @@
 import "server-only";
-import { canCompleteOrder, getStudioTimestampIST, toCustomerTrackingView } from "@focoman/domain";
+import { canCompleteOrder, getStudioTimestampIST, toCustomerTrackingView, resolveCloudStorageSettings } from "@focoman/domain";
 import {
   getMembersByStudio,
   getMembershipByUidAndStudio,
@@ -605,6 +605,20 @@ export async function submitCustomerTaskReviewCore(input: {
         success: false,
         error: "This step is not currently awaiting customer review.",
       };
+    }
+
+    const isPhotoSelectionTask = targetTask.title.toLowerCase().includes("photo selection");
+    if (isPhotoSelectionTask && !isStudioStaff) {
+      const settings = resolveCloudStorageSettings(
+        order,
+        Boolean((order.cloudPhotoCount && order.cloudPhotoCount > 0) || order.cloudReviewSubmittedAt)
+      );
+      if (!settings.proofingEnabled) {
+        return {
+          success: false,
+          error: "Photo proofing review is currently not enabled for this order.",
+        };
+      }
     }
 
     const cleanNote = input.reworkNotes?.trim();

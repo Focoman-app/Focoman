@@ -3,7 +3,12 @@ import {
   S3Client,
   PutObjectCommand,
   GetObjectCommand,
+  HeadObjectCommand,
   DeleteObjectsCommand,
+  CreateMultipartUploadCommand,
+  UploadPartCommand,
+  CompleteMultipartUploadCommand,
+  AbortMultipartUploadCommand,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
@@ -109,15 +114,16 @@ export async function createPresignedPhotoUploadUrl(input: {
 export async function createPresignedPhotoReadUrl(input: {
   objectKey: string;
   expiresInSeconds?: number;
+  responseContentDisposition?: string;
 }): Promise<string> {
   const env = getR2Env();
-  if (env.publicBaseUrl) {
-    return `${env.publicBaseUrl}/${input.objectKey.replace(/^\/+/, "")}`;
-  }
   const client = getR2Client();
   const command = new GetObjectCommand({
     Bucket: env.bucketName,
     Key: input.objectKey,
+    ...(input.responseContentDisposition
+      ? { ResponseContentDisposition: input.responseContentDisposition }
+      : {}),
   });
   return await getSignedUrl(client, command, {
     expiresIn: input.expiresInSeconds ?? 3600, // 1 hour
@@ -157,4 +163,115 @@ export async function deleteR2Objects(objectKeys: string[]): Promise<{
   }
 
   return { deletedCount, skipped: false };
+}
+
+export async function headR2Object(objectKey: string): Promise<{
+  exists: boolean;
+  sizeBytes?: number;
+  etag?: string;
+  contentType?: string;
+}> {
+  if (!isR2Configured()) {
+    return { exists: false };
+  }
+  const env = getR2Env();
+  const client = getR2Client();
+  try {
+    const res = await client.send(
+      new HeadObjectCommand({
+        Bucket: env.bucketName,
+        Key: objectKey,
+      })
+    );
+    return {
+      exists: true,
+      sizeBytes: res.ContentLength,
+      etag: res.ETag?.replace(/"/g, ""),
+      contentType: res.ContentType,
+    };
+  } catch (err: unknown) {
+    return { exists: false };
+  }
+}
+
+export async function createMultipartUpload(input: {
+  objectKey: string;
+  contentType: string;
+}): Promise<string> {
+  const env = getR2Env();
+  const client = getR2Client();
+  const res = await client.send(
+    new CreateMultipartUploadCommand({
+      Bucket: env.bucketName,
+      Key: input.objectKey,
+      ContentType: input.contentType,
+    })
+  );
+  if (!res.UploadId) {
+    throw new Error("Failed to initialize multipart upload.");
+  }
+  return res.UploadId;
+}
+
+export async function createPresignedUploadPartUrl(input: {
+  objectKey: string;
+  uploadId: string;
+  partNumber: number;
+  expiresInSeconds?: number;
+}): Promise<string> {
+  const env = getR2Env();
+  const client = getR2Client();
+  const command = new UploadPartCommand({
+    Bucket: env.bucketName,
+    Key: input.objectKey,
+    UploadId: input.uploadId,
+    PartNumber: input.partNumber,
+  });
+  return await getSignedUrl(client, command, {
+    expiresIn: input.expiresInSeconds ?? 600,
+  });
+}
+
+export async function completeMultipartUpload(input: {
+  objectKey: string;
+  uploadId: string;
+  parts: { partNumber: number; etag: string }[];
+}): Promise<{ etag?: string }> {
+  const env = getR2Env();
+  const client = getR2Client();
+  const sortedParts = [...input.parts].sort((a, b) => a.partNumber - b.partNumber);
+  const res = await client.send(
+    new CompleteMultipartUploadCommand({
+      Bucket: env.bucketName,
+      Key: input.objectKey,
+      UploadId: input.uploadId,
+      MultipartUpload: {
+        Parts: sortedParts.map((p) => ({
+          PartNumber: p.partNumber,
+          ETag: p.etag.startsWith('"') ? p.etag : `"${p.etag}"`,
+        })),
+      },
+    })
+  );
+  return { etag: res.ETag?.replace(/"/g, "") };
+}
+
+export async function abortMultipartUpload(input: {
+  objectKey: string;
+  uploadId: string;
+}): Promise<void> {
+  if (!isR2Configured()) return;
+  const env = getR2Env();
+  const client = getR2Client();
+  try {
+    await client.send(
+      new AbortMultipartUploadCommand({
+        Bucket: env.bucketName,
+        Key: input.objectKey,
+        UploadId: input.uploadId,
+      })
+    );
+  } catch {
+    // Non-fatal if upload was already completed or expired
+  }
 }

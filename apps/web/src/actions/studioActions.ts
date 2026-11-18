@@ -47,8 +47,10 @@ async function purgeStudioR2Objects(studioId: string): Promise<void> {
       .get();
     if (snap.empty) return;
     const keys = snap.docs
-      .map((d) => String((d.data() as { objectKey?: string }).objectKey || ""))
-      .filter(Boolean);
+      .flatMap((d) => {
+        const data = d.data() as { objectKey?: string; preview?: { objectKey?: string } };
+        return [data.objectKey, data.preview?.objectKey].filter(Boolean) as string[];
+      });
     if (keys.length > 0) {
       await deleteR2Objects(keys);
     }

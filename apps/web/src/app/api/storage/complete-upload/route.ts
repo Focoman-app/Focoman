@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import {
-  adjustStudioStorageUsage,
   getOrderById,
   getStudioBySlug,
-  saveCloudPhotosBatch,
+  commitVerifiedUploadBatch,
+  releaseStudioStorageReservation,
   syncOrderCloudPhotoSummary,
   updateOrder,
 } from "@focoman/db";
@@ -19,7 +19,7 @@ import {
   formatStorageBytes,
   resolveStudioStorageQuota,
 } from "@/lib/storageQuota";
-import { isR2Configured } from "@/services/r2StorageService";
+import { isR2Configured, headR2Object } from "@/services/r2StorageService";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -98,19 +98,40 @@ export async function POST(req: Request) {
       }
     }
 
-    const totalBatchBytes = photos.reduce((sum, p) => sum + p.sizeBytes, 0);
-    const quotaCheck = canStudioUploadBytes(studio, totalBatchBytes);
-    if (!quotaCheck.allowed) {
+    const verifiedPhotos: typeof photos = [];
+    let unverifiedBytes = 0;
+    let unverifiedCount = 0;
+
+    for (const p of photos) {
+      const head = await headR2Object(p.objectKey);
+      if (!head.exists || !head.sizeBytes || head.sizeBytes === 0) {
+        unverifiedBytes += p.sizeBytes;
+        unverifiedCount += 1;
+        continue;
+      }
+      verifiedPhotos.push({
+        ...p,
+        sizeBytes: head.sizeBytes || p.sizeBytes,
+      });
+    }
+
+    if (unverifiedCount > 0) {
+      await releaseStudioStorageReservation(cleanStudioId, unverifiedBytes, unverifiedCount);
+    }
+
+    if (verifiedPhotos.length === 0) {
       return NextResponse.json(
-        { error: quotaCheck.reason, quota: quotaCheck.quota },
-        { status: 413 }
+        { error: "No uploaded objects could be verified in cloud storage." },
+        { status: 400 }
       );
     }
 
+    const totalBatchBytes = verifiedPhotos.reduce((sum, p) => sum + p.sizeBytes, 0);
     const nowIso = new Date().toISOString();
     const uploaderName = decoded.name || decoded.email || "Studio Staff";
 
-    const records: OrderCloudPhoto[] = photos.map((p) => ({
+    const records: OrderCloudPhoto[] = verifiedPhotos.map((p) => ({
+      schemaVersion: 1,
       id: p.id,
       orderId,
       studioId: cleanStudioId,
@@ -119,6 +140,7 @@ export async function POST(req: Request) {
       objectKey: p.objectKey,
       mimeType: p.mimeType,
       sizeBytes: p.sizeBytes,
+      storageKind: "OPTIMIZED",
       ...(p.width ? { width: p.width } : {}),
       ...(p.height ? { height: p.height } : {}),
       selected: false,
@@ -126,10 +148,18 @@ export async function POST(req: Request) {
       uploadedBy: uploaderName,
     }));
 
-    await saveCloudPhotosBatch(records);
+    await commitVerifiedUploadBatch({
+      studioId: cleanStudioId,
+      orderId,
+      photos: records,
+      sessionsToCommit: verifiedPhotos.map((p) => ({
+        id: `ses_${p.id}`,
+        reservedBytes: p.sizeBytes,
+      })),
+    });
 
-    const [usageAfter, orderSummary] = await Promise.all([
-      adjustStudioStorageUsage(cleanStudioId, totalBatchBytes, records.length),
+    const [updatedStudio, orderSummary] = await Promise.all([
+      getStudioBySlug(cleanStudioId),
       syncOrderCloudPhotoSummary(orderId),
     ]);
 
@@ -146,11 +176,7 @@ export async function POST(req: Request) {
       auditLog: [...(order.auditLog || []), auditEntry],
     });
 
-    const updatedQuota = resolveStudioStorageQuota({
-      ...studio,
-      storageUsedBytes: usageAfter.storageUsedBytes,
-      storageFileCount: usageAfter.storageFileCount,
-    });
+    const updatedQuota = resolveStudioStorageQuota(updatedStudio || studio);
 
     return NextResponse.json({
       savedCount: records.length,
