@@ -11,7 +11,7 @@
 > - **Authentication & Identity:** Single personal Google Identity (Firebase UID). Decoupled studio memberships (`StudioOwner` vs. `CrewMember`). Zero passwords, zero customer accounts (guest tracking via cryptographic passkeys).
 > - **Pure JavaScript / TypeScript Stack:** 100% full-stack TypeScript with Next.js 15 App Router, React 19, Tailwind CSS, Firebase Auth & Firestore. All legacy Java, Spring Boot, and relational SQL artifacts are completely decommissioned.
 
-# ThreadSafe Project FOCOMAN: Product Requirements Specification
+# FOCOMAN: Product Requirements Specification
 
 ## 1. Introduction
 

@@ -662,6 +662,13 @@ export async function selectStudioPlanAction(
       return { success: false, error: "Choose a valid studio plan." };
     }
 
+    if (normalizedPlan !== "FREE") {
+      return {
+        success: false,
+        error: "Paid plans require verified payment collection through Cashfree. Please proceed via checkout.",
+      };
+    }
+
     const canonicalCapabilities = PLAN_CAPABILITIES[normalizedPlan];
     if (!canonicalCapabilities) {
       return { success: false, error: "The selected plan is not configured." };

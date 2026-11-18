@@ -316,3 +316,35 @@ export const PLAN_CAPABILITIES: Record<string, CapabilityId[]> = {
     'WHATSAPP_BOT', 'BUSINESS_REPORTS', 'ANALYTICS_ADVANCED',
   ],
 };
+
+/**
+ * Cashfree Payment Gateway Configuration
+ */
+export const PLAN_PRICES_INR = {
+  FREE: 0,
+  STARTER: 999,
+  PROFESSIONAL: 1999,
+} as const;
+
+export const CASHFREE_CONFIG = {
+  get appId(): string {
+    return process.env.CASHFREE_APP_ID || '';
+  },
+  get secretKey(): string {
+    return process.env.CASHFREE_SECRET_KEY || '';
+  },
+  get env(): 'sandbox' | 'production' {
+    return (process.env.CASHFREE_ENV === 'production' ? 'production' : 'sandbox') as 'sandbox' | 'production';
+  },
+  get apiVersion(): string {
+    return process.env.CASHFREE_API_VERSION || '2023-08-01';
+  },
+  get baseUrl(): string {
+    return this.env === 'production'
+      ? 'https://api.cashfree.com/pg'
+      : 'https://sandbox.cashfree.com/pg';
+  },
+  get isConfigured(): boolean {
+    return Boolean(this.appId && this.secretKey);
+  },
+};

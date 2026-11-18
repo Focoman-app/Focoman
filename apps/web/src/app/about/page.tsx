@@ -16,26 +16,26 @@ export default function AboutPage() {
             We Build Software for People Who Create
           </h1>
           <p className="mx-auto mt-5 max-w-xl text-base text-text-secondary sm:text-lg">
-            ThreadSafe is a product software company operating out of India.
+            Focoman is a software product organization operating out of India.
             We build focused, purposeful tools for creative professionals.
           </p>
         </div>
       </section>
 
-      {/* Company: ThreadSafe */}
+      {/* About Focoman */}
       <section className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8">
         <div className="rounded-3xl border border-border-default bg-white p-8 shadow-sm sm:p-12">
           <div className="grid gap-10 lg:grid-cols-2 lg:items-center">
             <div>
               <span className="inline-block rounded-full bg-brand-blue-background px-3 py-1 text-xs font-bold uppercase tracking-widest text-brand-blue-primary">
-                The Company
+                About Focoman
               </span>
               <h2 className="mt-4 text-2xl font-extrabold tracking-tight text-text-primary sm:text-3xl">
-                ThreadSafe
+                Focoman
               </h2>
               <p className="mt-4 text-sm leading-relaxed text-text-secondary sm:text-base">
-                ThreadSafe is a software product company based in India. We specialize in building
-                domain-specific software systems for small and medium businesses that have been
+                Focoman is registered in India and specializes in building
+                domain-specific software systems for photography and creative businesses that have been
                 historically underserved by generic enterprise tools.
               </p>
               <p className="mt-4 text-sm leading-relaxed text-text-secondary sm:text-base">
@@ -50,23 +50,22 @@ export default function AboutPage() {
                 </div>
                 <div className="rounded-xl border border-border-default bg-surface-app px-5 py-3">
                   <p className="text-xs font-bold text-text-primary">Type</p>
-                  <p className="mt-0.5 text-sm font-semibold text-brand-blue-primary">Product Software Company</p>
+                  <p className="mt-0.5 text-sm font-semibold text-brand-blue-primary">Product Software Organization</p>
                 </div>
                 <div className="rounded-xl border border-border-default bg-surface-app px-5 py-3">
                   <p className="text-xs font-bold text-text-primary">Focus</p>
-                  <p className="mt-0.5 text-sm font-semibold text-brand-blue-primary">SMB Vertical Software</p>
+                  <p className="mt-0.5 text-sm font-semibold text-brand-blue-primary">Creative Studio BOS</p>
                 </div>
               </div>
             </div>
 
             {/* Visual accent block */}
             <div className="rounded-2xl border border-border-default bg-gradient-to-br from-brand-blue-background via-white to-brand-purple-background p-8 text-center">
-              <p className="text-4xl font-extrabold text-text-primary">ThreadSafe</p>
-              <p className="mt-2 text-sm font-medium text-text-secondary">Software built to hold up under pressure.</p>
+              <p className="text-4xl font-extrabold text-text-primary">Focoman</p>
+              <p className="mt-2 text-sm font-medium text-text-secondary">Software built to power photography studios.</p>
               <div className="mt-6 h-px bg-border-divider" />
               <p className="mt-6 text-xs italic text-text-tertiary">
-                &quot;We name ourselves after the principle of writing code that works correctly
-                when multiple things happen at once, because business never slows down.&quot;
+                &quot;Focus beyond the frames — helping studios coordinate crews, manage orders, and deliver unforgettable memories on time.&quot;
               </p>
             </div>
           </div>
@@ -83,7 +82,7 @@ export default function AboutPage() {
             Focoman: Focus beyond the frames
           </h2>
           <p className="mt-4 max-w-3xl text-sm leading-relaxed text-text-secondary sm:text-base">
-            Focoman is ThreadSafe&apos;s first product: a complete Business Operating System built
+            Focoman is a complete Business Operating System built
             exclusively for photography studios. It replaces the chaos of scattered WhatsApp messages,
             hand-written notebooks, and Excel sheets that most studio owners rely on today.
           </p>

@@ -670,3 +670,58 @@ export type DashboardOrder = Pick<Order, 'id' | 'orderNumber' | 'eventType' | 'e
 };
 
 export type OrderScheduleSummary = Pick<Order, 'id' | 'eventDate' | 'eventDates' | 'serviceSchedules' | 'assignedResources' | 'orderStatus' | 'isDeleted'>;
+
+/**
+ * Cashfree Payment Gateway Contracts
+ */
+export interface CashfreeCustomerDetails {
+  customer_id: string;
+  customer_name?: string;
+  customer_email?: string;
+  customer_phone: string;
+}
+
+export interface CashfreeCreateOrderPayload {
+  order_id: string;
+  order_amount: number;
+  order_currency: string;
+  customer_details: CashfreeCustomerDetails;
+  order_meta?: {
+    return_url?: string;
+    notify_url?: string;
+    payment_methods?: string;
+  };
+  order_note?: string;
+  order_tags?: Record<string, string>;
+}
+
+export interface CashfreeOrderResponse {
+  cf_order_id?: string;
+  order_id: string;
+  entity?: string;
+  order_currency: string;
+  order_amount: number;
+  order_status: 'ACTIVE' | 'PAID' | 'EXPIRED' | 'TERMINATED';
+  payment_session_id?: string;
+  order_expiry_time?: string;
+  order_note?: string;
+  message?: string;
+  code?: string;
+  type?: string;
+}
+
+export interface PlanPaymentSessionResult {
+  success: boolean;
+  paymentSessionId?: string;
+  orderId?: string;
+  environment?: 'sandbox' | 'production';
+  error?: string;
+}
+
+export interface PlanPaymentVerificationResult {
+  success: boolean;
+  plan?: PlanType;
+  orderId?: string;
+  paymentStatus?: string;
+  error?: string;
+}

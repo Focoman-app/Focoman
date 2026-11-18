@@ -5,6 +5,10 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { StudioMembership } from "@focoman/types";
 import { getUserWorkspacesAction, selectStudioPlanAction } from "@/actions/studioActions";
+import {
+  createPlanPaymentSessionAction,
+  verifyAndActivatePlanAction,
+} from "@/actions/cashfreeActions";
 import { subscribeToAuthState } from "@/lib/firebaseAuth";
 import type { User } from "firebase/auth";
 
@@ -81,10 +85,47 @@ function buildCheckoutUrl(studioId: string, plan: CheckoutPlanId) {
   return `/checkout?${params.toString()}`;
 }
 
+declare global {
+  interface Window {
+    Cashfree?: any;
+  }
+}
+
+function loadCashfreeSdk(): Promise<any> {
+  if (typeof window === "undefined") {
+    return Promise.reject(new Error("Cashfree SDK is only available in the browser."));
+  }
+  if (window.Cashfree) {
+    return Promise.resolve(window.Cashfree);
+  }
+
+  return new Promise((resolve, reject) => {
+    const existing = document.getElementById("cashfree-sdk-v3");
+    if (existing) {
+      existing.addEventListener("load", () => resolve(window.Cashfree));
+      existing.addEventListener("error", () =>
+        reject(new Error("Failed to load payment gateway SDK."))
+      );
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.id = "cashfree-sdk-v3";
+    script.src = "https://sdk.cashfree.com/js/v3/cashfree.js";
+    script.async = true;
+    script.onload = () => resolve(window.Cashfree);
+    script.onerror = () =>
+      reject(new Error("Unable to connect to payment gateway SDK. Please check your connection."));
+    document.body.appendChild(script);
+  });
+}
+
 export function CheckoutBuilder() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const studioParam = searchParams.get("studio") ?? "";
+  const orderIdParam = searchParams.get("order_id");
+  const statusParam = searchParams.get("status");
   const planParam = resolveCheckoutPlanParam(
     searchParams.get("plan"),
     searchParams.get("upgrade")
@@ -154,6 +195,42 @@ export function CheckoutBuilder() {
     }
   }, [planParam, selectedPlan]);
 
+  // Handle return redirect from Cashfree with order_id verification
+  useEffect(() => {
+    if (!orderIdParam || !user || !selectedWorkspace || statusParam !== "verify") return;
+
+    let cancelled = false;
+    setIsSubmitting(true);
+    void (async () => {
+      try {
+        const idToken = await user.getIdToken();
+        const verification = await verifyAndActivatePlanAction(
+          orderIdParam,
+          selectedWorkspace.studioId,
+          selectedPlan === "FREE" ? "STARTER" : selectedPlan,
+          idToken
+        );
+        if (!cancelled) {
+          if (verification.success) {
+            setCheckoutSuccess(true);
+          } else {
+            setSubmitError(verification.error || "Payment verification failed.");
+          }
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setSubmitError(err instanceof Error ? err.message : "Unable to verify payment.");
+        }
+      } finally {
+        if (!cancelled) setIsSubmitting(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [orderIdParam, selectedPlan, selectedWorkspace, statusParam, user]);
+
   const selectedWorkspace = useMemo(
     () => ownerWorkspaces.find((workspace) => workspace.studioId === studioParam),
     [ownerWorkspaces, studioParam]
@@ -191,11 +268,77 @@ export function CheckoutBuilder() {
     setSubmitError(null);
     try {
       const idToken = await user.getIdToken();
-      const result = await selectStudioPlanAction(selectedWorkspace.studioId, selectedPlan, idToken);
-      if (!result.success) throw new Error(result.error || "Unable to save the studio plan.");
+
+      // Free plan requires no payment gateway transaction
+      if (selectedPlan === "FREE") {
+        const result = await selectStudioPlanAction(selectedWorkspace.studioId, "FREE", idToken);
+        if (!result.success) throw new Error(result.error || "Unable to save the studio plan.");
+        setCheckoutSuccess(true);
+        return;
+      }
+
+      // Paid plans (STARTER / PROFESSIONAL) require verified Cashfree payment
+      const origin = typeof window !== "undefined" ? window.location.origin : "http://localhost:3000";
+      const sessionResult = await createPlanPaymentSessionAction(
+        selectedWorkspace.studioId,
+        selectedPlan,
+        idToken,
+        origin
+      );
+
+      if (!sessionResult.success || !sessionResult.paymentSessionId || !sessionResult.orderId) {
+        throw new Error(sessionResult.error || "Unable to initialize payment session.");
+      }
+
+      // Load Cashfree Web SDK
+      const CashfreeSdk = await loadCashfreeSdk();
+      const cashfreeInstance = CashfreeSdk({
+        mode: sessionResult.environment === "production" ? "production" : "sandbox",
+      });
+
+      // Launch Cashfree modal checkout with fallback to redirect
+      let checkoutResult: any;
+      try {
+        checkoutResult = await cashfreeInstance.checkout({
+          paymentSessionId: sessionResult.paymentSessionId,
+          redirectTarget: "_modal",
+        });
+      } catch (modalErr) {
+        // Fallback to hosted redirect if modal checkout is restricted
+        await cashfreeInstance.checkout({
+          paymentSessionId: sessionResult.paymentSessionId,
+          redirectTarget: "_self",
+        });
+        return;
+      }
+
+      if (checkoutResult?.error) {
+        const msg = checkoutResult.error.message || "Payment was cancelled or failed.";
+        if (msg.includes("whitelist") || msg.includes("not enabled or approved")) {
+          throw new Error(
+            `${msg} (Tip: Go to merchant.cashfree.com > Developers > Whitelisting to whitelist http://localhost:3000)`
+          );
+        }
+        throw new Error(msg);
+      }
+
+      // Verify payment on the server before activating the plan
+      const verification = await verifyAndActivatePlanAction(
+        sessionResult.orderId,
+        selectedWorkspace.studioId,
+        selectedPlan,
+        idToken
+      );
+
+      if (!verification.success) {
+        throw new Error(
+          verification.error || "Payment verification failed. If your payment was deducted, please contact support."
+        );
+      }
+
       setCheckoutSuccess(true);
     } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : "Unable to save the studio plan.");
+      setSubmitError(error instanceof Error ? error.message : "Unable to process payment.");
     } finally {
       setIsSubmitting(false);
     }
@@ -312,10 +455,24 @@ export function CheckoutBuilder() {
               onClick={handleProceed}
               className="w-full rounded-xl bg-brand-orange-primary px-6 py-3.5 text-xs font-extrabold text-white shadow-sm transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {isSubmitting ? "Saving plan..." : selectedPlan === "FREE" ? "Save Free plan" : "Continue to payment setup"}
+              {isSubmitting
+                ? "Processing payment..."
+                : selectedPlan === "FREE"
+                ? "Save Free plan"
+                : selectedPlan === "STARTER"
+                ? "Proceed to Pay ₹999"
+                : "Proceed to Pay ₹1,999"}
             </button>
-            {selectedPlan !== "FREE" && <p className="text-center text-[11px] text-text-tertiary">Testing mode active: Clicking above immediately activates the selected plan for end-to-end testing.</p>}
-            {submitError && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-center text-[11px] text-red-700">{submitError}</p>}
+            {selectedPlan !== "FREE" && (
+              <p className="text-center text-[11px] text-text-tertiary">
+                🔒 Secure 256-bit encrypted payment gateway (UPI, Cards, NetBanking, Wallets).
+              </p>
+            )}
+            {submitError && (
+              <p role="alert" className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-center text-[11px] text-red-700">
+                {submitError}
+              </p>
+            )}
           </div>
         )}
       </section>
