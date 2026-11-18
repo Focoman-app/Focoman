@@ -686,13 +686,10 @@ export async function selectStudioPlanAction(
     await updateStudio(studioSlug, {
       features: {
         oms: true,
-        crm: normalizedPlan !== "FREE",
-        erp: normalizedPlan !== "FREE",
-        whatsapp: normalizedPlan === "PROFESSIONAL",
-        autoAssignCrew:
-          normalizedPlan !== "FREE"
-            ? existingStudio?.features?.autoAssignCrew ?? true
-            : false,
+        crm: false,
+        erp: false,
+        whatsapp: false,
+        autoAssignCrew: false,
         ...(existingStudio?.features?.autoAssignCrewConfigured !== undefined
           ? { autoAssignCrewConfigured: existingStudio.features.autoAssignCrewConfigured }
           : {}),

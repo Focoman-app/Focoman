@@ -195,6 +195,12 @@ export function CheckoutBuilder() {
     }
   }, [planParam, selectedPlan]);
 
+  const selectedWorkspace = useMemo(
+    () => ownerWorkspaces.find((workspace) => workspace.studioId === studioParam),
+    [ownerWorkspaces, studioParam]
+  );
+  const selectedPlanOption = PLAN_OPTIONS.find((plan) => plan.id === selectedPlan) ?? PLAN_OPTIONS[0];
+
   // Handle return redirect from Cashfree with order_id verification
   useEffect(() => {
     if (!orderIdParam || !user || !selectedWorkspace || statusParam !== "verify") return;
@@ -230,12 +236,6 @@ export function CheckoutBuilder() {
       cancelled = true;
     };
   }, [orderIdParam, selectedPlan, selectedWorkspace, statusParam, user]);
-
-  const selectedWorkspace = useMemo(
-    () => ownerWorkspaces.find((workspace) => workspace.studioId === studioParam),
-    [ownerWorkspaces, studioParam]
-  );
-  const selectedPlanOption = PLAN_OPTIONS.find((plan) => plan.id === selectedPlan) ?? PLAN_OPTIONS[0];
 
   const chooseWorkspace = (studioId: string) => {
     setCheckoutSuccess(false);
