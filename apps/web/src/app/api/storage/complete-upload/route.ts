@@ -1,192 +1,51 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import {
-  getOrderById,
-  getStudioBySlug,
-  commitVerifiedUploadBatch,
-  releaseStudioStorageReservation,
-  syncOrderCloudPhotoSummary,
-  updateOrder,
-} from "@focoman/db";
-import { getStudioTimestampIST } from "@focoman/domain";
-import type { OrderAuditEntry, OrderCloudPhoto } from "@focoman/types";
-import { requireStudioMember, requireVerifiedUser } from "@/lib/serverAuth";
-import {
-  MAX_PHOTOS_PER_BATCH,
-  MAX_PHOTO_UPLOAD_BYTES,
-  canStudioUploadBytes,
-  extractLightroomBaseName,
-  formatStorageBytes,
-  resolveStudioStorageQuota,
-} from "@/lib/storageQuota";
-import { isR2Configured, headR2Object } from "@/services/r2StorageService";
+import { appendCloudStorageAudit, beginCloudUploadVerification, commitCloudUploadSession, getCloudUploadSession } from "@focoman/db";
+import { randomUUID } from "crypto";
+import { isRawPhoto, validatePartManifest, validateRasterSignature } from "@focoman/domain";
+import { requireVerifiedUser } from "@/lib/serverAuth";
+import { authorizeCloudUploadSession } from "@/lib/cloudUploadAuthorization";
+import { completeMultipartUpload, hashR2Object, headR2Object, isR2Configured, listMultipartUploadParts } from "@/services/r2StorageService";
 
 export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
-
-const CompletedPhotoSchema = z.object({
-  id: z.string().trim().min(1).max(120),
-  fileName: z.string().trim().min(1).max(200),
-  objectKey: z.string().trim().min(1).max(400),
-  mimeType: z.string().trim().min(1).max(100),
-  sizeBytes: z.number().int().positive().max(MAX_PHOTO_UPLOAD_BYTES),
-  width: z.number().int().positive().max(20000).optional(),
-  height: z.number().int().positive().max(20000).optional(),
-});
-
-const CompleteUploadSchema = z.object({
-  studioId: z.string().trim().min(1),
-  orderId: z.string().trim().min(1),
-  photos: z.array(CompletedPhotoSchema).min(1).max(MAX_PHOTOS_PER_BATCH),
-});
-
-function extractBearerToken(req: Request): string | undefined {
-  const authHeader = req.headers.get("authorization") || "";
-  if (authHeader.toLowerCase().startsWith("bearer ")) {
-    return authHeader.slice(7).trim();
-  }
-  return undefined;
-}
-
+const schema = z.object({ sessionIds: z.array(z.string().min(1)).min(1).max(20) });
+const token = (req: Request) => { const h = req.headers.get("authorization") || ""; return h.toLowerCase().startsWith("bearer ") ? h.slice(7).trim() : undefined; };
 export async function POST(req: Request) {
   try {
-    if (!isR2Configured()) {
-      return NextResponse.json(
-        { error: "Cloud Proofing Storage is not configured on this server." },
-        { status: 503 }
-      );
-    }
-
-    const token = extractBearerToken(req);
-    const decoded = await requireVerifiedUser(token);
-
-    const body = await req.json().catch(() => null);
-    const parsed = CompleteUploadSchema.safeParse(body);
-    if (!parsed.success) {
-      return NextResponse.json(
-        { error: parsed.error.issues[0]?.message || "Invalid photo completion payload." },
-        { status: 400 }
-      );
-    }
-
-    const { studioId, orderId, photos } = parsed.data;
-    const cleanStudioId = studioId.toLowerCase();
-    const membership = await requireStudioMember(decoded.uid, cleanStudioId);
-
-    const [studio, order] = await Promise.all([
-      getStudioBySlug(cleanStudioId),
-      getOrderById(orderId),
-    ]);
-
-    if (!studio) {
-      return NextResponse.json({ error: "Studio not found." }, { status: 404 });
-    }
-    if (!order || order.studioId.toLowerCase() !== cleanStudioId) {
-      return NextResponse.json(
-        { error: "Order not found in this studio workspace." },
-        { status: 404 }
-      );
-    }
-
-    const expectedPrefix = `studios/${cleanStudioId.replace(/[^a-z0-9_-]/g, "_")}/orders/${orderId.replace(/[^a-zA-Z0-9_-]/g, "_")}/`;
-    for (const p of photos) {
-      if (!p.objectKey.startsWith(expectedPrefix)) {
-        return NextResponse.json(
-          { error: `Invalid storage object key for photo ${p.fileName}.` },
-          { status: 400 }
-        );
+    if (!isR2Configured()) return NextResponse.json({ error: "Cloud storage is not configured." }, { status: 503 });
+    const decoded = await requireVerifiedUser(token(req)); const parsed = schema.safeParse(await req.json().catch(() => null));
+    if (!parsed.success) return NextResponse.json({ error: "Invalid completion request." }, { status: 400 });
+    const results: { sessionId: string; state: string; photoId?: string; error?: string }[] = [];
+    for (const sessionId of [...new Set(parsed.data.sessionIds)]) try {
+      const existing = await getCloudUploadSession(sessionId);
+      if (!existing || !existing.multipartUploadId || !existing.uploadSizeBytes) throw new Error("Upload session not found.");
+      await authorizeCloudUploadSession(existing, decoded);
+      if (existing.actorUid !== decoded.uid) throw new Error("Only the uploader can complete this session.");
+      const s = await beginCloudUploadVerification({ sessionId, leaseToken: randomUUID(), leaseDurationMs: 5 * 60 * 1000 });
+      if (s.state === "COMMITTED") { results.push({ sessionId, state: "COMMITTED", photoId: s.photoId }); continue; }
+      if (new Date(s.expiresAt).getTime() < Date.now()) throw new Error("Upload session has expired.");
+      const uploadSizeBytes = s.uploadSizeBytes;
+      const multipartUploadId = s.multipartUploadId;
+      const verificationLeaseToken = s.leaseToken;
+      if (!uploadSizeBytes || !multipartUploadId || !verificationLeaseToken) throw new Error("Upload session is incomplete.");
+      // A previous request may have completed R2 before losing its Firestore
+      // response. HEAD first so a retry commits that immutable object instead
+      // of attempting to consume the multipart upload again.
+      let head = await headR2Object(s.objectKey);
+      if (!head.exists) {
+        const parts = validatePartManifest(uploadSizeBytes, await listMultipartUploadParts({ objectKey: s.objectKey, uploadId: multipartUploadId }));
+        await completeMultipartUpload({ objectKey: s.objectKey, uploadId: multipartUploadId, parts: parts.map((p) => ({ partNumber: p.PartNumber, etag: p.ETag })) });
+        head = await headR2Object(s.objectKey);
       }
-    }
-
-    const verifiedPhotos: typeof photos = [];
-    let unverifiedBytes = 0;
-    let unverifiedCount = 0;
-
-    for (const p of photos) {
-      const head = await headR2Object(p.objectKey);
-      if (!head.exists || !head.sizeBytes || head.sizeBytes === 0) {
-        unverifiedBytes += p.sizeBytes;
-        unverifiedCount += 1;
-        continue;
-      }
-      verifiedPhotos.push({
-        ...p,
-        sizeBytes: head.sizeBytes || p.sizeBytes,
-      });
-    }
-
-    if (unverifiedCount > 0) {
-      await releaseStudioStorageReservation(cleanStudioId, unverifiedBytes, unverifiedCount);
-    }
-
-    if (verifiedPhotos.length === 0) {
-      return NextResponse.json(
-        { error: "No uploaded objects could be verified in cloud storage." },
-        { status: 400 }
-      );
-    }
-
-    const totalBatchBytes = verifiedPhotos.reduce((sum, p) => sum + p.sizeBytes, 0);
-    const nowIso = new Date().toISOString();
-    const uploaderName = decoded.name || decoded.email || "Studio Staff";
-
-    const records: OrderCloudPhoto[] = verifiedPhotos.map((p) => ({
-      schemaVersion: 1,
-      id: p.id,
-      orderId,
-      studioId: cleanStudioId,
-      fileName: p.fileName,
-      displayName: extractLightroomBaseName(p.fileName) || p.fileName,
-      objectKey: p.objectKey,
-      mimeType: p.mimeType,
-      sizeBytes: p.sizeBytes,
-      storageKind: "OPTIMIZED",
-      ...(p.width ? { width: p.width } : {}),
-      ...(p.height ? { height: p.height } : {}),
-      selected: false,
-      uploadedAt: nowIso,
-      uploadedBy: uploaderName,
-    }));
-
-    await commitVerifiedUploadBatch({
-      studioId: cleanStudioId,
-      orderId,
-      photos: records,
-      sessionsToCommit: verifiedPhotos.map((p) => ({
-        id: `ses_${p.id}`,
-        reservedBytes: p.sizeBytes,
-      })),
-    });
-
-    const [updatedStudio, orderSummary] = await Promise.all([
-      getStudioBySlug(cleanStudioId),
-      syncOrderCloudPhotoSummary(orderId),
-    ]);
-
-    const auditEntry: OrderAuditEntry = {
-      id: `audit_${Date.now()}_cloud_upload`,
-      timestamp: getStudioTimestampIST(new Date()),
-      actorName: uploaderName,
-      actorRole: membership.role === "STUDIO_OWNER" ? "Owner" : "Member",
-      action: "Proofing Photos Uploaded",
-      details: `Uploaded ${records.length} proofing photo${records.length === 1 ? "" : "s"} (${formatStorageBytes(totalBatchBytes)}) to Cloud Storage`,
-    };
-
-    await updateOrder(orderId, {
-      auditLog: [...(order.auditLog || []), auditEntry],
-    });
-
-    const updatedQuota = resolveStudioStorageQuota(updatedStudio || studio);
-
-    return NextResponse.json({
-      savedCount: records.length,
-      quota: updatedQuota,
-      orderSummary,
-    });
-  } catch (err: unknown) {
-    console.error("[api/storage/complete-upload] Error:", err);
-    const message =
-      err instanceof Error ? err.message : "Failed to finalize cloud upload.";
-    return NextResponse.json({ error: message }, { status: 500 });
-  }
+      if (!head.exists || head.sizeBytes !== uploadSizeBytes) throw new Error("Stored object verification failed.");
+      const verified = await hashR2Object(s.objectKey, uploadSizeBytes);
+      if (verified.sizeBytes !== uploadSizeBytes || (s.expectedSha256 && verified.sha256 !== s.expectedSha256)) throw new Error("Stored object checksum verification failed.");
+      if (!isRawPhoto(s.sourceFileName) && !validateRasterSignature(verified.signature, head.contentType || s.uploadMimeType || "")) throw new Error("Stored image signature is invalid.");
+      const processingUnavailable = s.settings?.proofingEnabled && s.storageKind === "ORIGINAL" && process.env.CLOUD_STORAGE_WORKER_ENABLED !== "true";
+      const committed = await commitCloudUploadSession({ sessionId, actualSizeBytes: verified.sizeBytes, actualContentType: head.contentType, actualSha256: verified.sha256, leaseToken: verificationLeaseToken, processingUnavailable });
+      await appendCloudStorageAudit({ studioId: s.studioId, orderId: s.orderId, photoId: s.photoId, sessionId, actorUid: decoded.uid, action: "UPLOAD_COMMITTED", result: "SUCCESS", byteDelta: verified.sizeBytes });
+      results.push({ sessionId, state: committed.photo.processingStatus === "PENDING" ? "PROCESSING" : "COMMITTED", photoId: committed.photo.id });
+    } catch (err) { results.push({ sessionId, state: "FAILED", error: err instanceof Error ? err.message : "Completion failed." }); }
+    return NextResponse.json({ results }, { status: results.every((r) => r.state === "FAILED") ? 400 : 200 });
+  } catch (err) { return NextResponse.json({ error: err instanceof Error ? err.message : "Unable to complete uploads." }, { status: 500 }); }
 }

@@ -359,3 +359,124 @@ and [signed URLs](https://developers.cloudflare.com/r2/api/s3/presigned-urls/) d
 multipart and temporary capabilities. [LibRaw releases](https://www.libraw.org/download)
 and [camera support](https://www.libraw.org/supported-cameras) determine the pinned decoder
 and tested camera variants. Exact compatibility remains an integration gate.
+
+---
+
+## Launch refinement architecture — approved 2026-11-20
+
+This section supersedes conflicting earlier sections for the Cloud Storage & Photo
+Selection launch. It implements the approved plan at
+`docs/plan/analysis/cloud-storage-photo-selection-launch.md`. The prior universal
+multipart and mandatory LibRaw-worker designs are deferred: neither is required merely
+to make ordinary uploads reliable. Existing sessions using multipart stay supported.
+
+### Scope and fixed contracts
+
+Cloud Storage is the commercial/marketing name. The application calls the customer
+workflow **Photo Selection**. Do not rename IDs, routes, collections, legacy workflow
+titles, or API fields solely for copy. Compatibility readers map legacy data; writers use
+the additive contracts below.
+
+Direct browser-to-R2 upload remains mandatory. The Next.js process may inspect an object
+at completion within a bounded server-side verification path; it never receives the
+browser's upload body. Firestore metadata is the file index; gallery renders do not list
+R2. R2 credentials and object keys remain server-only.
+
+### Small-file and multipart protocol
+
+Ordinary raster uploads use a single server-authorized, short-lived PUT to a unique
+**session-owned staging key**. Large files, or existing resumable sessions, use the
+existing multipart APIs. Define the exact threshold in the policy module after checking
+the current SDK/R2 constraints; it must be below the serverless request path's limits.
+
+Both paths follow one persisted lifecycle:
+
+```text
+ADMITTED (reservation + session atomic)
+  -> UPLOADING -> VERIFYING -> COMMITTED
+                      |             |
+                      v             v
+              CLEANUP_PENDING -> CLEANED
+```
+
+Each upload's session ID is the idempotency identity. Admission transaction stores the
+reservation and a manifest hash; the same actor/order/manifest request returns its
+unexpired, nonterminal session. A different manifest for the same key is a conflict.
+The session owns an immutable staging key and a separate immutable final key. Commit
+uses a transaction lease/CAS and one stable final key. A retry first reads the session
+and final object, recovering provider success rather than initiating another upload.
+Only a verified committed final object becomes visible. Staging data and its reservation
+remain until a confirmed delete/abort after all issued URL expiry plus a short grace.
+
+The route classifies errors as invalid input, unauthenticated, forbidden, inaccessible,
+quota/size, conflict, and unavailable. It does not surface R2 internals. Server policy
+sets upload batch/session limits; quota/count admission and all reservations happen in
+the same Firestore transaction. `R2_PLATFORM_CAP_GB` must be explicitly configured in
+production: missing/invalid is an unavailable configuration, not an implicit 500 GiB
+production cap.
+
+### Representation and preview policy
+
+Compression remains independent from Photo Selection. Compression ON may transform
+supported raster uploads using the existing compressor. It stores metadata describing
+the actual persisted MIME, bytes, extension and storage kind. Compression OFF uploads
+the selected bytes unchanged. RAW files are never browser-recompressed or silently
+converted. Source filenames remain export labels; download names/extensions describe the
+actual stored representation.
+
+An optimized raster primary may be the customer preview. For original raster images,
+generate a separate bounded raster preview only when Photo Selection is enabled; it has
+its own key, metadata and quota usage. Use a small authenticated, bounded processing
+entry point only after its implementation and real integration verification. For RAW,
+attempting preview extraction requires real sample validation for the supported camera
+variant. Until such a safe extractor exists, a RAW record remains staff-downloadable with
+`processingStatus: FAILED` and an explicit preview-unavailable state; it is not exposed
+as an original download in the customer gallery. No full-resolution duplicate or raw
+browser decoding is permitted.
+
+Photo Selection ON schedules missing previews. OFF prevents new customer media grants
+and work, but retains stored originals, previews and annotations. Preview generation
+failure releases unused reservation only after verified absence of the failed derivative.
+
+### Cleanup and authorization
+
+Implement one maintenance command, safe by default, that processes expired sessions,
+confirmed deletion retries and stale upload state under leases. It is not a new
+distributed processing system. It reports action/outcome and is scheduled externally
+only after deployment documentation exists. It must never cancel cleanup work when Photo
+Selection is disabled.
+
+All upload, gallery, download, delete and annotation routes call the same authorization
+policy: verified user, active studio membership, order tenancy, and assigned-order
+restriction for non-owners. For customer access, proofing must be enabled; an email/UID
+locked order requires the matching customer or collaborator. Passkey access exists only
+for orders without that lock. Customer DTOs are allowlisted and contain a preview URL,
+not original object keys or original download URLs.
+
+Confirmed R2 deletion precedes metadata/ledger decrement. Provider absence, skipped work,
+or unknown result preserves the tombstone and capacity. Retry resumes the same deletion
+job. R2 list/head failures are availability errors, not absent objects.
+
+### Photo Selection contract
+
+`OrderCloudPhoto.selectionStatus?: 'NOT_REVIEWED' | 'SELECTED' | 'REJECTED'` is additive.
+Missing values map to NOT_REVIEWED; legacy `selected: true` maps to SELECTED. Existing
+`selected` remains a compatibility projection and is written consistently. Comments stay
+optional. Tags use one order-scoped vocabulary with stable IDs and a bounded photo tag-ID
+list; default and custom names use the same mechanism. Annotation writes patch only the
+target fields and use a scoped photo read, preventing selection/comment/tag lost updates.
+Tags only change Firestore metadata; they never copy R2 files.
+
+The existing filename export stays compatible. Additional selection status, comment and
+tag columns may be added without changing the filename field. Customer and staff views
+reuse existing gallery controls/layout, show selection counts, and do not create a new
+dashboard.
+
+### Verification gates
+
+Unit coverage must prove lifecycle transition guards, owned reservation release, legacy
+selection mapping, tag validation, patch-only annotation updates and retry classification.
+An isolated real R2/Firestore environment is required before declaring upload integrity,
+concurrent quota, deletion accounting, signed URL expiry and RAW compatibility verified.
+The user performs browser UAT; browser agents do not. The release record separately
+reports automated, integration and user-UAT evidence.

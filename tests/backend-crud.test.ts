@@ -558,6 +558,7 @@ describe("5. Major Design Amendment - Customer Order View Data Isolation", () =>
     assert.strictEqual((view.order as any).internalNotes, undefined);
     assert.strictEqual((view.order as any).assignedResources, undefined);
     assert.deepStrictEqual(view.tasks[0], {
+      id: "TSK-1",
       title: "Edit photos",
       serviceCategory: "PHOTOGRAPHY",
       status: "IN_PROGRESS",

@@ -1,5 +1,5 @@
-import type { BillingProfile } from './billing';
-export * from './billing';
+import type { BillingProfile } from './billing.ts';
+export * from './billing.ts';
 /**
  * Focoman Shared Domain Types
  * Primary Product Source of Truth: Focoman Product Discovery Document
@@ -237,8 +237,8 @@ export interface OrderDriveDeliverable {
   addedBy?: string;
 }
 
-export type { CloudStorageSettings, CloudProcessingStatus, CloudPhotoPreview, CloudUploadSession, CloudStorageJob, CloudStoragePlatform } from './cloudStorage';
-import type { CloudStorageSettings, CloudProcessingStatus, CloudPhotoPreview } from './cloudStorage';
+export type { CloudStorageSettings, CloudProcessingStatus, CloudPhotoPreview, CloudUploadState, CloudUploadSession, CloudStorageJob, CloudStoragePlatform } from './cloudStorage.ts';
+import type { CloudStorageSettings, CloudProcessingStatus, CloudPhotoPreview } from './cloudStorage.ts';
 
 export interface OrderCloudPhoto {
   schemaVersion?: 1;
@@ -253,6 +253,7 @@ export interface OrderCloudPhoto {
   processingStatus?: CloudProcessingStatus;
   processingError?: string;
   deletionStatus?: 'PENDING';
+  deletionJobId?: string;
   deletedObjectKeys?: string[];
   id: string;
   orderId: string;
@@ -267,6 +268,8 @@ export interface OrderCloudPhoto {
   selected?: boolean;
   selectedBy?: string;
   selectedAt?: string;
+  selectionStatus?: 'NOT_REVIEWED' | 'SELECTED' | 'REJECTED';
+  tags?: string[];
   comment?: string;
   uploadedAt: string;
   uploadedBy?: string;

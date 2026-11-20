@@ -300,8 +300,6 @@ export function toCustomerTrackingView(
       serviceCategory: task.serviceCategory,
       status: task.status,
       sequenceOrder: task.sequenceOrder,
-      ...(task.assignedMemberId ? { assignedMemberId: task.assignedMemberId } : {}),
-      ...(task.assignedMemberName ? { assignedMemberName: task.assignedMemberName } : {}),
       ...(task.reworkNotes ? { reworkNotes: task.reworkNotes } : {}),
     })),
   };

@@ -9,6 +9,12 @@ import {
   cloudPartLength,
   validatePartManifest,
   isRawPhoto,
+  canTransitionCloudUploadState,
+  cloudCommitReservationRelease,
+  sameCloudPhotoIdSet,
+  resolvePhotoSelectionStatus,
+  validatePhotoTags,
+  validatePhotoSelectionStatus,
 } from '../packages/domain/src/cloudStorage.ts';
 
 test('resolveCloudStorageSettings assigns new gallery default to compression ON and proofing OFF', () => {
@@ -152,4 +158,65 @@ test('validatePartManifest verifies complete ordered parts and valid ETags', () 
 
   // Incomplete parts throw
   assert.throws(() => validatePartManifest(size, parts.slice(0, 2)), /Upload is incomplete/);
+});
+
+test('cloud upload state transitions prevent completion and cancellation replay', () => {
+  assert.equal(canTransitionCloudUploadState('RESERVED', 'UPLOADING'), true);
+  assert.equal(canTransitionCloudUploadState('UPLOADING', 'VERIFYING'), true);
+  assert.equal(canTransitionCloudUploadState('VERIFYING', 'COMMITTED'), true);
+  assert.equal(canTransitionCloudUploadState('COMMITTED', 'CLEANUP_PENDING'), false);
+  assert.equal(canTransitionCloudUploadState('CLEANED', 'VERIFYING'), false);
+  assert.equal(canTransitionCloudUploadState('VERIFYING', 'CLEANUP_PENDING'), true);
+});
+
+test('cloud commit releases preview capacity unless a durable preview job owns it', () => {
+  assert.equal(cloudCommitReservationRelease({ primaryReservedBytes: 100, previewReservedBytes: 20, previewJobOwnsReservation: false }), 120);
+  assert.equal(cloudCommitReservationRelease({ primaryReservedBytes: 100, previewReservedBytes: 20, previewJobOwnsReservation: true }), 100);
+  assert.throws(() => cloudCommitReservationRelease({ primaryReservedBytes: 100, previewReservedBytes: -1, previewJobOwnsReservation: false }), /Storage accounting/);
+});
+
+test('deletion retry requires the exact pending selection', () => {
+  assert.equal(sameCloudPhotoIdSet(['p1', 'p2'], ['p2', 'p1']), true);
+  assert.equal(sameCloudPhotoIdSet(['p1'], ['p1', 'p2']), false);
+  assert.equal(sameCloudPhotoIdSet(['p1', 'p1'], ['p1', 'p1']), false);
+});
+
+test('resolvePhotoSelectionStatus maps legacy selected booleans and preserves three-state status', () => {
+  // Legacy selected: true -> SELECTED
+  assert.equal(resolvePhotoSelectionStatus({ selected: true }), 'SELECTED');
+
+  // Legacy selected: false / undefined -> NOT_REVIEWED (never fabricate historical REJECTED)
+  assert.equal(resolvePhotoSelectionStatus({ selected: false }), 'NOT_REVIEWED');
+  assert.equal(resolvePhotoSelectionStatus({}), 'NOT_REVIEWED');
+
+  // Explicit status takes precedence
+  assert.equal(resolvePhotoSelectionStatus({ selectionStatus: 'REJECTED', selected: false }), 'REJECTED');
+  assert.equal(resolvePhotoSelectionStatus({ selectionStatus: 'SELECTED', selected: true }), 'SELECTED');
+  assert.equal(resolvePhotoSelectionStatus({ selectionStatus: 'NOT_REVIEWED', selected: false }), 'NOT_REVIEWED');
+});
+
+test('validatePhotoTags cleans, deduplicates case-insensitively, and limits length/count', () => {
+  assert.deepEqual(validatePhotoTags(null), []);
+  assert.deepEqual(validatePhotoTags('not-an-array'), []);
+
+  // Trimming, filtering empty, case-insensitive deduplication
+  const raw = [' Wedding ', 'wedding', 'Portrait', '   ', 'ALBUM', 'portrait'];
+  const cleaned = validatePhotoTags(raw);
+  assert.deepEqual(cleaned, ['Wedding', 'Portrait', 'ALBUM']);
+
+  // Bounds checking: max 10 tags, max 30 characters
+  const longTags = Array.from({ length: 15 }, (_, i) => `Tag-${i}-${'a'.repeat(40)}`);
+  const bounded = validatePhotoTags(longTags);
+  assert.equal(bounded.length, 10);
+  bounded.forEach((tag) => {
+    assert.ok(tag.length <= 30);
+  });
+});
+
+test('validatePhotoSelectionStatus validates supported states and rejects invalid', () => {
+  assert.equal(validatePhotoSelectionStatus('NOT_REVIEWED'), 'NOT_REVIEWED');
+  assert.equal(validatePhotoSelectionStatus('SELECTED'), 'SELECTED');
+  assert.equal(validatePhotoSelectionStatus('REJECTED'), 'REJECTED');
+  assert.throws(() => validatePhotoSelectionStatus('UNKNOWN'), /Invalid selection status/);
+  assert.throws(() => validatePhotoSelectionStatus(null), /Invalid selection status/);
 });

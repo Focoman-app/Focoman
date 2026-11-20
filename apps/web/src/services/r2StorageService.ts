@@ -9,8 +9,11 @@ import {
   UploadPartCommand,
   CompleteMultipartUploadCommand,
   AbortMultipartUploadCommand,
+  ListPartsCommand,
+  ListMultipartUploadsCommand,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { createHash } from "node:crypto";
 
 let r2ClientInstance: S3Client | null = null;
 
@@ -20,9 +23,9 @@ function getR2Env() {
   const secretAccessKey = (process.env.R2_SECRET_ACCESS_KEY || "").trim();
   const bucketName = (process.env.R2_BUCKET_NAME || "").trim();
   const publicBaseUrl = (process.env.R2_PUBLIC_BASE_URL || "").trim().replace(/\/+$/, "");
-  const platformCapGbRaw = Number(process.env.R2_PLATFORM_CAP_GB || 500);
+  const platformCapGbRaw = Number(process.env.R2_PLATFORM_CAP_GB || NaN);
   const platformCapGb =
-    Number.isFinite(platformCapGbRaw) && platformCapGbRaw > 0 ? platformCapGbRaw : 500;
+    Number.isFinite(platformCapGbRaw) && platformCapGbRaw > 0 ? platformCapGbRaw : null;
 
   return {
     accountId,
@@ -49,6 +52,10 @@ export function getR2ConfigStatus() {
     hasPublicBaseUrl: Boolean(env.publicBaseUrl),
     platformCapGb: env.platformCapGb,
   };
+}
+
+export function hasConfiguredR2PlatformCap(): boolean {
+  return getR2Env().platformCapGb !== null;
 }
 
 function getR2Client(): S3Client {
@@ -141,7 +148,7 @@ export async function deleteR2Objects(objectKeys: string[]): Promise<{
     return { deletedCount: 0, skipped: false };
   }
   if (!isR2Configured()) {
-    return { deletedCount: 0, skipped: true };
+    throw new Error("Cloud storage is not configured.");
   }
 
   const env = getR2Env();
@@ -150,7 +157,7 @@ export async function deleteR2Objects(objectKeys: string[]): Promise<{
 
   for (let i = 0; i < cleanKeys.length; i += 1000) {
     const chunk = cleanKeys.slice(i, i + 1000);
-    await client.send(
+    const result = await client.send(
       new DeleteObjectsCommand({
         Bucket: env.bucketName,
         Delete: {
@@ -159,10 +166,41 @@ export async function deleteR2Objects(objectKeys: string[]): Promise<{
         },
       })
     );
+    if (result.Errors && result.Errors.length > 0) {
+      throw new Error(`R2 refused deletion of ${result.Errors.length} object(s).`);
+    }
     deletedCount += chunk.length;
   }
 
   return { deletedCount, skipped: false };
+}
+
+export async function listMultipartUploadParts(input: {
+  objectKey: string;
+  uploadId: string;
+}): Promise<{ PartNumber?: number; Size?: number; ETag?: string }[]> {
+  const env = getR2Env();
+  const client = getR2Client();
+  const result = await client.send(new ListPartsCommand({
+    Bucket: env.bucketName,
+    Key: input.objectKey,
+    UploadId: input.uploadId,
+  }));
+  return result.Parts || [];
+}
+
+/** Finds recoverable in-progress multipart uploads for one immutable session
+ * key. This is used after a process failure between provider initiation and
+ * Firestore attachment; more than one is a reconciliation error. */
+export async function listMultipartUploadIdsForKey(objectKey: string): Promise<string[]> {
+  const env = getR2Env();
+  const result = await getR2Client().send(new ListMultipartUploadsCommand({
+    Bucket: env.bucketName,
+    Prefix: objectKey,
+  }));
+  return (result.Uploads || [])
+    .filter((upload) => upload.Key === objectKey && upload.UploadId)
+    .map((upload) => upload.UploadId!);
 }
 
 export async function headR2Object(objectKey: string): Promise<{
@@ -190,7 +228,11 @@ export async function headR2Object(objectKey: string): Promise<{
       contentType: res.ContentType,
     };
   } catch (err: unknown) {
-    return { exists: false };
+    const status = typeof err === 'object' && err !== null && '$metadata' in err
+      ? (err as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode : undefined;
+    const name = err instanceof Error ? err.name : '';
+    if (status === 404 || name === 'NotFound' || name === 'NoSuchKey') return { exists: false };
+    throw new Error('Cloud storage is unavailable while checking the uploaded file.');
   }
 }
 
@@ -260,18 +302,30 @@ export async function abortMultipartUpload(input: {
   objectKey: string;
   uploadId: string;
 }): Promise<void> {
-  if (!isR2Configured()) return;
+  if (!isR2Configured()) throw new Error("Cloud storage is not configured.");
   const env = getR2Env();
   const client = getR2Client();
-  try {
-    await client.send(
+  await client.send(
       new AbortMultipartUploadCommand({
         Bucket: env.bucketName,
         Key: input.objectKey,
         UploadId: input.uploadId,
       })
     );
-  } catch {
-    // Non-fatal if upload was already completed or expired
+}
+
+/** Streams the immutable completed object on the server.  Multipart ETags and
+ * browser-provided hashes are never treated as integrity evidence. */
+export async function hashR2Object(objectKey: string, maximumBytes: number): Promise<{ sizeBytes: number; sha256: string; signature: Uint8Array }> {
+  const env = getR2Env();
+  const response = await getR2Client().send(new GetObjectCommand({ Bucket: env.bucketName, Key: objectKey }));
+  if (!response.Body) throw new Error("Stored object body is unavailable.");
+  const hash = createHash("sha256"); let sizeBytes = 0; let prefix = Buffer.alloc(0);
+  for await (const chunk of response.Body as AsyncIterable<Uint8Array>) {
+    const bytes = Buffer.from(chunk); sizeBytes += bytes.length;
+    if (sizeBytes > maximumBytes) throw new Error("Stored object exceeds the admitted size.");
+    if (prefix.length < 64) prefix = Buffer.concat([prefix, bytes]).subarray(0, 64);
+    hash.update(bytes);
   }
+  return { sizeBytes, sha256: hash.digest("hex"), signature: new Uint8Array(prefix) };
 }

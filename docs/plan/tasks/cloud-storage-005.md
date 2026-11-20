@@ -1,7 +1,7 @@
 ---
 id: cloud-storage-005
 scope: Multipart upload lifecycle
-status: completed
+status: blocked
 depends-on: [cloud-storage-004]
 ---
 
@@ -15,8 +15,9 @@ Extend R2 service and authorized routes for create/sign-parts/list/complete/abor
 
 Read `Agents.md`, `docs/Index.md` and
 [approved-plan candidate](../analysis/cloud-storage-independent-proofing.md).
-User explicitly approved this plan with "Proceed" on 2026-11-18. Developer work follows the Solution
-Architect blueprint in task 001. Use separate developer and verifier roles per docs-sprint;
+The earlier plan was superseded for launch refinement by the user-approved 2026-11-20
+architecture in `docs/technical/cloud-storage-proofing.md`; its universal-multipart
+direction is no longer the delivery contract. Task 011 replaces this task. Use separate developer and verifier roles per docs-sprint;
 never run automated browser UAT or spawn browser subagents.
 
 ## Path
@@ -35,19 +36,18 @@ evidence or mark completion based on compilation alone.
 ## Checklist
 
 - [x] Plan explicitly approved; dependencies complete.
-- [x] Blueprint reviewed; implementation finished.
-- [x] Relevant automated tests passed.
-- [x] Real integration checks passed, or unavailable checks explicitly recorded.
-- [x] TypeScript and lint results recorded.
-- [x] Independent verifier review completed; blocking findings resolved.
+- [ ] Superseded by task 011; legacy partial implementation remains review evidence.
+- [ ] Real R2 multipart integration checks are unavailable in this workspace.
+- [ ] Independent verifier review remains blocked; see `docs/plan/reviews/cloud-storage-fix-002.md`.
 - [x] Existing workflows checked and documentation updated.
 - [x] User E2E status recorded separately (not run by agents).
 
 ## Evidence
 
-Implementation complete:
+Superseded partial implementation; not delivery-complete:
 1. `apps/web/src/services/r2StorageService.ts` extended with `createMultipartUpload`, `createPresignedUploadPartUrl`, `completeMultipartUpload`, and `abortMultipartUpload`.
 2. `abortCloudUploadSessionAction` added to `storageActions.ts` allowing callers or owners to cancel in-flight uploads and atomically release studio reservations.
 3. Domain validation in `packages/domain/src/cloudStorage.ts` covers 16 MiB chunk part lengths and ordered manifest verification.
+4. The live routes now use session-bound multipart admission, part signing/status, session-only completion and cancellation. Real R2 CORS, part-size enforcement, interruption and cancellation-race tests remain required.
 
 

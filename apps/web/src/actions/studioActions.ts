@@ -39,23 +39,19 @@ import { DEFAULT_STUDIO_SERVICES, getDefaultStudioPackages } from "@/lib/studioS
 import { deleteR2Objects } from "@/services/r2StorageService";
 
 async function purgeStudioR2Objects(studioId: string): Promise<void> {
-  try {
-    const firestore = getFirestoreServerInstance();
-    const snap = await firestore
-      .collection("cloud_photos")
-      .where("studioId", "==", studioId.toLowerCase())
-      .get();
-    if (snap.empty) return;
-    const keys = snap.docs
-      .flatMap((d) => {
-        const data = d.data() as { objectKey?: string; preview?: { objectKey?: string } };
-        return [data.objectKey, data.preview?.objectKey].filter(Boolean) as string[];
-      });
-    if (keys.length > 0) {
-      await deleteR2Objects(keys);
-    }
-  } catch (err) {
-    console.warn(`[purgeStudioR2Objects] Warning for studio ${studioId}:`, err);
+  const firestore = getFirestoreServerInstance();
+  const snap = await firestore
+    .collection("cloud_photos")
+    .where("studioId", "==", studioId.toLowerCase())
+    .get();
+  if (snap.empty) return;
+  const keys = snap.docs
+    .flatMap((d) => {
+      const data = d.data() as { objectKey?: string; preview?: { objectKey?: string } };
+      return [data.objectKey, data.preview?.objectKey].filter(Boolean) as string[];
+    });
+  if (keys.length > 0) {
+    await deleteR2Objects(keys);
   }
 }
 

@@ -534,10 +534,12 @@ export async function submitCustomerTaskReviewCore(input: {
     let actorName = order.customer.name || "Customer";
     let isStudioStaff = false;
     let isAuthorized = false;
+    let verifiedIdentityPresented = false;
 
     if (input.idToken) {
       try {
         const decoded = await requireVerifiedUser(input.idToken);
+        verifiedIdentityPresented = true;
         const userEmail = decoded.email?.toLowerCase();
         const customerEmail = order.customer.email?.toLowerCase();
         const isPrimaryCustomer = Boolean(
@@ -561,11 +563,13 @@ export async function submitCustomerTaskReviewCore(input: {
           actorName = decoded.name || decoded.email || actorName;
         }
       } catch {
-        // fallback to passkey check below if token check fails
+        // Invalid tokens are never converted into a broad passkey fallback.
+        verifiedIdentityPresented = true;
       }
     }
 
-    if (!isAuthorized && input.passkey) {
+    const hasIdentityLock = Boolean(order.customer.email || order.customer.uid);
+    if (!isAuthorized && input.passkey && !verifiedIdentityPresented && !hasIdentityLock) {
       const cleanInput = input.passkey.trim().toUpperCase();
       const numericPinMatch =
         order.trackingPasskey?.match(/\d{6}/g) ||

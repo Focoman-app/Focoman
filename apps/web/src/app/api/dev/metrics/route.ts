@@ -128,7 +128,7 @@ export async function GET() {
     const maxAllocatedLiabilityInr =
       Math.round(maxAllocatedLiabilityUsd * USD_TO_INR_RATE * 100) / 100;
 
-    const platformCapGb = r2Config.platformCapGb;
+    const platformCapGb = r2Config.platformCapGb ?? 0;
     const platformCapUsedPercent =
       platformCapGb > 0
         ? Math.min(100, Math.round((totalUsedGb / platformCapGb) * 1000) / 10)

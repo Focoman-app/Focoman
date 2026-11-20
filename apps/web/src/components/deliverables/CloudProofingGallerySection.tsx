@@ -3,6 +3,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
+  Ban,
+  Check,
   CheckCircle2,
   CloudUpload,
   Copy,
@@ -11,6 +13,8 @@ import {
   HardDrive,
   Image as ImageIcon,
   MessageSquare,
+  RotateCcw,
+  Tag,
   Trash2,
   X,
 } from "lucide-react";
@@ -22,6 +26,7 @@ import {
   getOrderCloudStorageSettingsAction,
   updateOrderCloudStorageSettingsAction,
   getOriginalPhotoDownloadUrlAction,
+  updateCloudPhotoSelectionAction,
   type HydratedCloudPhoto,
 } from "@/actions/storageActions";
 import {
@@ -39,7 +44,7 @@ interface CloudProofingGallerySectionProps {
   onPhotosChanged?: (summary: { cloudPhotoCount: number; cloudStorageBytes: number }) => void;
 }
 
-type GalleryFilter = "ALL" | "SELECTED" | "COMMENTS";
+type GalleryFilter = "ALL" | "SELECTED" | "REJECTED" | "COMMENTS";
 
 export function CloudProofingGallerySection({
   studioId,
@@ -56,10 +61,19 @@ export function CloudProofingGallerySection({
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
 
   const [isUploading, setIsUploading] = useState(false);
+  const [failedFiles, setFailedFiles] = useState<File[]>([]);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const activeSessionIdsRef = useRef<Set<string>>(new Set());
   const [uploadProgress, setUploadProgress] = useState<{
     phase: "COMPRESSING" | "UPLOADING" | "FINALIZING";
     done: number;
     total: number;
+    bytesTransferred?: number;
+    totalBytes?: number;
+    speedBytesPerSec?: number;
+    etaSeconds?: number | null;
+    completedCount?: number;
+    failedCount?: number;
   } | null>(null);
 
   const [filter, setFilter] = useState<GalleryFilter>("ALL");
@@ -137,7 +151,12 @@ export function CloudProofingGallerySection({
   }, [loadGallery]);
 
   const selectedPhotos = useMemo(
-    () => photos.filter((p) => Boolean(p.selected)),
+    () => photos.filter((p) => p.selectionStatus === "SELECTED" || Boolean(p.selected)),
+    [photos]
+  );
+
+  const rejectedPhotos = useMemo(
+    () => photos.filter((p) => p.selectionStatus === "REJECTED"),
     [photos]
   );
 
@@ -148,16 +167,442 @@ export function CloudProofingGallerySection({
 
   const visiblePhotos = useMemo(() => {
     if (filter === "SELECTED") return selectedPhotos;
+    if (filter === "REJECTED") return rejectedPhotos;
     if (filter === "COMMENTS") return commentedPhotos;
     return photos;
-  }, [filter, photos, selectedPhotos, commentedPhotos]);
+  }, [filter, photos, selectedPhotos, rejectedPhotos, commentedPhotos]);
 
   const totalOrderBytes = useMemo(
     () => photos.reduce((sum, p) => sum + Math.max(0, p.sizeBytes || 0), 0),
     [photos]
   );
 
-  const handleFilesSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleCancelUpload = async () => {
+    if (!isUploading) return;
+    abortControllerRef.current?.abort();
+    const token = await getIdToken(false).catch(() => null);
+    const sessionIdsToClean = Array.from(activeSessionIdsRef.current);
+    if (token && sessionIdsToClean.length > 0) {
+      await Promise.allSettled(
+        sessionIdsToClean.map((sessionId) =>
+          fetch("/api/storage/cancel-upload", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ sessionId }),
+          })
+        )
+      );
+    }
+    activeSessionIdsRef.current.clear();
+    setIsUploading(false);
+    setUploadProgress(null);
+    setStatusMsg("Upload cancelled. In-flight storage reservations released.");
+  };
+
+  const handleUpdatePhotoStatus = async (
+    photoId: string,
+    status: "NOT_REVIEWED" | "SELECTED" | "REJECTED"
+  ) => {
+    const token = await getIdToken(false);
+    if (!token) return;
+    setPhotos((prev) =>
+      prev.map((p) =>
+        p.id === photoId
+          ? {
+              ...p,
+              selectionStatus: status,
+              selected: status === "SELECTED",
+            }
+          : p
+      )
+    );
+    try {
+      const res = await updateCloudPhotoSelectionAction({
+        orderId: order.id,
+        photoId,
+        selectionStatus: status,
+        idToken: token,
+      });
+      if (!res.success) {
+        setErrorMsg(res.error || "Failed to update selection.");
+        void loadGallery();
+      }
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : "Failed to update selection.");
+      void loadGallery();
+    }
+  };
+
+  const executeUpload = async (batchFiles: File[]) => {
+    if (batchFiles.length === 0) return;
+    setErrorMsg(null);
+    setStatusMsg(null);
+    setIsUploading(true);
+    abortControllerRef.current = new AbortController();
+    activeSessionIdsRef.current = new Set();
+    const signal = abortControllerRef.current.signal;
+
+    try {
+      const token = await getIdToken(true);
+      if (!token) throw new Error("Authentication expired. Please sign in again.");
+
+      // 1. Prepare files: compress if compression is enabled, or send original file bytes
+      const filePayloads: Array<{
+        blob: Blob | File;
+        fileName: string;
+        mimeType: string;
+        sizeBytes: number;
+        originalFile: File;
+      }> = [];
+
+      for (let i = 0; i < batchFiles.length; i++) {
+        if (signal.aborted) throw new Error("Upload cancelled.");
+        setUploadProgress({
+          phase: "COMPRESSING",
+          done: i,
+          total: batchFiles.length,
+          completedCount: 0,
+          failedCount: 0,
+        });
+        const source = batchFiles[i];
+        if (settings.compressionEnabled) {
+          // RAW stays byte-identical even when compression is enabled.
+          if (/\.(cr2|cr3|nef|arw|dng)$/i.test(source.name)) {
+            filePayloads.push({
+              blob: source,
+              fileName: source.name,
+              mimeType: source.type || "application/octet-stream",
+              sizeBytes: source.size,
+              originalFile: source,
+            });
+          } else {
+            const result = await compressProofingPhoto(source);
+            filePayloads.push({
+              blob: result.blob,
+              fileName: result.fileName,
+              mimeType: result.mimeType,
+              sizeBytes: result.sizeBytes,
+              originalFile: source,
+            });
+          }
+        } else {
+          filePayloads.push({
+            blob: source,
+            fileName: source.name,
+            mimeType: source.type || "application/octet-stream",
+            sizeBytes: source.size,
+            originalFile: source,
+          });
+        }
+      }
+      setUploadProgress({
+        phase: "COMPRESSING",
+        done: batchFiles.length,
+        total: batchFiles.length,
+        completedCount: 0,
+        failedCount: 0,
+      });
+
+      if (signal.aborted) throw new Error("Upload cancelled.");
+
+      const sha256 = async (blob: Blob) =>
+        Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", await blob.arrayBuffer())))
+          .map((b) => b.toString(16).padStart(2, "0"))
+          .join("");
+
+      // 2. Presign upload sessions
+      const admissionFiles = await Promise.all(
+        filePayloads.map(async (c) => ({
+          fileName: c.fileName,
+          sourceSizeBytes: c.originalFile.size,
+          sourceMimeType: c.originalFile.type || "application/octet-stream",
+          mimeType: c.mimeType,
+          sizeBytes: c.sizeBytes,
+          sha256: await sha256(c.blob),
+          lastModified: c.originalFile.lastModified,
+          idempotencyKey: crypto.randomUUID().replace(/-/g, ""),
+        }))
+      );
+
+      const presignRes = await fetch("/api/storage/presign-upload", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          studioId,
+          orderId: order.id,
+          files: admissionFiles,
+        }),
+        signal,
+      });
+
+      const presignData = await presignRes.json();
+      if (!presignRes.ok) {
+        if (presignData.quota) setQuota(presignData.quota);
+        throw new Error(presignData.error || "Unable to authorize photo upload.");
+      }
+
+      const rawUploads: Array<{
+        photoId: string;
+        fileName: string;
+        mimeType: string;
+        sizeBytes: number;
+        sessionId: string;
+        partCount: number;
+        partSizeBytes: number;
+      }> = presignData.uploads || [];
+
+      const uploads = rawUploads.map((u, idx) => ({ ...u, index: idx }));
+      uploads.forEach((u) => activeSessionIdsRef.current.add(u.sessionId));
+
+      // 3. Upload parts with 4 concurrency, byte tracking, smoothed speed, and transient retries
+      const totalUploadBytes = uploads.reduce((sum, u) => sum + u.sizeBytes, 0);
+      let bytesTransferred = 0;
+      let completedUploads = 0;
+      let failedUploadsCount = 0;
+      const succeeded: typeof uploads = [];
+      const failedFileItems: File[] = [];
+      const uploadStartTime = Date.now();
+
+      setUploadProgress({
+        phase: "UPLOADING",
+        done: 0,
+        total: uploads.length,
+        bytesTransferred: 0,
+        totalBytes: totalUploadBytes,
+        speedBytesPerSec: 0,
+        etaSeconds: null,
+        completedCount: 0,
+        failedCount: 0,
+      });
+
+      const concurrency = 4;
+      let cursor = 0;
+
+      const worker = async () => {
+        while (cursor < uploads.length) {
+          if (signal.aborted) break;
+          const targetIndex = cursor++;
+          const target = uploads[targetIndex];
+          const payload = filePayloads[target.index];
+          const blob = payload.blob;
+          let fileFailed = false;
+
+          try {
+            for (let first = 1; first <= target.partCount; first += 8) {
+              if (signal.aborted) throw new Error("Upload cancelled.");
+              const partNumbers = Array.from(
+                { length: Math.min(8, target.partCount - first + 1) },
+                (_, i) => first + i
+              );
+
+              // Transient retry for preparing upload parts (max 3 attempts)
+              let partsData: { parts?: Array<{ partNumber: number; sizeBytes: number; url: string }>; error?: string } = {};
+              for (let attempt = 0; attempt < 3; attempt++) {
+                if (signal.aborted) throw new Error("Upload cancelled.");
+                try {
+                  const partsRes = await fetch("/api/storage/upload-parts", {
+                    method: "POST",
+                    headers: {
+                      "Content-Type": "application/json",
+                      Authorization: `Bearer ${token}`,
+                    },
+                    body: JSON.stringify({ sessionId: target.sessionId, partNumbers }),
+                    signal,
+                  });
+                  partsData = await partsRes.json();
+                  if (partsRes.ok && partsData.parts) break;
+                  if (partsRes.status >= 400 && partsRes.status < 500 && partsRes.status !== 408 && partsRes.status !== 429) {
+                    throw new Error(partsData.error || `Could not prepare ${target.fileName}.`);
+                  }
+                } catch (e) {
+                  if (signal.aborted) throw e;
+                  if (attempt === 2) throw e;
+                }
+                const backoffMs = Math.min(2500, 400 * Math.pow(2, attempt)) + Math.random() * 200;
+                await new Promise((r) => setTimeout(r, backoffMs));
+              }
+
+              if (!partsData.parts) {
+                throw new Error(partsData.error || `Could not prepare ${target.fileName}.`);
+              }
+
+              for (const part of partsData.parts) {
+                if (signal.aborted) throw new Error("Upload cancelled.");
+                const start = (part.partNumber - 1) * target.partSizeBytes;
+                const partBlob = blob.slice(start, start + part.sizeBytes);
+
+                // Transient retry for PUT part bytes (max 3 attempts)
+                let putSuccess = false;
+                let lastStatus = 0;
+                for (let attempt = 0; attempt < 3; attempt++) {
+                  if (signal.aborted) throw new Error("Upload cancelled.");
+                  try {
+                    const putRes = await fetch(part.url, { method: "PUT", body: partBlob, signal });
+                    if (putRes.ok) {
+                      putSuccess = true;
+                      break;
+                    }
+                    lastStatus = putRes.status;
+                    if (lastStatus >= 400 && lastStatus < 500 && lastStatus !== 408 && lastStatus !== 429) {
+                      break;
+                    }
+                  } catch (e) {
+                    if (signal.aborted) throw e;
+                    if (attempt === 2) throw e;
+                  }
+                  const backoffMs = Math.min(2500, 400 * Math.pow(2, attempt)) + Math.random() * 200;
+                  await new Promise((r) => setTimeout(r, backoffMs));
+                }
+
+                if (!putSuccess) {
+                  throw new Error(`Upload failed for "${target.fileName}" (HTTP ${lastStatus}).`);
+                }
+
+                bytesTransferred += part.sizeBytes;
+                const elapsedSec = Math.max(0.2, (Date.now() - uploadStartTime) / 1000);
+                const currentSpeed = Math.round(bytesTransferred / elapsedSec);
+                const remainingBytes = Math.max(0, totalUploadBytes - bytesTransferred);
+                const etaSeconds = currentSpeed > 0 ? Math.round(remainingBytes / currentSpeed) : null;
+
+                setUploadProgress({
+                  phase: "UPLOADING",
+                  done: completedUploads,
+                  total: uploads.length,
+                  bytesTransferred,
+                  totalBytes: totalUploadBytes,
+                  speedBytesPerSec: currentSpeed,
+                  etaSeconds,
+                  completedCount: completedUploads,
+                  failedCount: failedUploadsCount,
+                });
+              }
+            }
+          } catch (err) {
+            fileFailed = true;
+            failedUploadsCount++;
+            failedFileItems.push(payload.originalFile);
+            if (signal.aborted) throw err;
+          }
+
+          if (!fileFailed && !signal.aborted) {
+            succeeded.push(target);
+            completedUploads++;
+            const elapsedSec = Math.max(0.2, (Date.now() - uploadStartTime) / 1000);
+            const currentSpeed = Math.round(bytesTransferred / elapsedSec);
+            const remainingBytes = Math.max(0, totalUploadBytes - bytesTransferred);
+            const etaSeconds = currentSpeed > 0 ? Math.round(remainingBytes / currentSpeed) : null;
+
+            setUploadProgress({
+              phase: "UPLOADING",
+              done: completedUploads,
+              total: uploads.length,
+              bytesTransferred,
+              totalBytes: totalUploadBytes,
+              speedBytesPerSec: currentSpeed,
+              etaSeconds,
+              completedCount: completedUploads,
+              failedCount: failedUploadsCount,
+            });
+          }
+        }
+      };
+
+      await Promise.all(
+        Array.from({ length: Math.min(concurrency, uploads.length) }, () => worker())
+      );
+
+      if (signal.aborted) throw new Error("Upload cancelled.");
+
+      // 4. Finalize uploaded sessions in bounded batches of max 20
+      if (succeeded.length > 0) {
+        setUploadProgress({
+          phase: "FINALIZING",
+          done: succeeded.length,
+          total: uploads.length,
+          bytesTransferred,
+          totalBytes: totalUploadBytes,
+          completedCount: succeeded.length,
+          failedCount: failedUploadsCount,
+        });
+
+        const COMPLETION_CHUNK_SIZE = 20;
+        let finalizedCount = 0;
+
+        for (let i = 0; i < succeeded.length; i += COMPLETION_CHUNK_SIZE) {
+          if (signal.aborted) break;
+          const chunk = succeeded.slice(i, i + COMPLETION_CHUNK_SIZE);
+          try {
+            const completeRes = await fetch("/api/storage/complete-upload", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`,
+              },
+              body: JSON.stringify({ sessionIds: chunk.map((s) => s.sessionId) }),
+              signal,
+            });
+
+            const completeData = await completeRes.json();
+            if (!completeRes.ok) {
+              chunk.forEach((c) => {
+                failedFileItems.push(filePayloads[c.index].originalFile);
+              });
+            } else {
+              const results: Array<{ sessionId: string; state: string; error?: string }> =
+                completeData.results || [];
+              for (const c of chunk) {
+                const resItem = results.find((r) => r.sessionId === c.sessionId);
+                if (resItem && resItem.state === "FAILED") {
+                  failedFileItems.push(filePayloads[c.index].originalFile);
+                } else {
+                  finalizedCount++;
+                  activeSessionIdsRef.current.delete(c.sessionId);
+                }
+              }
+            }
+          } catch {
+            chunk.forEach((c) => {
+              failedFileItems.push(filePayloads[c.index].originalFile);
+            });
+          }
+        }
+
+        if (finalizedCount > 0) {
+          setStatusMsg(
+            `Uploaded and finalized ${finalizedCount} photo${finalizedCount === 1 ? "" : "s"}. ${
+              failedFileItems.length > 0
+                ? `${failedFileItems.length} photo(s) failed and can be retried.`
+                : ""
+            }`
+          );
+        }
+      }
+
+      setFailedFiles(failedFileItems);
+      if (failedFileItems.length > 0 && succeeded.length === 0) {
+        setErrorMsg(`Failed to upload ${failedFileItems.length} photo(s). Click "Retry Failed Files" to try again.`);
+      }
+
+      await loadGallery();
+    } catch (err: unknown) {
+      if (signal.aborted) {
+        setStatusMsg("Upload cancelled by user.");
+      } else {
+        setErrorMsg(err instanceof Error ? err.message : "Failed to upload proofing photos.");
+      }
+    } finally {
+      setIsUploading(false);
+      setUploadProgress(null);
+    }
+  };
+
+  const handleFilesSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
     const rawFiles = Array.from(e.target.files || []);
     e.target.value = "";
     if (rawFiles.length === 0) return;
@@ -176,9 +621,10 @@ export function CloudProofingGallerySection({
       return;
     }
 
-    const imageFiles = rawFiles.filter((f) => f.type.startsWith("image/"));
+    const acceptedExtensions = /\.(jpe?g|png|webp|cr2|cr3|nef|arw|dng)$/i;
+    const imageFiles = rawFiles.filter((f) => f.type.startsWith("image/") || acceptedExtensions.test(f.name));
     if (imageFiles.length === 0) {
-      setErrorMsg("Please select valid image files (JPEG, PNG, or WebP).");
+      setErrorMsg("Please select JPEG, PNG, WebP, CR2, CR3, NEF, ARW, or DNG files.");
       return;
     }
 
@@ -191,158 +637,7 @@ export function CloudProofingGallerySection({
       setStatusMsg(null);
     }
 
-    setErrorMsg(null);
-    setIsUploading(true);
-
-    try {
-      const token = await getIdToken(true);
-      if (!token) throw new Error("Authentication expired. Please sign in again.");
-
-      // 1. Prepare files: compress if compression is enabled, or send original file bytes
-      const filePayloads: Array<{
-        blob: Blob | File;
-        fileName: string;
-        mimeType: string;
-        sizeBytes: number;
-        width?: number;
-        height?: number;
-      }> = [];
-
-      if (settings.compressionEnabled) {
-        for (let i = 0; i < batchFiles.length; i++) {
-          setUploadProgress({ phase: "COMPRESSING", done: i, total: batchFiles.length });
-          const result = await compressProofingPhoto(batchFiles[i]);
-          filePayloads.push(result);
-        }
-      } else {
-        for (let i = 0; i < batchFiles.length; i++) {
-          const f = batchFiles[i];
-          filePayloads.push({
-            blob: f,
-            fileName: f.name,
-            mimeType: f.type || "application/octet-stream",
-            sizeBytes: f.size,
-          });
-        }
-      }
-      setUploadProgress({ phase: "COMPRESSING", done: batchFiles.length, total: batchFiles.length });
-
-      // 2. Request presigned upload URLs (strict quota check on server)
-      const presignRes = await fetch("/api/storage/presign-upload", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          studioId,
-          orderId: order.id,
-          files: filePayloads.map((c) => ({
-            fileName: c.fileName,
-            mimeType: c.mimeType,
-            sizeBytes: c.sizeBytes,
-            width: c.width,
-            height: c.height,
-          })),
-        }),
-      });
-
-      const presignData = await presignRes.json();
-      if (!presignRes.ok) {
-        if (presignData.quota) setQuota(presignData.quota);
-        throw new Error(presignData.error || "Unable to authorize photo upload.");
-      }
-
-      const uploads: Array<{
-        photoId: string;
-        fileName: string;
-        objectKey: string;
-        mimeType: string;
-        sizeBytes: number;
-        width?: number;
-        height?: number;
-        uploadUrl: string;
-      }> = presignData.uploads || [];
-
-      // 3. Parallel queued PUT directly to R2 (concurrency 4)
-      let completedUploads = 0;
-      setUploadProgress({ phase: "UPLOADING", done: 0, total: uploads.length });
-      const succeeded: typeof uploads = [];
-      const concurrency = 4;
-      let cursor = 0;
-
-      const worker = async () => {
-        while (cursor < uploads.length) {
-          const idx = cursor++;
-          const target = uploads[idx];
-          const blob = filePayloads[idx].blob;
-          const putRes = await fetch(target.uploadUrl, {
-            method: "PUT",
-            headers: {
-              "Content-Type": target.mimeType,
-            },
-            body: blob,
-          });
-          if (!putRes.ok) {
-            throw new Error(`Upload failed for "${target.fileName}" (HTTP ${putRes.status}). Check R2 CORS policy.`);
-          }
-          succeeded.push(target);
-          completedUploads++;
-          setUploadProgress({
-            phase: "UPLOADING",
-            done: completedUploads,
-            total: uploads.length,
-          });
-        }
-      };
-
-      await Promise.all(
-        Array.from({ length: Math.min(concurrency, uploads.length) }, () => worker())
-      );
-
-      // 4. Finalize metadata & increment storage ledger
-      setUploadProgress({ phase: "FINALIZING", done: succeeded.length, total: uploads.length });
-      const completeRes = await fetch("/api/storage/complete-upload", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          studioId,
-          orderId: order.id,
-          photos: succeeded.map((s) => ({
-            id: s.photoId,
-            fileName: s.fileName,
-            objectKey: s.objectKey,
-            mimeType: s.mimeType,
-            sizeBytes: s.sizeBytes,
-            width: s.width,
-            height: s.height,
-          })),
-        }),
-      });
-
-      const completeData = await completeRes.json();
-      if (!completeRes.ok) {
-        throw new Error(completeData.error || "Failed to save uploaded photo metadata.");
-      }
-
-      if (completeData.quota) setQuota(completeData.quota);
-      if (completeData.orderSummary && onPhotosChanged) {
-        onPhotosChanged(completeData.orderSummary);
-      }
-
-      setStatusMsg(
-        `Uploaded ${succeeded.length} proofing photo${succeeded.length === 1 ? "" : "s"} successfully.`
-      );
-      await loadGallery();
-    } catch (err: unknown) {
-      setErrorMsg(err instanceof Error ? err.message : "Failed to upload proofing photos.");
-    } finally {
-      setIsUploading(false);
-      setUploadProgress(null);
-    }
+    void executeUpload(batchFiles);
   };
 
   const handleDeletePhotos = async (photoIds: string[]) => {
@@ -403,12 +698,14 @@ export function CloudProofingGallerySection({
     if (targetList.length === 0) return;
     const escapeCsv = (val: string) => `"${(val || "").replace(/"/g, '""')}"`;
     const rows = [
-      ["Filename", "LightroomSearchName", "Selected", "Comment", "SelectedBy"].join(","),
+      ["Filename", "LightroomSearchName", "Selected", "SelectionStatus", "Tags", "Comment", "SelectedBy"].join(","),
       ...targetList.map((p) =>
         [
           escapeCsv(p.fileName),
           escapeCsv(p.displayName),
           p.selected ? "YES" : "NO",
+          escapeCsv(p.selectionStatus || (p.selected ? "SELECTED" : "NOT_REVIEWED")),
+          escapeCsv((p.tags || []).join("; ")),
           escapeCsv(p.comment || ""),
           escapeCsv(p.selectedBy || ""),
         ].join(",")
@@ -485,15 +782,36 @@ export function CloudProofingGallerySection({
                 onChange={handleFilesSelected}
                 className="hidden"
               />
-              <button
-                type="button"
-                disabled={isUploading || quota.isAtCap}
-                onClick={() => fileInputRef.current?.click()}
-                className="inline-flex items-center gap-1.5 rounded-xl bg-brand-orange-primary px-3.5 py-1.5 text-xs font-bold text-white hover:bg-orange-600 disabled:opacity-50 transition shadow-2xs cursor-pointer"
-              >
-                <CloudUpload className="h-3.5 w-3.5" />
-                <span>{isUploading ? "Uploading..." : "Upload Proofing Photos"}</span>
-              </button>
+              {isUploading ? (
+                <button
+                  type="button"
+                  onClick={handleCancelUpload}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-red-300 bg-white px-3.5 py-1.5 text-xs font-bold text-red-600 hover:bg-red-50 transition shadow-2xs cursor-pointer"
+                >
+                  <X className="h-3.5 w-3.5" />
+                  <span>Cancel Upload</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  disabled={quota.isAtCap}
+                  onClick={() => fileInputRef.current?.click()}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-brand-orange-primary px-3.5 py-1.5 text-xs font-bold text-white hover:bg-orange-600 disabled:opacity-50 transition shadow-2xs cursor-pointer"
+                >
+                  <CloudUpload className="h-3.5 w-3.5" />
+                  <span>Upload Photos</span>
+                </button>
+              )}
+              {failedFiles.length > 0 && !isUploading && (
+                <button
+                  type="button"
+                  onClick={() => void executeUpload(failedFiles)}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-800 hover:bg-amber-100 transition shadow-2xs cursor-pointer"
+                >
+                  <RotateCcw className="h-3.5 w-3.5" />
+                  <span>Retry {failedFiles.length} Failed Photo(s)</span>
+                </button>
+              )}
             </>
           ) : (
             <Link
@@ -546,7 +864,7 @@ export function CloudProofingGallerySection({
               <span className="block text-[11px] text-text-tertiary">
                 {settings.compressionEnabled
                   ? "ON · Compress uploads to ~2048px WebP to conserve plan quota"
-                  : "OFF · Store full original file bytes directly"}
+                  : "OFF · Store exact original file bytes without raster compression"}
               </span>
             </div>
           </label>
@@ -560,10 +878,10 @@ export function CloudProofingGallerySection({
               className="h-4 w-4 rounded border-border-default text-brand-orange-primary focus:ring-brand-orange-primary cursor-pointer"
             />
             <div>
-              <span className="font-bold text-text-primary">Client Proofing Access</span>
+              <span className="font-bold text-text-primary">Photo Selection Access</span>
               <span className="block text-[11px] text-text-tertiary">
                 {settings.proofingEnabled
-                  ? "ENABLED · Customers can open the gallery and submit selections"
+                  ? "ENABLED · Customers can open the gallery and submit photo selections"
                   : "DISABLED · Gallery hidden from customer tracking view"}
               </span>
             </div>
@@ -577,6 +895,21 @@ export function CloudProofingGallerySection({
         )}
       </div>
 
+      {!settings.compressionEnabled && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50/90 px-3.5 py-2 text-xs text-amber-900 space-y-0.5">
+          <span className="font-bold">Notice: Image compression is OFF.</span>
+          <p className="text-[11px] text-amber-800">
+            Original uncompressed files (especially RAW or high-resolution photos) consume your studio storage quota faster. Photo selection previews for customer viewing will require derivative generation.
+          </p>
+        </div>
+      )}
+
+      {!settings.proofingEnabled && (
+        <div className="rounded-xl border border-slate-200 bg-slate-50/80 px-3.5 py-2 text-xs text-slate-700">
+          <span className="font-semibold">Photo Selection Access is DISABLED.</span> Photos uploaded here are stored in cloud storage but remain hidden from the customer on their tracking page.
+        </div>
+      )}
+
       {!r2Configured && quota?.isCloudStorageEnabled && (
         <div className="rounded-xl border border-amber-200 bg-amber-50/80 px-3 py-2 text-xs text-amber-900">
           Cloud storage uploads are paused until Cloudflare R2 credentials (<code className="font-mono">R2_ACCOUNT_ID</code>, <code className="font-mono">R2_ACCESS_KEY_ID</code>, <code className="font-mono">R2_SECRET_ACCESS_KEY</code>, <code className="font-mono">R2_BUCKET_NAME</code>) are configured on the server.
@@ -584,17 +917,61 @@ export function CloudProofingGallerySection({
       )}
 
       {uploadProgress && (
-        <div className="rounded-xl border border-brand-blue-soft bg-brand-blue-background/40 px-3.5 py-2.5 text-xs font-semibold text-brand-blue-primary flex items-center justify-between gap-2">
-          <span>
-            {uploadProgress.phase === "COMPRESSING"
-              ? `Compressing previews in browser (${uploadProgress.done}/${uploadProgress.total})...`
-              : uploadProgress.phase === "UPLOADING"
-              ? `Uploading to Cloud Storage (${uploadProgress.done}/${uploadProgress.total})...`
-              : "Finalizing gallery & updating storage quota..."}
-          </span>
-          <span className="font-mono text-[11px]">
-            {Math.round((uploadProgress.done / Math.max(1, uploadProgress.total)) * 100)}%
-          </span>
+        <div className="rounded-xl border border-brand-blue-soft bg-brand-blue-background/40 px-3.5 py-3 text-xs font-semibold text-brand-blue-primary space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <span>
+              {uploadProgress.phase === "COMPRESSING"
+                ? `Compressing photos in browser (${uploadProgress.done}/${uploadProgress.total})...`
+                : uploadProgress.phase === "UPLOADING"
+                ? `Uploading (${uploadProgress.completedCount || 0}/${uploadProgress.total} completed${
+                    uploadProgress.failedCount ? `, ${uploadProgress.failedCount} failed` : ""
+                  })...`
+                : `Finalizing ${uploadProgress.done}/${uploadProgress.total} photo metadata in Cloud Storage...`}
+            </span>
+            <div className="flex items-center gap-3">
+              <span className="font-mono text-[11px]">
+                {uploadProgress.phase === "UPLOADING" && uploadProgress.totalBytes
+                  ? `${Math.round(((uploadProgress.bytesTransferred || 0) / Math.max(1, uploadProgress.totalBytes)) * 100)}%`
+                  : `${Math.round((uploadProgress.done / Math.max(1, uploadProgress.total)) * 100)}%`}
+              </span>
+              <button
+                type="button"
+                onClick={handleCancelUpload}
+                className="rounded-lg border border-red-300 bg-white px-2 py-0.5 text-[10px] font-bold text-red-600 hover:bg-red-50 transition cursor-pointer"
+              >
+                Cancel Upload
+              </button>
+            </div>
+          </div>
+
+          {uploadProgress.phase === "UPLOADING" && uploadProgress.totalBytes ? (
+            <div className="space-y-1">
+              <div className="h-1.5 w-full overflow-hidden rounded-full bg-blue-100">
+                <div
+                  className="h-full rounded-full bg-brand-blue-primary transition-all duration-200"
+                  style={{
+                    width: `${Math.min(
+                      100,
+                      Math.round(((uploadProgress.bytesTransferred || 0) / Math.max(1, uploadProgress.totalBytes)) * 100)
+                    )}%`,
+                  }}
+                />
+              </div>
+              <div className="flex flex-wrap items-center justify-between text-[10px] font-mono text-text-secondary pt-0.5">
+                <span>
+                  {formatStorageBytes(uploadProgress.bytesTransferred || 0)} of {formatStorageBytes(uploadProgress.totalBytes)}
+                </span>
+                <span className="flex items-center gap-2">
+                  {uploadProgress.speedBytesPerSec ? (
+                    <span>{formatStorageBytes(uploadProgress.speedBytesPerSec)}/s</span>
+                  ) : null}
+                  {uploadProgress.etaSeconds !== null && uploadProgress.etaSeconds !== undefined ? (
+                    <span>ETA: {uploadProgress.etaSeconds}s</span>
+                  ) : null}
+                </span>
+              </div>
+            </div>
+          ) : null}
         </div>
       )}
 
@@ -619,6 +996,7 @@ export function CloudProofingGallerySection({
                 [
                   { id: "ALL", label: `All (${photos.length})` },
                   { id: "SELECTED", label: `Selected (${selectedPhotos.length})` },
+                  { id: "REJECTED", label: `Rejected (${rejectedPhotos.length})` },
                   { id: "COMMENTS", label: `Comments (${commentedPhotos.length})` },
                 ] as const
               ).map((chip) => (
@@ -732,11 +1110,15 @@ export function CloudProofingGallerySection({
                 )}
               </button>
 
-              {photo.selected && (
+              {photo.selectionStatus === "SELECTED" || photo.selected ? (
                 <span className="absolute top-1.5 left-1.5 inline-flex items-center gap-1 rounded-full bg-emerald-600 px-2 py-0.5 text-[10px] font-bold text-white shadow">
                   ✓ Selected
                 </span>
-              )}
+              ) : photo.selectionStatus === "REJECTED" ? (
+                <span className="absolute top-1.5 left-1.5 inline-flex items-center gap-1 rounded-full bg-rose-600 px-2 py-0.5 text-[10px] font-bold text-white shadow">
+                  ✕ Rejected
+                </span>
+              ) : null}
 
               <button
                 type="button"
@@ -762,6 +1144,18 @@ export function CloudProofingGallerySection({
                     </span>
                   )}
                 </div>
+                {photo.tags && photo.tags.length > 0 && (
+                  <div className="flex flex-wrap gap-1 pt-0.5">
+                    {photo.tags.slice(0, 2).map((tag) => (
+                      <span key={tag} className="rounded bg-slate-100 px-1 py-0.2 text-[9px] font-mono text-slate-600">
+                        #{tag}
+                      </span>
+                    ))}
+                    {photo.tags.length > 2 && (
+                      <span className="text-[9px] text-slate-400">+{photo.tags.length - 2}</span>
+                    )}
+                  </div>
+                )}
                 {photo.comment && (
                   <p className="truncate text-[10px] text-text-secondary" title={photo.comment}>
                     {photo.comment}
@@ -784,29 +1178,89 @@ export function CloudProofingGallerySection({
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
-              <div>
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className="font-mono text-xs font-bold">{lightboxPhoto.fileName}</span>
-                <span className="ml-2 text-[11px] text-white/60">
+                <span className="text-[11px] text-white/60">
                   {formatStorageBytes(lightboxPhoto.sizeBytes)}
                 </span>
+                {(lightboxPhoto.selectionStatus === "SELECTED" || lightboxPhoto.selected) && (
+                  <span className="rounded-full bg-emerald-600/80 px-2 py-0.5 text-[10px] font-bold text-white">
+                    Selected
+                  </span>
+                )}
+                {lightboxPhoto.selectionStatus === "REJECTED" && (
+                  <span className="rounded-full bg-rose-600/80 px-2 py-0.5 text-[10px] font-bold text-white">
+                    Rejected
+                  </span>
+                )}
               </div>
-              <button
-                type="button"
-                onClick={() => setLightboxPhotoId(null)}
-                className="rounded-lg p-1 text-white/70 hover:bg-white/10 hover:text-white cursor-pointer"
-              >
-                <X className="h-4 w-4" />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() =>
+                    handleUpdatePhotoStatus(
+                      lightboxPhoto.id,
+                      lightboxPhoto.selectionStatus === "SELECTED" || lightboxPhoto.selected
+                        ? "NOT_REVIEWED"
+                        : "SELECTED"
+                    )
+                  }
+                  className={`rounded-lg px-2.5 py-1 text-xs font-bold transition cursor-pointer ${
+                    lightboxPhoto.selectionStatus === "SELECTED" || lightboxPhoto.selected
+                      ? "bg-emerald-600 text-white"
+                      : "bg-white/10 text-white/80 hover:bg-white/20"
+                  }`}
+                >
+                  ✓ Select
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    handleUpdatePhotoStatus(
+                      lightboxPhoto.id,
+                      lightboxPhoto.selectionStatus === "REJECTED" ? "NOT_REVIEWED" : "REJECTED"
+                    )
+                  }
+                  className={`rounded-lg px-2.5 py-1 text-xs font-bold transition cursor-pointer ${
+                    lightboxPhoto.selectionStatus === "REJECTED"
+                      ? "bg-rose-600 text-white"
+                      : "bg-white/10 text-white/80 hover:bg-white/20"
+                  }`}
+                >
+                  ✕ Reject
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLightboxPhotoId(null)}
+                  className="rounded-lg p-1 text-white/70 hover:bg-white/10 hover:text-white cursor-pointer"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
             </div>
             <div className="flex items-center justify-center bg-black max-h-[75vh]">
-              {lightboxPhoto.previewUrl && (
+              {lightboxPhoto.previewUrl ? (
                 <img
                   src={lightboxPhoto.previewUrl}
                   alt={lightboxPhoto.fileName}
                   className="max-h-[75vh] w-auto object-contain"
                 />
+              ) : (
+                <div className="py-20 text-center text-xs text-white/40">
+                  Preview unavailable or processing.
+                </div>
               )}
             </div>
+            {lightboxPhoto.tags && lightboxPhoto.tags.length > 0 && (
+              <div className="px-4 py-2 border-t border-white/10 flex flex-wrap gap-1.5 items-center text-xs text-white/70">
+                <span className="font-semibold text-white/50 text-[11px]">Tags:</span>
+                {lightboxPhoto.tags.map((t) => (
+                  <span key={t} className="rounded bg-white/15 px-2 py-0.5 font-mono text-[11px] text-white/90">
+                    #{t}
+                  </span>
+                ))}
+              </div>
+            )}
             {lightboxPhoto.comment && (
               <div className="px-4 py-3 border-t border-white/10 text-xs text-white/90">
                 Client comment: &ldquo;{lightboxPhoto.comment}&rdquo;

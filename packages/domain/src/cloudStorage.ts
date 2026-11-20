@@ -1,4 +1,4 @@
-import type { CloudStorageSettings, Order, OrderCloudPhoto } from '@focoman/types';
+import type { CloudStorageSettings, CloudUploadState, Order, OrderCloudPhoto } from '@focoman/types';
 
 export const CLOUD_PART_BYTES = 16 * 1024 * 1024;
 export const CLOUD_MAX_ORIGINAL_BYTES = 512 * 1024 * 1024;
@@ -111,6 +111,36 @@ export function cloudPhotoStoredBytes(photo: OrderCloudPhoto): number {
   );
 }
 
+/** Legal server-owned upload state transitions. Browser requests never supply a
+ * target state; routes use this to reject replay/cancellation races. */
+export function canTransitionCloudUploadState(from: CloudUploadState, to: CloudUploadState): boolean {
+  if (from === to) return from === 'COMMITTED' || from === 'CLEANED';
+  return (
+    (from === 'RESERVED' && (to === 'UPLOADING' || to === 'VERIFYING' || to === 'CLEANUP_PENDING')) ||
+    (from === 'UPLOADING' && (to === 'VERIFYING' || to === 'CLEANUP_PENDING')) ||
+    (from === 'VERIFYING' && (to === 'COMMITTED' || to === 'CLEANUP_PENDING')) ||
+    (from === 'CLEANUP_PENDING' && to === 'CLEANED')
+  );
+}
+
+/** Returns the exact reservation that can be released when primary bytes commit.
+ * Preview capacity remains reserved only when a durable preview job owns it. */
+export function cloudCommitReservationRelease(input: {
+  primaryReservedBytes: number;
+  previewReservedBytes: number;
+  previewJobOwnsReservation: boolean;
+}): number {
+  const primary = requireSafeCounter(input.primaryReservedBytes, 'primary reservation');
+  const preview = requireSafeCounter(input.previewReservedBytes, 'preview reservation');
+  return primary + (input.previewJobOwnsReservation ? 0 : preview);
+}
+
+export function sameCloudPhotoIdSet(left: string[], right: string[]): boolean {
+  if (left.length !== right.length || new Set(left).size !== left.length || new Set(right).size !== right.length) return false;
+  const rightSet = new Set(right);
+  return left.every((id) => rightSet.has(id));
+}
+
 export function cloudPreviewRequired(
   photo: Pick<OrderCloudPhoto, 'storageKind' | 'preview'>,
   settings: CloudStorageSettings
@@ -204,3 +234,43 @@ export function validateAdmissionFile(
   }
   return original ? 'ORIGINAL' : 'OPTIMIZED';
 }
+
+export const MAX_PHOTO_TAGS = 10;
+export const MAX_TAG_LENGTH = 30;
+
+/** Resolves photo selection status with legacy fallback (selected: true -> SELECTED, false/missing -> NOT_REVIEWED). */
+export function resolvePhotoSelectionStatus(
+  photo: Pick<OrderCloudPhoto, 'selected' | 'selectionStatus'>
+): 'NOT_REVIEWED' | 'SELECTED' | 'REJECTED' {
+  if (photo.selectionStatus === 'SELECTED' || photo.selectionStatus === 'REJECTED' || photo.selectionStatus === 'NOT_REVIEWED') {
+    return photo.selectionStatus;
+  }
+  return photo.selected ? 'SELECTED' : 'NOT_REVIEWED';
+}
+
+/** Validates and sanitizes photo tags list: strings only, trimmed, unique case-insensitively, max count and length bounded. */
+export function validatePhotoTags(tags: unknown): string[] {
+  if (!Array.isArray(tags)) return [];
+  const valid: string[] = [];
+  const seen = new Set<string>();
+  for (const item of tags) {
+    if (typeof item !== 'string') continue;
+    const clean = item.trim().slice(0, MAX_TAG_LENGTH);
+    if (!clean) continue;
+    const lower = clean.toLowerCase();
+    if (seen.has(lower)) continue;
+    seen.add(lower);
+    valid.push(clean);
+    if (valid.length >= MAX_PHOTO_TAGS) break;
+  }
+  return valid;
+}
+
+/** Validates photo selection status enum. */
+export function validatePhotoSelectionStatus(status: unknown): 'NOT_REVIEWED' | 'SELECTED' | 'REJECTED' {
+  if (status === 'SELECTED' || status === 'REJECTED' || status === 'NOT_REVIEWED') {
+    return status;
+  }
+  throw new Error('Invalid selection status. Must be NOT_REVIEWED, SELECTED, or REJECTED.');
+}
+

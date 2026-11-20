@@ -9,11 +9,13 @@
   "scripts": {
     "dev": "npm --prefix apps/web run dev",
     "build": "npm --prefix apps/web run build",
-    "test": "node --experimental-strip-types --test tests/backend-crud.test.ts tests/billing-drive.test.ts tests/storage-quota.test.ts tests/cashfree-payment.test.ts",
+    "test": "node --experimental-strip-types --test tests/backend-crud.test.ts tests/billing-drive.test.ts tests/storage-quota.test.ts tests/cloud-storage-policy.test.ts tests/cashfree-payment.test.ts",
     "start": "npm --prefix apps/web run start",
     "lint": "npm --prefix apps/web run lint",
     "gitpush": "powershell -ExecutionPolicy Bypass -File scripts/gitpush.ps1",
     "deploy": "powershell -ExecutionPolicy Bypass -File scripts/deploy.ps1",
+    "storage:maintenance": "node --experimental-strip-types scripts/cloud-storage-maintenance.ts",
+    "storage:maintenance:run": "node --experimental-strip-types scripts/cloud-storage-maintenance.ts --run",
     "audit:marketplace-data": "node scripts/purge-marketplace-data.mjs --audit",
     "purge:marketplace": "node scripts/purge-marketplace-data.mjs"
   },

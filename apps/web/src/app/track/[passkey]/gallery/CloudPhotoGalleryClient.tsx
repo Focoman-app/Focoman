@@ -32,7 +32,7 @@ interface CloudPhotoGalleryClientProps {
   rawIdentifier: string;
 }
 
-type GalleryFilter = "ALL" | "SELECTED" | "UNSELECTED" | "COMMENTS";
+type GalleryFilter = "ALL" | "SELECTED" | "REJECTED" | "UNSELECTED" | "COMMENTS";
 
 export function CloudPhotoGalleryClient({
   view,
@@ -193,7 +193,20 @@ export function CloudPhotoGalleryClient({
   };
 
   const selectedCount = useMemo(
-    () => photos.filter((p) => Boolean(p.selected)).length,
+    () => photos.filter((p) => p.selectionStatus === "SELECTED" || Boolean(p.selected)).length,
+    [photos]
+  );
+  const rejectedCount = useMemo(
+    () => photos.filter((p) => p.selectionStatus === "REJECTED").length,
+    [photos]
+  );
+  const notReviewedCount = useMemo(
+    () =>
+      photos.filter(
+        (p) =>
+          (!p.selectionStatus || p.selectionStatus === "NOT_REVIEWED") &&
+          !p.selected
+      ).length,
     [photos]
   );
   const commentedCount = useMemo(
@@ -202,8 +215,16 @@ export function CloudPhotoGalleryClient({
   );
 
   const filteredPhotos = useMemo(() => {
-    if (filter === "SELECTED") return photos.filter((p) => p.selected);
-    if (filter === "UNSELECTED") return photos.filter((p) => !p.selected);
+    if (filter === "SELECTED")
+      return photos.filter((p) => p.selectionStatus === "SELECTED" || Boolean(p.selected));
+    if (filter === "REJECTED")
+      return photos.filter((p) => p.selectionStatus === "REJECTED");
+    if (filter === "UNSELECTED")
+      return photos.filter(
+        (p) =>
+          (!p.selectionStatus || p.selectionStatus === "NOT_REVIEWED") &&
+          !p.selected
+      );
     if (filter === "COMMENTS")
       return photos.filter((p) => Boolean(p.comment && p.comment.trim()));
     return photos;
@@ -220,14 +241,19 @@ export function CloudPhotoGalleryClient({
     }
   }, [activeLightboxPhoto]);
 
-  const togglePhotoSelect = useCallback(
-    async (photo: HydratedCloudPhoto) => {
+  const setPhotoSelectionStatus = useCallback(
+    async (photo: HydratedCloudPhoto, nextStatus: "NOT_REVIEWED" | "SELECTED" | "REJECTED") => {
       if (!canEdit && !isStaffUser) return;
-      const nextSelected = !photo.selected;
+      const prevStatus = photo.selectionStatus || (photo.selected ? "SELECTED" : "NOT_REVIEWED");
+      const finalStatus = prevStatus === nextStatus ? "NOT_REVIEWED" : nextStatus;
+      const nextSelected = finalStatus === "SELECTED";
+
       // Optimistic update
       setPhotos((prev) =>
         prev.map((p) =>
-          p.id === photo.id ? { ...p, selected: nextSelected } : p
+          p.id === photo.id
+            ? { ...p, selected: nextSelected, selectionStatus: finalStatus }
+            : p
         )
       );
       setSavingPhotoId(photo.id);
@@ -236,7 +262,7 @@ export function CloudPhotoGalleryClient({
         const res = await updateCloudPhotoSelectionAction({
           orderId: order.id,
           photoId: photo.id,
-          selected: nextSelected,
+          selectionStatus: finalStatus,
           passkey: order.trackingPasskey || rawIdentifier,
           idToken,
         });
@@ -244,7 +270,9 @@ export function CloudPhotoGalleryClient({
           // rollback
           setPhotos((prev) =>
             prev.map((p) =>
-              p.id === photo.id ? { ...p, selected: photo.selected } : p
+              p.id === photo.id
+                ? { ...p, selected: photo.selected, selectionStatus: photo.selectionStatus }
+                : p
             )
           );
           setErrorMsg(res.error || "Could not save selection.");
@@ -254,6 +282,20 @@ export function CloudPhotoGalleryClient({
       }
     },
     [canEdit, isStaffUser, currentUser, order.id, order.trackingPasskey, rawIdentifier]
+  );
+
+  const togglePhotoSelect = useCallback(
+    async (photo: HydratedCloudPhoto) => {
+      await setPhotoSelectionStatus(photo, "SELECTED");
+    },
+    [setPhotoSelectionStatus]
+  );
+
+  const togglePhotoReject = useCallback(
+    async (photo: HydratedCloudPhoto) => {
+      await setPhotoSelectionStatus(photo, "REJECTED");
+    },
+    [setPhotoSelectionStatus]
   );
 
   const savePhotoComment = async (photo: HydratedCloudPhoto) => {
@@ -462,10 +504,8 @@ export function CloudPhotoGalleryClient({
               [
                 { id: "ALL", label: `All (${photos.length})` },
                 { id: "SELECTED", label: `Selected (${selectedCount})` },
-                {
-                  id: "UNSELECTED",
-                  label: `Unselected (${Math.max(0, photos.length - selectedCount)})`,
-                },
+                { id: "REJECTED", label: `Rejected (${rejectedCount})` },
+                { id: "UNSELECTED", label: `Not Reviewed (${notReviewedCount})` },
                 { id: "COMMENTS", label: `Comments (${commentedCount})` },
               ] as const
             ).map((tab) => (
@@ -575,8 +615,10 @@ export function CloudPhotoGalleryClient({
               <div
                 key={photo.id}
                 className={`group relative rounded-2xl border overflow-hidden bg-white shadow-2xs transition ${
-                  photo.selected
+                  photo.selectionStatus === "SELECTED" || photo.selected
                     ? "border-emerald-500 ring-2 ring-emerald-500/25"
+                    : photo.selectionStatus === "REJECTED"
+                    ? "border-rose-400 ring-2 ring-rose-400/20"
                     : "border-[#D8D2C4] hover:border-[#A8A29E]"
                 }`}
               >
@@ -600,24 +642,51 @@ export function CloudPhotoGalleryClient({
                 </button>
 
                 {(canEdit || isStaffUser) && (
-                  <button
-                    type="button"
-                    disabled={savingPhotoId === photo.id}
-                    onClick={() => void togglePhotoSelect(photo)}
-                    aria-label={
-                      photo.selected
-                        ? `Deselect ${photo.fileName}`
-                        : `Select ${photo.fileName}`
-                    }
-                    className={`absolute top-2 right-2 flex h-8 w-8 items-center justify-center rounded-full border shadow-sm transition cursor-pointer ${
-                      photo.selected
-                        ? "border-emerald-600 bg-emerald-600 text-white"
-                        : "border-white/80 bg-black/50 text-white hover:bg-emerald-600"
-                    }`}
-                  >
-                    <Check className="h-4 w-4" />
-                  </button>
+                  <div className="absolute top-2 right-2 flex items-center gap-1">
+                    <button
+                      type="button"
+                      disabled={savingPhotoId === photo.id}
+                      onClick={() => void togglePhotoSelect(photo)}
+                      aria-label={
+                        photo.selected || photo.selectionStatus === "SELECTED"
+                          ? `Deselect ${photo.fileName}`
+                          : `Select ${photo.fileName}`
+                      }
+                      title="Select Photo"
+                      className={`flex h-8 w-8 items-center justify-center rounded-full border shadow-sm transition cursor-pointer ${
+                        photo.selected || photo.selectionStatus === "SELECTED"
+                          ? "border-emerald-600 bg-emerald-600 text-white"
+                          : "border-white/80 bg-black/50 text-white hover:bg-emerald-600"
+                      }`}
+                    >
+                      <Check className="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
+                      disabled={savingPhotoId === photo.id}
+                      onClick={() => void togglePhotoReject(photo)}
+                      aria-label="Reject photo"
+                      title="Reject Photo"
+                      className={`flex h-8 w-8 items-center justify-center rounded-full border shadow-sm transition cursor-pointer ${
+                        photo.selectionStatus === "REJECTED"
+                          ? "border-rose-600 bg-rose-600 text-white"
+                          : "border-white/80 bg-black/50 text-white hover:bg-rose-600"
+                      }`}
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
                 )}
+
+                {photo.selectionStatus === "SELECTED" || photo.selected ? (
+                  <span className="absolute top-2 left-2 inline-flex items-center gap-1 rounded-full bg-emerald-600 px-2 py-0.5 text-[10px] font-bold text-white shadow">
+                    ✓ Selected
+                  </span>
+                ) : photo.selectionStatus === "REJECTED" ? (
+                  <span className="absolute top-2 left-2 inline-flex items-center gap-1 rounded-full bg-rose-600 px-2 py-0.5 text-[10px] font-bold text-white shadow">
+                    ✕ Rejected
+                  </span>
+                ) : null}
 
                 <div className="p-2.5 flex items-center justify-between gap-2">
                   <span
@@ -635,6 +704,18 @@ export function CloudPhotoGalleryClient({
                     </span>
                   )}
                 </div>
+                {photo.tags && photo.tags.length > 0 && (
+                  <div className="flex flex-wrap gap-1 px-2.5 pb-2">
+                    {photo.tags.slice(0, 2).map((tag) => (
+                      <span key={tag} className="rounded bg-[#FAF7F2] border border-[#E7E2D8] px-1.5 py-0.2 text-[9px] font-mono text-[#57534E]">
+                        #{tag}
+                      </span>
+                    ))}
+                    {photo.tags.length > 2 && (
+                      <span className="text-[9px] text-[#A8A29E]">+{photo.tags.length - 2}</span>
+                    )}
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -664,20 +745,40 @@ export function CloudPhotoGalleryClient({
 
             <div className="flex items-center gap-2">
               {(canEdit || isStaffUser) && (
-                <button
-                  type="button"
-                  onClick={() => void togglePhotoSelect(activeLightboxPhoto)}
-                  className={`inline-flex items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-xs font-bold transition cursor-pointer ${
-                    activeLightboxPhoto.selected
-                      ? "bg-emerald-600 text-white"
-                      : "border border-white/30 bg-white/10 text-white hover:bg-white/20"
-                  }`}
-                >
-                  <Check className="h-3.5 w-3.5" />
-                  <span>
-                    {activeLightboxPhoto.selected ? "Selected" : "Select Photo"}
-                  </span>
-                </button>
+                <>
+                  <button
+                    type="button"
+                    onClick={() => void togglePhotoSelect(activeLightboxPhoto)}
+                    className={`inline-flex items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-xs font-bold transition cursor-pointer ${
+                      activeLightboxPhoto.selected || activeLightboxPhoto.selectionStatus === "SELECTED"
+                        ? "bg-emerald-600 text-white"
+                        : "border border-white/30 bg-white/10 text-white hover:bg-white/20"
+                    }`}
+                  >
+                    <Check className="h-3.5 w-3.5" />
+                    <span>
+                      {activeLightboxPhoto.selected || activeLightboxPhoto.selectionStatus === "SELECTED"
+                        ? "Selected"
+                        : "Select Photo"}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void togglePhotoReject(activeLightboxPhoto)}
+                    className={`inline-flex items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-xs font-bold transition cursor-pointer ${
+                      activeLightboxPhoto.selectionStatus === "REJECTED"
+                        ? "bg-rose-600 text-white"
+                        : "border border-white/30 bg-white/10 text-white hover:bg-white/20"
+                    }`}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                    <span>
+                      {activeLightboxPhoto.selectionStatus === "REJECTED"
+                        ? "Rejected"
+                        : "Reject"}
+                    </span>
+                  </button>
+                </>
               )}
               <button
                 type="button"
@@ -733,11 +834,21 @@ export function CloudPhotoGalleryClient({
             )}
           </div>
 
-          {/* Bottom Comment Bar */}
+          {/* Bottom Comment & Tags Bar */}
           <div
-            className="border-t border-white/10 bg-[#1C1917] px-4 py-3"
+            className="border-t border-white/10 bg-[#1C1917] px-4 py-3 space-y-2"
             onClick={(e) => e.stopPropagation()}
           >
+            {activeLightboxPhoto.tags && activeLightboxPhoto.tags.length > 0 && (
+              <div className="mx-auto max-w-3xl flex flex-wrap gap-1.5 items-center text-xs text-white/70">
+                <span className="font-semibold text-white/50 text-[11px]">Tags:</span>
+                {activeLightboxPhoto.tags.map((t) => (
+                  <span key={t} className="rounded bg-white/15 px-2 py-0.5 font-mono text-[11px] text-white/90">
+                    #{t}
+                  </span>
+                ))}
+              </div>
+            )}
             <div className="mx-auto max-w-3xl flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
               <input
                 type="text"

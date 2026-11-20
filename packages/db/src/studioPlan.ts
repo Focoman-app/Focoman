@@ -1,6 +1,6 @@
 // File: packages/db/src/studioPlan.ts
-import { getFirestoreServerInstance } from './index';
-import { StudioPlan, Studio } from '@focoman/types';
+import { getFirestoreServerInstance } from './index.ts';
+import type { StudioPlan, Studio } from '@focoman/types';
 
 /**
  * Reads the studio plan document from Firestore.

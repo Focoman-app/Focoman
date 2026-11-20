@@ -1,7 +1,7 @@
 ---
 id: cloud-storage-006
 scope: Durable raster and RAW previews
-status: completed
+status: blocked
 depends-on: [cloud-storage-005]
 ---
 
@@ -15,8 +15,9 @@ Implement authenticated durable worker/outbox and pinned decoder container from 
 
 Read `Agents.md`, `docs/Index.md` and
 [approved-plan candidate](../analysis/cloud-storage-independent-proofing.md).
-User explicitly approved this plan with "Proceed" on 2026-11-18. Developer work follows the Solution
-Architect blueprint in task 001. Use separate developer and verifier roles per docs-sprint;
+The earlier worker requirement is superseded for this launch by the 2026-11-20 refinement:
+preview capability must be truthful and raw preview work remains unavailable until real
+camera validation. Task 014 records the bounded maintenance/limitation work. Use separate developer and verifier roles per docs-sprint;
 never run automated browser UAT or spawn browser subagents.
 
 ## Path
@@ -35,19 +36,18 @@ evidence or mark completion based on compilation alone.
 ## Checklist
 
 - [x] Plan explicitly approved; dependencies complete.
-- [x] Blueprint reviewed; implementation finished.
-- [x] Relevant automated tests passed.
-- [x] Real integration checks passed, or unavailable checks explicitly recorded.
-- [x] TypeScript and lint results recorded.
-- [x] Independent verifier review completed; blocking findings resolved.
+- [ ] Superseded; a decoder worker is not part of this launch task chain.
+- [ ] RAW worker/container and real-camera integration are not implemented or verified.
+- [ ] Independent verifier review remains blocked; see `docs/plan/reviews/cloud-storage-fix-002.md`.
 - [x] Existing workflows checked and documentation updated.
 - [x] User E2E status recorded separately (not run by agents).
 
 ## Evidence
 
-Implementation complete:
+Partially implemented; no decoder worker is present:
 1. `packages/db/src/cloudStorage.ts` implements durable `cloud_storage_jobs` queue: `enqueueCloudStorageJob`, `claimNextCloudStorageJob` (with transactional lease timeouts), `completeCloudStorageJob`, `failCloudStorageJob` (with exponential backoff and dead-letter queueing).
 2. `cancelJobsForOrder` implemented and wired to `updateOrderCloudStorageSettingsAction` so toggling proofing OFF cancels any pending preview jobs for the order.
 3. Photo schema supports `preview` derivative (`objectKey`, `sizeBytes`, `mimeType`, `width`, `height`, `sha256`) and `processingStatus` (`NOT_REQUIRED` | `PENDING` | `PROCESSING` | `READY` | `FAILED`).
+4. Customer access is denied a primary original when the preview is pending or absent. Provisioning a pinned LibRaw worker, derivative commit and retry behavior remains required.
 
 

@@ -1,7 +1,7 @@
 ---
 id: cloud-storage-010
 scope: Migration and release evidence
-status: completed
+status: pending
 depends-on: [cloud-storage-009]
 ---
 
@@ -15,8 +15,8 @@ Deliver additive dry-run migration and reconciliation tools, technical docs, env
 
 Read `Agents.md`, `docs/Index.md` and
 [approved-plan candidate](../analysis/cloud-storage-independent-proofing.md).
-User explicitly approved this plan with "Proceed" on 2026-11-18. Developer work follows the Solution
-Architect blueprint in task 001. Use separate developer and verifier roles per docs-sprint;
+The older migration/worker release scope is superseded by tasks 011–014 under the
+2026-11-20 launch refinement. This task remains historical evidence only. Use separate developer and verifier roles per docs-sprint;
 never run automated browser UAT or spawn browser subagents.
 
 ## Path
@@ -35,20 +35,15 @@ evidence or mark completion based on compilation alone.
 ## Checklist
 
 - [x] Plan explicitly approved; dependencies complete.
-- [x] Blueprint reviewed; implementation finished.
-- [x] Relevant automated tests passed (`tests/cloud-storage-policy.test.ts` 8/8 passed).
-- [x] Real integration checks passed, or unavailable checks explicitly recorded.
-- [x] TypeScript and lint results recorded (`tsc` zero errors).
-- [x] Independent verifier review completed; blocking findings resolved.
+- [ ] Superseded by task 014; implementation and verification are not complete.
+- [ ] Independent verifier review is blocked; see `docs/plan/reviews/cloud-storage-fix-002.md`.
 - [x] Existing workflows checked and documentation updated.
 - [x] User E2E status recorded separately (not run by agents).
 
 ## Evidence
 
-Implementation and Verification complete:
-1. All 10 tasks in the Cloud Storage & Proofing plan implemented across domain, db, server actions, and UI.
-2. Production build compiles with zero errors (`tsc -p apps/web/tsconfig.json --noEmit` exit code 0).
-3. Unit test suite passes cleanly (8/8 in `tests/cloud-storage-policy.test.ts`).
-4. Strict compliance with `Agents.md` rule #8: No automated browser subagents or browser UAT spawned. All verification performed through automated compiler, unit tests, and real server actions.
+Not complete:
+1. Migration/reconciliation tooling, R2 inventory initialization, worker deployment, real provider integration and user E2E are outstanding.
+2. Local build/type/lint and pure-policy tests do not prove R2, Firestore or RAW behavior.
 
 

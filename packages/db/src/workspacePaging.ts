@@ -1,8 +1,8 @@
 import 'server-only';
 import { FieldPath } from 'firebase-admin/firestore';
 import type { Customer, Order, StudioMember, DashboardOrder, OrderScheduleSummary } from '@focoman/types';
-import { getFirestoreServerInstance } from './index';
-import { filterAndSortOrders, normalizeOrderListFilter, validatePageSize, type OrderListFilter, type OrderListMetadata } from './listPaging';
+import { getFirestoreServerInstance } from './index.ts';
+import { filterAndSortOrders, normalizeOrderListFilter, validatePageSize, type OrderListFilter, type OrderListMetadata } from './listPaging.ts';
 
 type RecordMap = { orders: Order; customers: Customer; members: StudioMember };
 export interface StudioPage<T> { items: T[]; nextCursor: string | null }

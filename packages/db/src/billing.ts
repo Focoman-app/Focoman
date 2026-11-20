@@ -2,7 +2,7 @@ import 'server-only';
 import { createHash } from 'node:crypto';
 import type { BillingDocument, BillingKind, BillingOptionalFields, Order, ReceiptConfirmation, ReceiptSource, Studio } from '@focoman/types';
 import { assertBillingTextSupported, getBillingProfile, getBillingSourceFingerprint, getOrderFinancials, getReceiptSources, isBillingDate, receiptSourceKey } from '@focoman/domain';
-import { getFirestoreServerInstance } from './index';
+import { getFirestoreServerInstance } from './index.ts';
 
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
 function cleanText(value: string, label: string, max = 500): string {

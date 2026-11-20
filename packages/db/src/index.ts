@@ -1,6 +1,6 @@
 import 'server-only';
-import { getApps, initializeApp, cert, App } from 'firebase-admin/app';
-import { FieldValue, getFirestore, Firestore } from 'firebase-admin/firestore';
+import { getApps, initializeApp, cert, type App } from 'firebase-admin/app';
+import { FieldValue, getFirestore, type Firestore } from 'firebase-admin/firestore';
 import type {
   Studio,
   StudioMember,
@@ -362,6 +362,9 @@ export async function permanentlyDeleteStudioData(studioId: string): Promise<boo
     'studio_packages',
     'leads',
     'cloud_photos',
+    'cloud_upload_sessions',
+    'cloud_storage_jobs',
+    'cloud_storage_audit',
     'billingDocuments',
     'billingDocumentKeys',
     'billingCounters',
@@ -1633,7 +1636,7 @@ export async function getCustomerOrdersHistory(customerId: string): Promise<Orde
 // 12. STUDIO PLANS & ENTITLEMENTS
 // ============================================================================
 
-export * from './studioPlan';
+export * from './studioPlan.ts';
 
 // ============================================================================
 // 13. PLATFORM PUBLIC STATS
@@ -1695,8 +1698,8 @@ export async function updateStudioLead(
 
 
 
-export * from './billing';
-export * from './cloudStorage';
+export * from './billing.ts';
+export * from './cloudStorage.ts';
 
 // ============================================================================
 // 15. CLOUD PROOFING PHOTOS & STORAGE QUOTA LEDGER
@@ -1726,21 +1729,39 @@ export async function saveCloudPhotosBatch(photos: OrderCloudPhoto[]): Promise<v
   }
 }
 
+export async function getCloudPhotoById(photoId: string): Promise<OrderCloudPhoto | null> {
+  const db = getFirestoreServerInstance();
+  const snap = await db.collection('cloud_photos').doc(photoId).get();
+  if (!snap.exists) return null;
+  return snap.data() as OrderCloudPhoto;
+}
+
 export async function updateCloudPhoto(
   photoId: string,
-  updates: Partial<Pick<OrderCloudPhoto, 'selected' | 'selectedBy' | 'selectedAt' | 'comment'>>
+  updates: Partial<Pick<OrderCloudPhoto, 'selected' | 'selectedBy' | 'selectedAt' | 'selectionStatus' | 'tags' | 'comment'>>
 ): Promise<OrderCloudPhoto | null> {
   const db = getFirestoreServerInstance();
   const ref = db.collection('cloud_photos').doc(photoId);
   const snap = await ref.get();
   if (!snap.exists) return null;
   const existing = snap.data() as OrderCloudPhoto;
-  const next: OrderCloudPhoto = {
+
+  // Build patch of only specified changed fields to prevent overwriting concurrent mutations
+  const patch: Record<string, unknown> = {};
+  if (updates.selected !== undefined) patch.selected = updates.selected;
+  if (updates.selectedBy !== undefined) patch.selectedBy = updates.selectedBy;
+  if (updates.selectedAt !== undefined) patch.selectedAt = updates.selectedAt;
+  if (updates.selectionStatus !== undefined) patch.selectionStatus = updates.selectionStatus;
+  if (updates.tags !== undefined) patch.tags = updates.tags;
+  if (updates.comment !== undefined) patch.comment = updates.comment;
+
+  if (Object.keys(patch).length === 0) return existing;
+
+  await ref.update(patch);
+  return {
     ...existing,
     ...updates,
   };
-  await ref.set(next, { merge: true });
-  return next;
 }
 
 export async function deleteCloudPhotosByIds(photoIds: string[]): Promise<void> {
@@ -1795,7 +1816,10 @@ export async function syncOrderCloudPhotoSummary(orderId: string): Promise<{
   const db = getFirestoreServerInstance();
   const photos = await getCloudPhotosByOrder(orderId);
   const cloudPhotoCount = photos.length;
-  const cloudStorageBytes = photos.reduce((sum, p) => sum + Math.max(0, Number(p.sizeBytes || 0)), 0);
+  const cloudStorageBytes = photos.reduce(
+    (sum, p) => sum + Math.max(0, Number(p.sizeBytes || 0)) + Math.max(0, Number(p.preview?.sizeBytes || 0)),
+    0
+  );
   await db.collection('orders').doc(orderId).set(
     {
       cloudPhotoCount,
@@ -1807,5 +1831,5 @@ export async function syncOrderCloudPhotoSummary(orderId: string): Promise<{
   return { cloudPhotoCount, cloudStorageBytes };
 }
 
-export { readStudioPage, readOrderListPage, readOrderPageByIds, getDashboardOrderProjection, getOrderScheduleProjection } from './workspacePaging';
-export type { StudioPage, StudioPageInput } from './workspacePaging';
+export { readStudioPage, readOrderListPage, readOrderPageByIds, getDashboardOrderProjection, getOrderScheduleProjection } from './workspacePaging.ts';
+export type { StudioPage, StudioPageInput } from './workspacePaging.ts';
